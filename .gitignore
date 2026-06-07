@@ -1,0 +1,38 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Environment variables
+.env
+
+# Local secrets helper (contains real API keys once filled in)
+set-secrets.sh
+
+# Supabase CLI local state
+supabase/.temp/
+
+# Data migration scripts + exported data (may contain real/sensitive data)
+migrate-data.js
+restore-rest.js
+data-export/
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

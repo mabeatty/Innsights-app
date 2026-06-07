@@ -1,0 +1,10 @@
+project_id = "xdwoczxzifqojhqvjlzd"
+
+[functions.export-aia-excel]
+verify_jwt = false
+
+[functions.check-alerts]
+verify_jwt = false
+
+[functions.receive-invoice-email]
+verify_jwt = false

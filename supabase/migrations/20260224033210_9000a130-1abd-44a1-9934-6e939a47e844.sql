@@ -1,0 +1,2 @@
+
+ALTER TABLE public.ada_line_items ENABLE ROW LEVEL SECURITY;

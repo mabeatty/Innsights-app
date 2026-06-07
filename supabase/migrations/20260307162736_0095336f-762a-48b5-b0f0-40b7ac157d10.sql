@@ -1,0 +1,1 @@
+ALTER TABLE public.budget_transactions ADD COLUMN IF NOT EXISTS transaction_group_id uuid DEFAULT gen_random_uuid();

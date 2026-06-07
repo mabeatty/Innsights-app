@@ -1,0 +1,1 @@
+ALTER TABLE public.organization_members ADD COLUMN investment_access boolean NOT NULL DEFAULT false;

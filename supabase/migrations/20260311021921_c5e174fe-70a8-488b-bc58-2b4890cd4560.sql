@@ -1,0 +1,1 @@
+ALTER TABLE public.project_info ADD COLUMN entity_name text DEFAULT '';

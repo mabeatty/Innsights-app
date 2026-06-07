@@ -1,0 +1,1 @@
+ALTER TABLE public.budget_transactions ADD COLUMN IF NOT EXISTS document_url text DEFAULT NULL;

@@ -1,0 +1,1 @@
+ALTER TABLE public.budget_transactions ADD COLUMN draw_id uuid REFERENCES public.draw_history(id) ON DELETE SET NULL DEFAULT NULL;

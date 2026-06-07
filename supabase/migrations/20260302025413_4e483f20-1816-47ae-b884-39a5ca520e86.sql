@@ -1,0 +1,1 @@
+ALTER TABLE public.capital_cash_flow ADD COLUMN draw_amount numeric NOT NULL DEFAULT 0;

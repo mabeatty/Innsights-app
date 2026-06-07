@@ -1,0 +1,1 @@
+DROP POLICY IF EXISTS "Allow authenticated users to read organization_members" ON organization_members;

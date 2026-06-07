@@ -1,0 +1,1 @@
+ALTER TABLE public.projects ADD COLUMN plaid_account_id uuid REFERENCES public.plaid_accounts(id) ON DELETE SET NULL DEFAULT NULL;

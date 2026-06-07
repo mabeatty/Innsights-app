@@ -1,0 +1,1 @@
+ALTER TABLE public.takeoff_line_items ADD COLUMN is_ada boolean NOT NULL DEFAULT false;
