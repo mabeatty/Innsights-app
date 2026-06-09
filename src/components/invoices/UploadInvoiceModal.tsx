@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { COST_TYPES, APPROVER_ROLES } from "./types";
+import { createNotifications } from "@/lib/notify";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -156,6 +157,19 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         performed_by_name: user.email,
         notes: `Vendor: ${vendor}${invoiceNumber ? ` · ${invoiceNumber}` : ""}`,
       });
+
+      // Notify all assigned approvers that a new invoice awaits their review.
+      if (hasApprovers) {
+        const projName = projects.find((p) => p.id === projectId)?.name || "a project";
+        await createNotifications(
+          APPROVER_ROLES.map((r) => ({
+            user_id: approverMap[r.key] ?? undefined,
+            invoice_id: inv!.id,
+            title: "New invoice to approve",
+            body: `${vendor} · $${Number(amount).toLocaleString()} on ${projName} needs your approval.`,
+          })),
+        );
+      }
 
       toast.success(
         hasApprovers

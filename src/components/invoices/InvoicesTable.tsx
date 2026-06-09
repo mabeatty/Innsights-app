@@ -9,10 +9,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import DatePickerInput from "@/components/ui/date-picker-input";
 import { Plus, Search, Mail } from "lucide-react";
-import { format, startOfMonth } from "date-fns";
-import { Invoice, INVOICE_STATUSES, INVOICE_TYPES, statusBadgeClasses, formatCurrency } from "./types";
+import { format } from "date-fns";
+import { Invoice, statusBadgeClasses, formatCurrency } from "./types";
 import UploadInvoiceModal from "./UploadInvoiceModal";
 import InvoiceDetailDialog from "./InvoiceDetailDialog";
+
+const STATUS_OPTIONS = ["Pending Review", "In Approval", "Approved", "Rejected"];
 
 interface Props {
   projectId?: string; // scope to a single project when set
@@ -31,7 +33,6 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [projectFilter, setProjectFilter] = useState<string>("all");
-  const [typeFilter, setTypeFilter] = useState<string>("all");
   const [from, setFrom] = useState<Date | undefined>(undefined);
   const [to, setTo] = useState<Date | undefined>(undefined);
   const [search, setSearch] = useState("");
@@ -57,7 +58,6 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
     return invoices.filter((i) => {
       if (statusFilter !== "all" && i.status !== statusFilter) return false;
       if (projectFilter !== "all" && i.project_id !== projectFilter) return false;
-      if (typeFilter !== "all" && i.type !== typeFilter) return false;
       if (from && (!i.invoice_date || new Date(i.invoice_date) < from)) return false;
       if (to && (!i.invoice_date || new Date(i.invoice_date) > to)) return false;
       if (search) {
@@ -66,16 +66,16 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
       }
       return true;
     });
-  }, [invoices, statusFilter, projectFilter, typeFilter, from, to, search]);
+  }, [invoices, statusFilter, projectFilter, from, to, search]);
 
   const counts = useMemo(() => {
-    const monthStart = startOfMonth(new Date());
-    const pending = invoices.filter((i) => i.status === "Pending" || i.status === "Pending — Needs Review");
+    const pendingReview = invoices.filter((i) => i.status === "Pending Review");
+    const inApproval = invoices.filter((i) => i.status === "In Approval");
     return {
-      pending: pending.length,
-      approvedThisMonth: invoices.filter((i) => (i.status === "Approved" || i.status === "Partially Approved" || i.status === "Routed for Payment") && i.approved_at && new Date(i.approved_at) >= monthStart).length,
-      rejected: invoices.filter((i) => i.status === "Rejected").length,
-      totalPendingValue: pending.reduce((sum, i) => sum + Number(i.amount ?? 0), 0),
+      pendingReview: pendingReview.length,
+      inApproval: inApproval.length,
+      approved: invoices.filter((i) => i.status === "Approved").length,
+      totalPendingValue: [...pendingReview, ...inApproval].reduce((sum, i) => sum + Number(i.amount ?? 0), 0),
     };
   }, [invoices]);
 
@@ -83,10 +83,10 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
     <div className="space-y-4">
       {/* Summary */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Pending</div><div className="text-xl font-semibold">{counts.pending}</div></CardContent></Card>
-        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Approved this month</div><div className="text-xl font-semibold">{counts.approvedThisMonth}</div></CardContent></Card>
-        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Rejected</div><div className="text-xl font-semibold">{counts.rejected}</div></CardContent></Card>
-        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total value pending</div><div className="text-xl font-semibold">{formatCurrency(counts.totalPendingValue)}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Pending Review</div><div className="text-xl font-semibold">{counts.pendingReview}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">In Approval</div><div className="text-xl font-semibold">{counts.inApproval}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Approved</div><div className="text-xl font-semibold">{counts.approved}</div></CardContent></Card>
+        <Card><CardContent className="p-3"><div className="text-xs text-muted-foreground">Total $ Pending</div><div className="text-xl font-semibold">{formatCurrency(counts.totalPendingValue)}</div></CardContent></Card>
       </div>
 
       {/* Filters bar */}
@@ -99,7 +99,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
           <SelectTrigger className="w-[170px] h-9"><SelectValue placeholder="Status" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
-            {INVOICE_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+            {STATUS_OPTIONS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
         {!projectId && (
@@ -111,13 +111,6 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
             </SelectContent>
           </Select>
         )}
-        <Select value={typeFilter} onValueChange={setTypeFilter}>
-          <SelectTrigger className="w-[170px] h-9"><SelectValue placeholder="Type" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All types</SelectItem>
-            {INVOICE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-          </SelectContent>
-        </Select>
         <DatePickerInput value={from} onChange={setFrom} placeholder="From" />
         <DatePickerInput value={to} onChange={setTo} placeholder="To" />
         {canUpload && (
@@ -135,7 +128,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
               <TableHead>Invoice #</TableHead>
               <TableHead>Invoice Date</TableHead>
               <TableHead className="text-right">Amount</TableHead>
-              <TableHead>Type</TableHead>
+              <TableHead>Budget Line Item</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Submitted By</TableHead>
               <TableHead>Submitted</TableHead>
@@ -151,7 +144,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
                 <TableCell className="text-xs">{i.invoice_number || "—"}</TableCell>
                 <TableCell className="text-xs">{i.invoice_date ? format(new Date(i.invoice_date), "MMM d, yyyy") : "—"}</TableCell>
                 <TableCell className="text-xs text-right">{formatCurrency(i.amount)}</TableCell>
-                <TableCell className="text-xs">{i.type || "—"}</TableCell>
+                <TableCell className="text-xs">{i.budget_line_item || "—"}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">
                     <Badge variant="outline" className={`${statusBadgeClasses(i.status)} text-[10px]`}>{i.status}</Badge>
