@@ -96,6 +96,13 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
       const { error: invErr } = await supabase.from("invoices").update(invUpdate).eq("id", invoice.id);
       if (invErr) throw invErr;
 
+      // Sync the linked transaction lines so only approved invoices are draw-eligible.
+      if (overall === "Approved") {
+        await supabase.from("budget_transactions").update({ status: "Approved" }).eq("invoice_id", invoice.id);
+      } else if (overall === "Rejected") {
+        await supabase.from("budget_transactions").update({ status: "Pending" }).eq("invoice_id", invoice.id);
+      }
+
       await recordAudit(`${roleLabel(role)} ${decision.toLowerCase()}`, notes.trim() || undefined);
 
       // Notify the other two approvers + the submitter of this decision.

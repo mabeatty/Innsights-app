@@ -176,7 +176,9 @@ export default function ProjectAccountingModule({
       if (error) throw error;
 
       if (insertedDraw) {
-        await (supabase as any).from("budget_transactions").update({ draw_id: insertedDraw.id }).eq("project_id", projectId).is("draw_id", null);
+        // Only approved (non-Pending) transactions go on the draw; unapproved
+        // invoices' lines stay current until their invoice is approved.
+        await (supabase as any).from("budget_transactions").update({ draw_id: insertedDraw.id }).eq("project_id", projectId).is("draw_id", null).neq("status", "Pending");
       }
 
       const monthYear = drawMonth;

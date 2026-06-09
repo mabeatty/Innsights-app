@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, ExternalLink, Link, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, ExternalLink, Link, ArrowUp, ArrowDown, ArrowUpDown, Eye } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,6 +19,8 @@ import {
   BudgetTransaction, ALL_DIVISIONS, TRANSACTION_TYPES, TRANSACTION_STATUSES, fmtDecimal,
 } from "./types";
 import type { DrawRecord } from "./DrawHistoryTab";
+import InvoiceDetailDialog from "@/components/invoices/InvoiceDetailDialog";
+import { statusBadgeClasses } from "@/components/invoices/types";
 
 interface Props {
   projectId: string;
@@ -48,6 +50,8 @@ interface TransactionGroup {
   totalAmount: number;
   totalRetainage: number;
   totalNet: number;
+  invoiceId: string | null;
+  invoiceStatus: string | null;
 }
 
 interface Vendor {
@@ -93,6 +97,8 @@ function buildGroups(txns: BudgetTransaction[]): TransactionGroup[] {
       totalAmount: items.reduce((s, i) => s + Number(i.amount), 0),
       totalRetainage: items.reduce((s, i) => s + Number(i.retainage_amount), 0),
       totalNet: items.reduce((s, i) => s + Number(i.net_amount), 0),
+      invoiceId: (first as any).invoice_id ?? (first as any).invoices?.id ?? null,
+      invoiceStatus: (first as any).invoices?.status ?? null,
     });
   }
   result.sort((a, b) => b.date.localeCompare(a.date));
@@ -106,6 +112,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
   const [editingDrawId, setEditingDrawId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   // View toggle: "current" or "past"
   const [view, setView] = useState<"current" | "past">("current");
@@ -158,7 +165,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("budget_transactions")
-      .select("*")
+      .select("*, invoices(id, status)")
       .eq("project_id", projectId)
       .order("date", { ascending: false });
     if (error) toast.error("Failed to load transactions.");
@@ -537,16 +544,36 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalRetainage)}</td>
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalNet)}</td>
           <td className="px-3 py-2">
-            <span className={cn(
-              "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-              g.status === "Paid" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-              g.status === "Approved" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-              g.status === "Pending" && "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
-              g.status === "Deferred" && "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-            )}>{g.status}</span>
+            {g.invoiceStatus ? (
+              <span className={cn("inline-block rounded-full border px-2 py-0.5 text-xs font-medium", statusBadgeClasses(g.invoiceStatus))}>{g.invoiceStatus}</span>
+            ) : (
+              <span className={cn(
+                "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
+                g.status === "Paid" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
+                g.status === "Approved" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
+                g.status === "Pending" && "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400",
+                g.status === "Deferred" && "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
+              )}>{g.status}</span>
+            )}
           </td>
           <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
-            {readOnly ? (
+            {g.invoiceId ? (
+              <div className="grid grid-cols-3 gap-0" style={{ width: "84px" }}>
+                <div className="flex justify-center">
+                  {g.documentUrl ? (
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(g.documentUrl!, "_blank")} title="Open document">
+                      <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                    </Button>
+                  ) : <span className="inline-block w-7 h-7" />}
+                </div>
+                <div className="flex justify-center">
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setSelectedInvoiceId(g.invoiceId!)} title="View invoice">
+                    <Eye className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+                <span className="inline-block w-7 h-7" />
+              </div>
+            ) : readOnly ? (
               <div className="grid grid-cols-3 gap-0" style={{ width: "84px" }}>
                 <div className="flex justify-center">
                   {g.documentUrl ? (
@@ -664,11 +691,9 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
               </Select>
             </div>
             <div className="flex gap-2 ml-auto">
+              <span className="text-xs text-muted-foreground self-center">Invoices are added in the global Invoices tab.</span>
               <Button size="sm" variant="outline" onClick={() => setManageVendorsOpen(true)}>
                 Manage Vendors
-              </Button>
-              <Button size="sm" className="gap-1.5" onClick={() => { resetForm(); setEditingGroupId(null); setDialogOpen(true); }}>
-                <Plus className="h-3.5 w-3.5" /> Add Transaction
               </Button>
             </div>
           </div>
@@ -984,6 +1009,9 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Invoice detail (opened from invoice-linked transaction rows) */}
+      <InvoiceDetailDialog invoiceId={selectedInvoiceId} onClose={() => setSelectedInvoiceId(null)} onChange={load} />
     </div>
   );
 }
