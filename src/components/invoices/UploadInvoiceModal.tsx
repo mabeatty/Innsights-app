@@ -107,14 +107,16 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       if (up.error) throw up.error;
       const { data: signed } = await supabase.storage.from("invoices").createSignedUrl(path, 60 * 60 * 24 * 30);
 
-      // Load this project's configured approvers (one per role).
-      const { data: approverRows } = await supabase
-        .from("project_approvers")
-        .select("role, approver_id")
-        .eq("project_id", projectId);
+      // Resolve the approval chain: Project Manager & Project Lead are assigned
+      // per project; Treasury is the global per-user profile flag.
+      const [{ data: approverRows }, { data: treasuryRows }] = await Promise.all([
+        supabase.from("project_approvers").select("role, approver_id").eq("project_id", projectId),
+        supabase.from("profiles").select("user_id").eq("is_treasury", true).limit(1),
+      ]);
       const approverMap: Record<string, string | null> = {};
       (approverRows ?? []).forEach((r) => { approverMap[r.role] = r.approver_id; });
-      const hasApprovers = (approverRows ?? []).some((r) => r.approver_id);
+      approverMap.treasury = treasuryRows?.[0]?.user_id ?? null;
+      const hasApprovers = APPROVER_ROLES.some((r) => approverMap[r.key]);
 
       // Route into the approval chain if approvers exist; otherwise hold for review.
       const status = hasApprovers ? "In Approval" : "Pending Review";

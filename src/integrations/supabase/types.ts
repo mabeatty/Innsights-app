@@ -261,6 +261,7 @@ export type Database = {
           document_url: string | null
           draw_id: string | null
           id: string
+          invoice_id: string | null
           net_amount: number
           notes: string | null
           payee: string
@@ -283,6 +284,7 @@ export type Database = {
           document_url?: string | null
           draw_id?: string | null
           id?: string
+          invoice_id?: string | null
           net_amount?: number
           notes?: string | null
           payee?: string
@@ -305,6 +307,7 @@ export type Database = {
           document_url?: string | null
           draw_id?: string | null
           id?: string
+          invoice_id?: string | null
           net_amount?: number
           notes?: string | null
           payee?: string
@@ -1818,6 +1821,7 @@ export type Database = {
           avatar_url: string | null
           first_name: string | null
           id: string
+          is_treasury: boolean
           last_name: string | null
           phone: string | null
           updated_at: string
@@ -1827,6 +1831,7 @@ export type Database = {
           avatar_url?: string | null
           first_name?: string | null
           id?: string
+          is_treasury?: boolean
           last_name?: string | null
           phone?: string | null
           updated_at?: string
@@ -1836,6 +1841,7 @@ export type Database = {
           avatar_url?: string | null
           first_name?: string | null
           id?: string
+          is_treasury?: boolean
           last_name?: string | null
           phone?: string | null
           updated_at?: string

@@ -7,7 +7,6 @@ import SettingsIntegrations from "./SettingsIntegrations";
 import ProfileSettings from "@/components/settings/ProfileSettings";
 import ActivityTab from "@/components/settings/ActivityTab";
 import AlertsTab from "@/components/settings/AlertsTab";
-import { TreasuryDefaultSetting } from "@/components/invoices/TreasuryDefaultSetting";
 import { useAuth } from "@/contexts/AuthContext";
 
 const ACTIVITY_EMAIL = "marc.alex.beatty@gmail.com";
@@ -50,9 +49,8 @@ export default function Settings() {
         <TabsContent value="templates" className="mt-6">
           <AdminTemplates embedded />
         </TabsContent>
-        <TabsContent value="team" className="mt-6 space-y-6">
+        <TabsContent value="team" className="mt-6">
           <AdminTeam embedded />
-          <TreasuryDefaultSetting />
         </TabsContent>
         <TabsContent value="integrations" className="mt-6">
           <SettingsIntegrations />

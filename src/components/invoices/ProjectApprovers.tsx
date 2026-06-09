@@ -10,20 +10,22 @@ import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { APPROVER_ROLES, ApproverRole } from "./types";
 
 const UNASSIGNED = "__unassigned__";
-export const TREASURY_DEFAULT_KEY = "default_treasury_approver";
+
+// Treasury is a global per-user profile flag (profiles.is_treasury). Only
+// Project Manager and Project Lead are assigned per project here.
+const PROJECT_ROLES = APPROVER_ROLES.filter((r) => r.key !== "treasury");
 
 interface Props {
   projectId: string;
 }
 
 /**
- * "Invoice Approvers" section for Project Info. Three dropdowns (Project Manager,
- * Treasury, Project Lead), each listing org members. Treasury pre-fills from the
- * org-wide default set in Settings; PM and Project Lead vary per project.
- * Saves to the project_approvers table (one row per project per role).
+ * "Invoice Approvers" section for Project Info. Two dropdowns (Project Manager,
+ * Project Lead), each listing org members, saved to project_approvers. The
+ * Treasury approver is set globally via the user-profile checkbox.
  */
 export function ProjectApprovers({ projectId }: Props) {
-  const { organizationId, accessLevel } = useAuth();
+  const { accessLevel } = useAuth();
   const { members } = useTeamMembers();
   const [assignments, setAssignments] = useState<Record<ApproverRole, string>>({
     project_manager: "",
@@ -37,7 +39,6 @@ export function ProjectApprovers({ projectId }: Props) {
 
   useEffect(() => {
     (async () => {
-      // Existing per-project assignments
       const { data: rows } = await supabase
         .from("project_approvers")
         .select("role, approver_id")
@@ -48,26 +49,15 @@ export function ProjectApprovers({ projectId }: Props) {
         next[r.role as ApproverRole] = r.approver_id ?? "";
       });
 
-      // Pre-fill Treasury from the org-wide default if not set for this project
-      if (!next.treasury && organizationId) {
-        const { data: def } = await supabase
-          .from("integrations")
-          .select("value")
-          .eq("org_id", organizationId)
-          .eq("integration_key", TREASURY_DEFAULT_KEY)
-          .maybeSingle();
-        if (def?.value) next.treasury = def.value;
-      }
-
       setAssignments(next);
       setLoaded(true);
     })();
-  }, [projectId, organizationId]);
+  }, [projectId]);
 
   const handleSave = async () => {
     setSaving(true);
     try {
-      const rows = APPROVER_ROLES.map((r) => ({
+      const rows = PROJECT_ROLES.map((r) => ({
         project_id: projectId,
         role: r.key,
         approver_id: assignments[r.key] || null,
@@ -90,11 +80,11 @@ export function ProjectApprovers({ projectId }: Props) {
     <section className="space-y-4">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoice Approvers</h3>
       <p className="text-xs text-muted-foreground -mt-2">
-        Invoices for this project route to these three approvers. Treasury defaults to your organization-wide
-        setting (Settings → Team) and can be overridden here.
+        Invoices for this project route to the Project Manager and Project Lead below, plus the global
+        Treasury approver (set via each user's profile).
       </p>
-      <div className="grid gap-4 sm:grid-cols-3">
-        {APPROVER_ROLES.map((role) => (
+      <div className="grid gap-4 sm:grid-cols-2">
+        {PROJECT_ROLES.map((role) => (
           <div key={role.key} className="space-y-1.5">
             <Label>{role.label}</Label>
             <Select

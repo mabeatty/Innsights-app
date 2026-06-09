@@ -19,6 +19,7 @@ export default function ProfileSettings() {
   const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [expenseRole, setExpenseRole] = useState("");
+  const [isTreasury, setIsTreasury] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -49,7 +50,7 @@ export default function ProfileSettings() {
   const loadProfile = async () => {
     const { data } = await supabase
       .from("profiles")
-      .select("first_name, last_name, phone, avatar_url")
+      .select("first_name, last_name, phone, avatar_url, is_treasury")
       .eq("user_id", user!.id)
       .maybeSingle();
     if (data) {
@@ -57,6 +58,7 @@ export default function ProfileSettings() {
       setLastName(data.last_name || "");
       setPhone(data.phone || "");
       setAvatarUrl(data.avatar_url || "");
+      setIsTreasury(!!data.is_treasury);
     }
   };
 
@@ -91,6 +93,7 @@ export default function ProfileSettings() {
           last_name: lastName.trim(),
           phone: phone.trim(),
           avatar_url: avatarUrl,
+          is_treasury: isTreasury,
           updated_at: new Date().toISOString(),
         },
         { onConflict: "user_id" }
@@ -364,6 +367,14 @@ export default function ProfileSettings() {
             <Label>Job Title / Role</Label>
             <Input value={expenseRole} disabled className="bg-muted" />
             <p className="text-xs text-muted-foreground">Set by your organization admin</p>
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3">
+            <div>
+              <p className="font-medium text-sm">Treasury Approver</p>
+              <p className="text-xs text-muted-foreground">Acts as the Treasury approver on every project's invoice approval chain.</p>
+            </div>
+            <Switch checked={isTreasury} onCheckedChange={setIsTreasury} />
           </div>
 
           <Button onClick={handleSaveProfile} disabled={saving}>
