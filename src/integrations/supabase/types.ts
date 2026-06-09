@@ -1150,6 +1150,82 @@ export type Database = {
           },
         ]
       }
+      invoice_approvals: {
+        Row: {
+          approver_id: string | null
+          approver_role: string
+          created_at: string
+          decided_at: string | null
+          id: string
+          invoice_id: string
+          notes: string | null
+          status: string
+        }
+        Insert: {
+          approver_id?: string | null
+          approver_role: string
+          created_at?: string
+          decided_at?: string | null
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          status?: string
+        }
+        Update: {
+          approver_id?: string | null
+          approver_role?: string
+          created_at?: string
+          decided_at?: string | null
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_approvals_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      project_approvers: {
+        Row: {
+          approver_id: string | null
+          created_at: string
+          id: string
+          project_id: string
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          approver_id?: string | null
+          created_at?: string
+          id?: string
+          project_id: string
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          approver_id?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_approvers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoices: {
         Row: {
           ai_extracted_fields: Json | null
@@ -1157,6 +1233,7 @@ export type Database = {
           approved_at: string | null
           approved_by: string | null
           budget_line_item: string | null
+          cost_type: string | null
           created_at: string
           id: string
           invoice_date: string | null
@@ -1188,6 +1265,7 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           budget_line_item?: string | null
+          cost_type?: string | null
           created_at?: string
           id?: string
           invoice_date?: string | null
@@ -1219,6 +1297,7 @@ export type Database = {
           approved_at?: string | null
           approved_by?: string | null
           budget_line_item?: string | null
+          cost_type?: string | null
           created_at?: string
           id?: string
           invoice_date?: string | null

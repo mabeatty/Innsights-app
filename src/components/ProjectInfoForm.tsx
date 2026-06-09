@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { PROJECT_STATUSES } from "@/lib/projectStatus";
+import { ProjectApprovers } from "@/components/invoices/ProjectApprovers";
 
 const US_STATES = [
   "AL","AK","AZ","AR","CA","CO","CT","DE","FL","GA","HI","ID","IL","IN","IA",
@@ -249,6 +250,9 @@ export function ProjectInfoForm({ projectId, brandName, roomMatrixCount, onInfoC
         <Field label="ClickUp List ID" value={info.clickup_list_id} onChange={v => update("clickup_list_id", v)} placeholder="e.g. 901234567890" />
         <ProjectAccountField projectId={projectId} />
       </section>
+
+      {/* Invoice Approvers */}
+      <ProjectApprovers projectId={projectId} />
 
       <Button onClick={handleSave} disabled={saving} className="gap-2">
         <Save className="h-4 w-4" />

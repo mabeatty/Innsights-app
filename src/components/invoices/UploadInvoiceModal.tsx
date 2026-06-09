@@ -11,7 +11,7 @@ import { Sparkles, Upload, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { INVOICE_TYPES, APPROVER_EMAIL } from "./types";
+import { COST_TYPES, APPROVER_ROLES } from "./types";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -34,7 +34,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [amount, setAmount] = useState("");
   const [partial, setPartial] = useState("");
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
-  const [type, setType] = useState<string>("");
+  const [costType, setCostType] = useState<string>("");
   const [budgetLine, setBudgetLine] = useState<string>("");
   const [notes, setNotes] = useState("");
 
@@ -46,7 +46,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   useEffect(() => { if (open) {
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
-    setAmount(""); setPartial(""); setType(""); setBudgetLine(""); setNotes("");
+    setAmount(""); setPartial(""); setCostType(""); setBudgetLine(""); setNotes("");
     setExtracted({}); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
@@ -71,7 +71,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         reader.onerror = reject;
         reader.readAsDataURL(f);
       });
-      const { data } = await supabase.functions.invoke("extract-invoice-pdf", {
+      const { data } = await supabase.functions.invoke("extract-invoice-claude", {
         body: { pdfBase64: b64, mimeType: "application/pdf" },
       });
       if (data?.ok && data.fields) {
@@ -95,8 +95,8 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   const handleSave = async () => {
     if (!file) return toast.error("Please upload a PDF.");
-    if (!vendor || !invoiceNumber || !invoiceDate || !amount || !projectId || !type) {
-      return toast.error("Please fill all required fields.");
+    if (!vendor || !amount || !projectId) {
+      return toast.error("Vendor, Amount, and Project are required.");
     }
     if (!organizationId || !user) return toast.error("Not authenticated.");
     setSaving(true);
@@ -106,18 +106,27 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       if (up.error) throw up.error;
       const { data: signed } = await supabase.storage.from("invoices").createSignedUrl(path, 60 * 60 * 24 * 30);
 
-      const partialNum = partial ? Number(partial) : null;
-      const status = partialNum ? "Pending" : "Pending";
+      // Load this project's configured approvers (one per role).
+      const { data: approverRows } = await supabase
+        .from("project_approvers")
+        .select("role, approver_id")
+        .eq("project_id", projectId);
+      const approverMap: Record<string, string | null> = {};
+      (approverRows ?? []).forEach((r) => { approverMap[r.role] = r.approver_id; });
+      const hasApprovers = (approverRows ?? []).some((r) => r.approver_id);
+
+      // Route into the approval chain if approvers exist; otherwise hold for review.
+      const status = hasApprovers ? "In Approval" : "Pending Review";
 
       const { data: inv, error } = await supabase.from("invoices").insert({
         organization_id: organizationId,
         project_id: projectId,
         vendor_name: vendor,
-        invoice_number: invoiceNumber,
-        invoice_date: format(invoiceDate, "yyyy-MM-dd"),
+        invoice_number: invoiceNumber || null,
+        invoice_date: invoiceDate ? format(invoiceDate, "yyyy-MM-dd") : null,
         amount: Number(amount),
-        partial_approved_amount: partialNum,
-        type,
+        partial_approved_amount: partial ? Number(partial) : null,
+        cost_type: costType || null,
         budget_line_item: budgetLine || null,
         status,
         submitted_by: user.id,
@@ -130,28 +139,29 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       }).select("id").single();
       if (error) throw error;
 
+      // Create one approval row per role (Pending), pulling the assigned approver.
+      const approvalRows = APPROVER_ROLES.map((r) => ({
+        invoice_id: inv!.id,
+        approver_role: r.key,
+        approver_id: approverMap[r.key] ?? null,
+        status: "Pending",
+      }));
+      const { error: apprErr } = await supabase.from("invoice_approvals").insert(approvalRows);
+      if (apprErr) throw apprErr;
+
       await supabase.from("invoice_audit_trail").insert({
         invoice_id: inv!.id,
         action: "Invoice submitted",
         performed_by: user.id,
         performed_by_name: user.email,
-        notes: `Vendor: ${vendor} · ${invoiceNumber}`,
+        notes: `Vendor: ${vendor}${invoiceNumber ? ` · ${invoiceNumber}` : ""}`,
       });
 
-      // notify approver (best effort)
-      const projName = projects.find(p => p.id === projectId)?.name || "Project";
-      supabase.functions.invoke("send-invoice-email", {
-        body: {
-          to: APPROVER_EMAIL,
-          subject: `New invoice to review: ${vendor} · ${invoiceNumber}`,
-          html: `<p>A new invoice has been submitted for <b>${projName}</b>.</p>
-                 <ul><li>Vendor: ${vendor}</li><li>Invoice #: ${invoiceNumber}</li><li>Amount: $${Number(amount).toLocaleString()}</li></ul>
-                 <p><a href="${window.location.origin}/invoices">Review in Innsights</a></p>`,
-          attachPdfPath: path,
-        },
-      }).catch(() => {});
-
-      toast.success("Invoice submitted for approval.");
+      toast.success(
+        hasApprovers
+          ? "Invoice submitted — routed to approvers."
+          : "Invoice submitted. Assign approvers in Project Info to start the approval chain.",
+      );
       onOpenChange(false);
       onCreated?.();
     } catch (e: any) {
@@ -187,11 +197,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
               <Input value={vendor} onChange={(e) => setVendor(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label className="flex items-center">Invoice Number * {extracted.invoice_number && <AIBadge />}</Label>
+              <Label className="flex items-center">Invoice Number {extracted.invoice_number && <AIBadge />}</Label>
               <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label className="flex items-center">Invoice Date * {extracted.invoice_date && <AIBadge />}</Label>
+              <Label className="flex items-center">Invoice Date {extracted.invoice_date && <AIBadge />}</Label>
               <DatePickerInput value={invoiceDate} onChange={setInvoiceDate} heightClass="h-10" textClass="text-sm" />
             </div>
             <div className="space-y-1.5">
@@ -212,11 +222,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Invoice Type *</Label>
-              <Select value={type} onValueChange={setType}>
-                <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
+              <Label>Cost Type</Label>
+              <Select value={costType} onValueChange={setCostType}>
+                <SelectTrigger><SelectValue placeholder="Select cost type" /></SelectTrigger>
                 <SelectContent>
-                  {INVOICE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                  {COST_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
