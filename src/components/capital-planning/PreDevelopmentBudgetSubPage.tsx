@@ -298,6 +298,9 @@ export default function PreDevelopmentBudgetSubPage({ projectId }: Props) {
 
     // Totals row
     const totalsR = dataEnd + 1;
+    const firstDataRow = dataStart + 1; // Excel (1-based) row of the first line item
+    const lastDataRow = dataEnd + 1;    // Excel (1-based) row of the last line item
+    const sumCol: Record<number, string> = { 1: "B", 2: "C", 3: "D" };
     for (let c = 0; c < 5; c++) {
       const addr = XLSX.utils.encode_cell({ r: totalsR, c });
       if (!ws[addr]) ws[addr] = { t: "s", v: "" };
@@ -307,7 +310,15 @@ export default function PreDevelopmentBudgetSubPage({ projectId }: Props) {
         alignment: { horizontal: c >= 1 && c <= 3 ? "right" : "left", vertical: "center", indent: c === 0 ? 1 : 0 },
         border: { top: thick, bottom: thick, left: thin, right: thin },
       };
-      if (c >= 1 && c <= 3) (ws[addr] as any).z = fmtCur;
+      if (c >= 1 && c <= 3) {
+        (ws[addr] as any).z = fmtCur;
+        // Live SUM formula so the totals update automatically when any line
+        // item amount is edited in the exported spreadsheet.
+        if (data.length > 0) {
+          (ws[addr] as any).t = "n";
+          (ws[addr] as any).f = `SUM(${sumCol[c]}${firstDataRow}:${sumCol[c]}${lastDataRow})`;
+        }
+      }
     }
 
     // Thick outer border around full table
