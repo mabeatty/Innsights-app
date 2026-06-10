@@ -253,6 +253,7 @@ Deno.serve(async (req) => {
 
       const divs = budgetRows.filter((r: any) => r.cost_type === costType);
       let sS = 0, sP = 0, sT = 0, sM = 0, sC = 0, sB = 0, sR = 0;
+      const divRowIdxs: number[] = [];
 
       divs.forEach((div: any) => {
         const dTxns = approvedTxns.filter((t: any) => t.division_number === div.division_number);
@@ -266,6 +267,7 @@ Deno.serve(async (req) => {
         const ret = dTxns.reduce((s: number, t: any) => s + Number(t.retainage_amount), 0);
         sS += sched; sP += prev; sT += tp; sM += mat; sC += tc; sB += bal; sR += ret;
 
+        divRowIdxs.push(G.length);
         G.push([
           div.division_number,
           div.division_name,
@@ -277,8 +279,9 @@ Deno.serve(async (req) => {
       G.push([]); // blank before subtotal
       G.push([]); // blank
       const subPct = sS > 0 ? sC / sS : 0;
+      const subRowIdx = G.length;
       G.push(["", `${label} SUBTOTAL`, sS, sP, sT, sM, sC, subPct, sB, sR, ""]);
-      return { sS, sP, sT, sM, sC, sB, sR };
+      return { sS, sP, sT, sM, sC, sB, sR, divRowIdxs, subRowIdx };
     };
 
     const hard = addDivRows("hard", "CONSTRUCTION HARD COSTS");
@@ -289,6 +292,7 @@ Deno.serve(async (req) => {
     const grandSched = hard.sS + soft.sS;
     const grandTC = hard.sC + soft.sC;
     const grandPct = grandSched > 0 ? grandTC / grandSched : 0;
+    const totalRowIdx = G.length;
     G.push([
       "", "TOTAL COSTS",
       hard.sS + soft.sS, hard.sP + soft.sP, hard.sT + soft.sT,
@@ -297,6 +301,38 @@ Deno.serve(async (req) => {
     ]);
 
     const ws703 = XLSX.utils.aoa_to_sheet(G);
+
+    // ── Live formulas (keep the computed numbers as cached values) ──
+    // Adds a formula to an existing numeric cell, preserving its cached value.
+    const setF = (sheet: any, r: number, c: number, f: string) => {
+      const addr = XLSX.utils.encode_cell({ r, c });
+      const cell = sheet[addr];
+      if (cell && typeof cell.v === "number") { cell.t = "n"; cell.f = f; }
+    };
+    const col = (c: number) => XLSX.utils.encode_col(c);
+    const SUM_COLS = [2, 3, 4, 5, 6, 8, 9]; // C,D,E,F,G,I (bal), J (retainage)
+
+    // Per division row: G = SUM(D:F), H = G/C, I = C - G.
+    for (const r of [...hard.divRowIdxs, ...soft.divRowIdxs]) {
+      const x = r + 1; // 1-based Excel row
+      setF(ws703, r, 6, `SUM(D${x}:F${x})`);
+      setF(ws703, r, 7, `IF(C${x}=0,0,G${x}/C${x})`);
+      setF(ws703, r, 8, `C${x}-G${x}`);
+    }
+    // Section subtotals: SUM over that section's division rows; % from its own G/C.
+    for (const sec of [hard, soft]) {
+      if (sec.divRowIdxs.length === 0) continue;
+      const a = sec.divRowIdxs[0] + 1;
+      const b = sec.divRowIdxs[sec.divRowIdxs.length - 1] + 1;
+      for (const c of SUM_COLS) setF(ws703, sec.subRowIdx, c, `SUM(${col(c)}${a}:${col(c)}${b})`);
+      setF(ws703, sec.subRowIdx, 7, `IF(C${sec.subRowIdx + 1}=0,0,G${sec.subRowIdx + 1}/C${sec.subRowIdx + 1})`);
+    }
+    // Grand total = hard subtotal + soft subtotal.
+    {
+      const hr = hard.subRowIdx + 1, sr = soft.subRowIdx + 1, tx = totalRowIdx + 1;
+      for (const c of SUM_COLS) setF(ws703, totalRowIdx, c, `${col(c)}${hr}+${col(c)}${sr}`);
+      setF(ws703, totalRowIdx, 7, `IF(C${tx}=0,0,G${tx}/C${tx})`);
+    }
     ws703["!cols"] = [
       { wch: 10 }, { wch: 38 }, { wch: 18 }, { wch: 18 },
       { wch: 15 }, { wch: 18 }, { wch: 20 }, { wch: 10 },
@@ -356,6 +392,13 @@ Deno.serve(async (req) => {
         const cell = ws3[XLSX.utils.encode_cell({ r, c })];
         if (cell && typeof cell.v === "number") cell.z = '$#,##0.00';
       }
+    }
+
+    // Detail TOTAL row: live SUM over the Cost / Retainage / Total columns.
+    if (periodTxns.length > 0) {
+      const tRow = periodTxns.length + 2; // 0-based index of the TOTAL row
+      const a = 2, b = periodTxns.length + 1; // first/last data Excel rows
+      for (const c of [6, 7, 8]) setF(ws3, tRow, c, `SUM(${col(c)}${a}:${col(c)}${b})`);
     }
 
     // ── Build workbook ──
