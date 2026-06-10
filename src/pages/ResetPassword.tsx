@@ -55,7 +55,7 @@ export default function ResetPassword() {
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Card className="w-full max-w-sm shadow-lg">
           <CardContent className="pt-6 text-center text-muted-foreground">
-            Verifying reset link…
+            Verifying your link…
           </CardContent>
         </Card>
       </div>
@@ -67,7 +67,7 @@ export default function ResetPassword() {
       <Card className="w-full max-w-sm shadow-lg">
         <CardHeader className="text-center pb-2">
           <CardTitle className="text-2xl font-bold tracking-tight text-primary">
-            Set New Password
+            Set Your Password
           </CardTitle>
         </CardHeader>
         <CardContent>
