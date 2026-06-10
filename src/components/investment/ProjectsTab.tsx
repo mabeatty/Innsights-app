@@ -184,6 +184,24 @@ export default function ProjectsTab() {
         const cell = ws[XLSX.utils.encode_cell({ r: totalsRow, c: i })];
         if (cell) cell.s = { font: { bold: true } };
       });
+
+      // Live formulas: Remaining = Committed - Called per row; totals = SUM.
+      const setF = (r: number, c: number, f: string) => {
+        const addr = XLSX.utils.encode_cell({ r, c });
+        const cell = ws[addr];
+        if (cell && typeof cell.v === "number") { cell.t = "n"; cell.f = f; }
+      };
+      for (let r = 4; r < 4 + rows.length; r++) {
+        const x = r + 1; // 1-based Excel row; cols D=Committed, E=Called, F=Remaining
+        setF(r, 5, `D${x}-E${x}`);
+      }
+      if (rows.length > 0) {
+        const a = 5, b = 4 + rows.length; // first/last data Excel rows
+        for (const c of [3, 4, 5, 6]) {
+          setF(totalsRow, c, `SUM(${XLSX.utils.encode_col(c)}${a}:${XLSX.utils.encode_col(c)}${b})`);
+        }
+      }
+
       ws["!cols"] = headers.map(() => ({ wch: 18 }));
 
       const wb = XLSX.utils.book_new();
