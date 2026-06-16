@@ -95,7 +95,7 @@ export default function Login() {
     e.preventDefault();
     setForgotLoading(true);
     await supabase.auth.resetPasswordForEmail(forgotEmail, {
-      redirectTo: "https://innsights.vercel.app/reset-password",
+      redirectTo: "https://mabeatty-innsights.vercel.app/reset-password",
     });
     setForgotLoading(false);
     setForgotSent(true);

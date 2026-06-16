@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
     // invitee creates a password before they can log in.
     const { data: inviteData, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(email, {
       data: { first_name: firstName, last_name: lastName },
-      redirectTo: "https://innsights.vercel.app/reset-password",
+      redirectTo: "https://mabeatty-innsights.vercel.app/reset-password",
     });
 
     if (inviteError) {
