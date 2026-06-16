@@ -29,6 +29,10 @@ export default function Login() {
   const [forgotLoading, setForgotLoading] = useState(false);
   const [forgotSent, setForgotSent] = useState(false);
 
+  // Resend-confirmation affordance (shown when email isn't confirmed)
+  const [showResend, setShowResend] = useState(false);
+  const [resendMsg, setResendMsg] = useState("");
+
   // Success banner after password reset
   const [resetSuccess, setResetSuccess] = useState(false);
   useEffect(() => {
@@ -40,18 +44,50 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setResendMsg("");
+    setShowResend(false);
     setLoading(true);
-    const { error } = await signIn(email, password);
-    if (error) {
-      setError("Invalid email or password.");
+    try {
+      const { error } = await signIn(email, password);
+      if (error) {
+        console.error("[login] sign-in failed:", error);
+        const msg = (error.message || "").toLowerCase();
+        if (msg.includes("email not confirmed")) {
+          setError("Your email hasn't been confirmed yet. Use the button below to resend the confirmation link.");
+          setShowResend(true);
+        } else if (msg.includes("invalid login credentials")) {
+          setError("Invalid email or password. If you were just invited, open your invite link to set a password first.");
+        } else {
+          setError(error.message || "Login failed. Please try again.");
+        }
+        return;
+      }
+      const mfa = await refreshMfaStatus();
+      console.log("[login] signed in; mfaRequired =", mfa.mfaRequired);
+      navigate(mfa.mfaRequired ? "/mfa-verify" : "/dashboard");
+    } catch (err: any) {
+      // Surface unexpected failures instead of leaving the button stuck/disabled.
+      console.error("[login] unexpected error:", err);
+      setError(err?.message || "Something went wrong while signing in. Please try again.");
+    } finally {
       setLoading(false);
-      return;
     }
-    const mfa = await refreshMfaStatus();
-    if (mfa.mfaRequired) {
-      navigate("/mfa-verify");
-    } else {
-      navigate("/dashboard");
+  };
+
+  const handleResendConfirmation = async () => {
+    setResendMsg("");
+    if (!email) { setResendMsg("Enter your email above first."); return; }
+    try {
+      const { error } = await supabase.auth.resend({ type: "signup", email });
+      if (error) {
+        console.error("[login] resend failed:", error);
+        setResendMsg(error.message);
+      } else {
+        setResendMsg("Confirmation email sent — check your inbox.");
+      }
+    } catch (err: any) {
+      console.error("[login] resend error:", err);
+      setResendMsg(err?.message || "Could not resend confirmation email.");
     }
   };
 
@@ -116,12 +152,20 @@ export default function Login() {
                 Forgot Password?
               </button>
             </div>
-            {error && (
-              <p className="text-sm text-destructive">{error}</p>
-            )}
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? "Signing in…" : "Sign In"}
             </Button>
+            {error && (
+              <p className="text-sm text-destructive text-center" role="alert">{error}</p>
+            )}
+            {showResend && (
+              <Button type="button" variant="outline" className="w-full" onClick={handleResendConfirmation} disabled={loading}>
+                Resend confirmation email
+              </Button>
+            )}
+            {resendMsg && (
+              <p className="text-sm text-muted-foreground text-center">{resendMsg}</p>
+            )}
           </form>
           <div className="text-xs text-center text-muted-foreground mt-4 space-y-1">
             <p><Link to="/signup" className="text-primary hover:underline">Create account</Link></p>
