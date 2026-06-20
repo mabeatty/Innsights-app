@@ -33,7 +33,7 @@ interface LineItem {
   id: string;
   divisionNumber: string;
   amount: number;
-  retainagePct: number;
+  retainageAmount: number;
   description: string;
 }
 
@@ -70,7 +70,7 @@ const newLineItem = (): LineItem => ({
   id: `new-${++lineItemCounter}`,
   divisionNumber: "",
   amount: 0,
-  retainagePct: 10,
+  retainageAmount: 0,
   description: "",
 });
 
@@ -208,9 +208,9 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   }, [pastTransactions, draws]);
 
   const handleTypeChange = (type: string) => {
+    // Retainage is entered manually in dollars, so changing the transaction
+    // type no longer recalculates it from a percentage.
     setFormType(type);
-    const pct = type === "Contractor Pay Application" ? 10 : 0;
-    setLineItems(prev => prev.map(li => ({ ...li, retainagePct: pct })));
   };
 
   const resetForm = () => {
@@ -237,7 +237,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
       id: t.id,
       divisionNumber: t.division_number,
       amount: Number(t.amount),
-      retainagePct: Number(t.retainage_percent),
+      retainageAmount: Number(t.retainage_amount),
       description: t.description,
     })));
     setDialogOpen(true);
@@ -259,7 +259,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   };
 
   const formTotalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
-  const formTotalRetainage = lineItems.reduce((s, li) => s + li.amount * (li.retainagePct / 100), 0);
+  const formTotalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
   const formTotalNet = formTotalAmount - formTotalRetainage;
 
   const updateDrawSnapshot = async (drawId: string) => {
@@ -337,7 +337,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
 
       const rows = validLines.map(li => {
         const div = ALL_DIVISIONS.find(d => d.number === li.divisionNumber);
-        const retAmt = li.amount * (li.retainagePct / 100);
+        const retAmt = li.retainageAmount;
         return {
           project_id: projectId,
           transaction_group_id: groupId,
@@ -349,7 +349,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           division_name: div?.name ?? "",
           description: li.description,
           amount: li.amount,
-          retainage_percent: li.retainagePct,
+          retainage_percent: li.amount > 0 ? (retAmt / li.amount) * 100 : 0,
           retainage_amount: retAmt,
           net_amount: li.amount - retAmt,
           status: formStatus,
@@ -854,7 +854,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                     <tr className="bg-muted/50 text-muted-foreground text-left text-xs">
                       <th className="px-2 py-1.5 min-w-[200px]">Division</th>
                       <th className="px-2 py-1.5 w-28">Amount</th>
-                      <th className="px-2 py-1.5 w-20">Ret %</th>
                       <th className="px-2 py-1.5 w-28">Retainage</th>
                       <th className="px-2 py-1.5 w-28">Net</th>
                       <th className="px-2 py-1.5">Description</th>
@@ -863,7 +862,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                   </thead>
                   <tbody>
                     {lineItems.map(li => {
-                      const retAmt = li.amount * (li.retainagePct / 100);
+                      const retAmt = li.retainageAmount;
                       const netAmt = li.amount - retAmt;
                       return (
                         <tr key={li.id} className="border-t">
@@ -876,12 +875,11 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                             </Select>
                           </td>
                           <td className="px-2 py-1.5">
-                            <Input type="number" className="h-7 text-xs" value={li.amount || ""} onChange={e => updateLineItem(li.id, "amount", Number(e.target.value) || 0)} />
+                            <Input type="number" step="0.01" className="h-7 text-xs" value={li.amount || ""} onChange={e => updateLineItem(li.id, "amount", Number(e.target.value) || 0)} />
                           </td>
                           <td className="px-2 py-1.5">
-                            <Input type="number" className="h-7 text-xs" value={li.retainagePct} onChange={e => updateLineItem(li.id, "retainagePct", Number(e.target.value) || 0)} />
+                            <Input type="number" step="0.01" min="0" className="h-7 text-xs" value={li.retainageAmount || ""} onChange={e => updateLineItem(li.id, "retainageAmount", Number(e.target.value) || 0)} />
                           </td>
-                          <td className="px-2 py-1.5 text-xs text-muted-foreground text-right">{fmtDecimal(retAmt)}</td>
                           <td className="px-2 py-1.5 text-xs text-muted-foreground text-right">{fmtDecimal(netAmt)}</td>
                           <td className="px-2 py-1.5">
                             <Input className="h-7 text-xs" value={li.description} onChange={e => updateLineItem(li.id, "description", e.target.value)} />
@@ -899,7 +897,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                     <tr className="border-t bg-muted/50 font-semibold text-xs">
                       <td className="px-2 py-1.5">Totals</td>
                       <td className="px-2 py-1.5 text-right">{fmtDecimal(formTotalAmount)}</td>
-                      <td className="px-2 py-1.5" />
                       <td className="px-2 py-1.5 text-right">{fmtDecimal(formTotalRetainage)}</td>
                       <td className="px-2 py-1.5 text-right">{fmtDecimal(formTotalNet)}</td>
                       <td colSpan={2} />
