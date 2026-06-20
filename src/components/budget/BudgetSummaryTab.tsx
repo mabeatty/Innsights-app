@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { BudgetRow, BudgetTransaction, fmt } from "./types";
+import { BudgetRow, BudgetTransaction, fmtDecimal } from "./types";
 
 interface Props {
   budgetRows: BudgetRow[];
@@ -74,12 +74,12 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
   const pctComplete = projectCost > 0 ? (totalCompleted / projectCost) * 100 : 0;
 
   const summaryCards = [
-    { label: "Project Cost", value: fmt(projectCost) },
-    { label: "Completed to Date", value: fmt(totalCompleted) },
-    { label: "Retainage Held", value: fmt(totalRetainage) },
-    { label: "Balance to Finish", value: fmt(balanceToFinish) },
+    { label: "Project Cost", value: fmtDecimal(projectCost) },
+    { label: "Completed to Date", value: fmtDecimal(totalCompleted) },
+    { label: "Retainage Held", value: fmtDecimal(totalRetainage) },
+    { label: "Balance to Finish", value: fmtDecimal(balanceToFinish) },
     { label: "% Complete", value: `${pctComplete.toFixed(1)}%` },
-    ...(totalDeferred > 0 ? [{ label: "Deferred Fees", value: fmt(totalDeferred) }] : []),
+    ...(totalDeferred > 0 ? [{ label: "Deferred Fees", value: fmtDecimal(totalDeferred) }] : []),
   ];
 
   // Account balance card for Partners
@@ -130,7 +130,7 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
               {balanceLoading ? (
                 <p className="text-lg font-bold mt-1 text-muted-foreground">…</p>
               ) : plaidAccountId ? (
-                <p className="text-lg font-bold mt-1">{balance !== null ? fmt(balance) : "—"}</p>
+                <p className="text-lg font-bold mt-1">{balance !== null ? fmtDecimal(balance) : "—"}</p>
               ) : (
                 <p className="text-xs text-muted-foreground mt-1">— Link in Project Info</p>
               )}
@@ -183,22 +183,22 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                 {groups.map((g) => (
                   <tr key={g.label} className="border-t hover:bg-muted/20 transition-colors">
                     <td className="px-3 py-2 font-medium">{g.label}</td>
-                    <td className="px-3 py-2 text-right">{fmt(g.scheduled)}</td>
-                    <td className="px-3 py-2 text-right">{fmt(g.completed)}</td>
+                    <td className="px-3 py-2 text-right">{fmtDecimal(g.scheduled)}</td>
+                    <td className="px-3 py-2 text-right">{fmtDecimal(g.completed)}</td>
                     <td className="px-3 py-2 text-right">{g.pctComplete.toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-right">{fmt(g.balance)}</td>
-                    <td className="px-3 py-2 text-right">{fmt(g.retainage)}</td>
+                    <td className="px-3 py-2 text-right">{fmtDecimal(g.balance)}</td>
+                    <td className="px-3 py-2 text-right">{fmtDecimal(g.retainage)}</td>
                   </tr>
                 ))}
               </tbody>
               <tfoot>
                 <tr className="border-t bg-muted/50 font-semibold text-xs">
                   <td className="px-3 py-2">Total</td>
-                  <td className="px-3 py-2 text-right">{fmt(projectCost)}</td>
-                  <td className="px-3 py-2 text-right">{fmt(totalCompleted)}</td>
+                  <td className="px-3 py-2 text-right">{fmtDecimal(projectCost)}</td>
+                  <td className="px-3 py-2 text-right">{fmtDecimal(totalCompleted)}</td>
                   <td className="px-3 py-2 text-right">{pctComplete.toFixed(1)}%</td>
-                  <td className="px-3 py-2 text-right">{fmt(balanceToFinish)}</td>
-                  <td className="px-3 py-2 text-right">{fmt(totalRetainage)}</td>
+                  <td className="px-3 py-2 text-right">{fmtDecimal(balanceToFinish)}</td>
+                  <td className="px-3 py-2 text-right">{fmtDecimal(totalRetainage)}</td>
                 </tr>
               </tfoot>
             </table>
