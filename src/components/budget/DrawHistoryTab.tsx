@@ -163,7 +163,22 @@ export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
   };
 
   const snapshot = viewDraw?.snapshot_json;
-  const snapshotRows = snapshot?.budgetRows ?? [];
+  // Sort line items ascending by the numeric prefix of the category (division
+  // number, e.g. 01, 02, 62, 73). Categories without a numeric prefix fall
+  // after the numbered ones, ordered alphabetically.
+  const categoryPrefix = (r: any) => {
+    const raw = String(r?.division_number ?? r?.division_name ?? "").trim();
+    const match = raw.match(/^\s*(\d+)/);
+    return { num: match ? parseInt(match[1], 10) : null, label: raw.toLowerCase() };
+  };
+  const snapshotRows = [...(snapshot?.budgetRows ?? [])].sort((a, b) => {
+    const pa = categoryPrefix(a);
+    const pb = categoryPrefix(b);
+    if (pa.num !== null && pb.num !== null) return pa.num - pb.num;
+    if (pa.num !== null) return -1;
+    if (pb.num !== null) return 1;
+    return pa.label.localeCompare(pb.label);
+  });
   const snapshotG702 = snapshot?.g702 ?? {};
 
   const deleteEnabled = deleteConfirmText.toLowerCase() === "delete";
