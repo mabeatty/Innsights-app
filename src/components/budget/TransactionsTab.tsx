@@ -525,9 +525,19 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     </thead>
   );
 
+  // Sort a draw/transaction group's line items by the leading number of the
+  // category (e.g. "07 — Thermal" -> 7). Items with no numeric prefix sort last.
+  const getCategoryNumber = (name?: string) => {
+    const match = name?.match(/^(\d+)/);
+    return match ? parseInt(match[1], 10) : 9999;
+  };
+
   const renderGroupRow = (g: TransactionGroup, readOnly: boolean) => {
     const isExpanded = expandedGroups.has(g.groupId);
     const hasMultiple = g.items.length > 1;
+    const sortedItems = [...g.items].sort(
+      (a, b) => getCategoryNumber(a.division_number) - getCategoryNumber(b.division_number)
+    );
     return (
       <Fragment key={g.groupId}>
         <tr className="border-t hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => hasMultiple && toggleExpand(g.groupId)}>
@@ -612,7 +622,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
             )}
           </td>
         </tr>
-        {isExpanded && g.items.map(item => (
+        {isExpanded && sortedItems.map(item => (
           <tr key={item.id} className="bg-muted/20 border-t border-dashed">
             <td className="px-3 py-1.5" />
             <td className="px-3 py-1.5 text-xs text-muted-foreground" colSpan={2}>
