@@ -128,6 +128,8 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
               <TableHead>Invoice #</TableHead>
               <TableHead>Invoice Date</TableHead>
               <TableHead className="text-right">Amount</TableHead>
+              <TableHead className="text-right">Retainage</TableHead>
+              <TableHead className="text-right">Net Amount</TableHead>
               <TableHead>Budget Line Item</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Submitted By</TableHead>
@@ -135,8 +137,8 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6 text-sm">Loading…</TableCell></TableRow>}
-            {!loading && filtered.length === 0 && <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-6 text-sm">No invoices.</TableCell></TableRow>}
+            {loading && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6 text-sm">Loading…</TableCell></TableRow>}
+            {!loading && filtered.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6 text-sm">No invoices.</TableCell></TableRow>}
             {filtered.map((i) => (
               <TableRow key={i.id} className="cursor-pointer" onClick={() => setSelectedId(i.id)}>
                 {!hideProjectColumn && <TableCell className="text-xs">{i.projects?.name || "—"}</TableCell>}
@@ -144,6 +146,8 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
                 <TableCell className="text-xs">{i.invoice_number || "—"}</TableCell>
                 <TableCell className="text-xs">{i.invoice_date ? format(new Date(i.invoice_date), "MMM d, yyyy") : "—"}</TableCell>
                 <TableCell className="text-xs text-right">{formatCurrency(i.amount)}</TableCell>
+                <TableCell className="text-xs text-right">{formatCurrency(i.retainage_amount)}</TableCell>
+                <TableCell className="text-xs text-right">{formatCurrency(i.net_amount)}</TableCell>
                 <TableCell className="text-xs">{i.budget_line_item || "—"}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-1">

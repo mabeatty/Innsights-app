@@ -67,6 +67,8 @@ export interface Invoice {
   invoice_number: string | null;
   invoice_date: string | null;
   amount: number | null;
+  retainage_amount: number | null;
+  net_amount: number | null;
   partial_approved_amount: number | null;
   type: string | null;
   budget_line_item: string | null;
