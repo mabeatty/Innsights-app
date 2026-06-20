@@ -201,7 +201,9 @@ export default function ProjectView() {
         </div>
       )}
 
-      {/* Tabs */}
+      {/* Tabs — hidden while the Project Info panel is open so its content
+          (Executive Summary, etc.) doesn't render beneath the panel. */}
+      {!infoOpen && (
       <Tabs defaultValue="executive-summary">
         <TabsList>
           <TabsTrigger value="executive-summary" className="gap-1.5">
@@ -282,6 +284,7 @@ export default function ProjectView() {
           />
         </TabsContent>
       </Tabs>
+      )}
 
       {/* ── Edit Project Dialog ── */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
