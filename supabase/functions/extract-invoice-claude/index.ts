@@ -10,8 +10,14 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT =
-  "Extract the following fields from this invoice PDF and return only a JSON object with keys: vendor_name, invoice_number, invoice_date (YYYY-MM-DD), amount (number only). If a field cannot be found return null.";
+const SYSTEM_PROMPT = `Extract the following fields from this invoice PDF and return only a JSON object with these keys:
+- vendor_name (string)
+- invoice_number (string)
+- invoice_date (string, YYYY-MM-DD format)
+- total_amount (number only, no currency symbols)
+- line_items (array of objects, each with: description (string), amount (number), category (string or null))
+
+For line_items, extract every line item, service, or cost category listed on the invoice with its corresponding amount. If you cannot determine a category, set it to null. If no line items are found, return an empty array. Return only the JSON object with no preamble or markdown.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
