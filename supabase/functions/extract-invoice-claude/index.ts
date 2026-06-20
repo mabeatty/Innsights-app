@@ -29,7 +29,9 @@ Deno.serve(async (req) => {
     if (!apiKey) {
       return json({ ok: false, error: "ANTHROPIC_API_KEY is not configured." });
     }
-    const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-3-5-sonnet-20241022";
+    // PDF-capable current model. Override with the ANTHROPIC_MODEL secret
+    // (e.g. claude-haiku-4-5 for a cheaper/faster option) without redeploying.
+    const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-opus-4-8";
 
     const { pdfBase64, mimeType } = await req.json();
     if (!pdfBase64) {

@@ -103,10 +103,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         setExtracted(flagged);
         toast.success("AI extracted fields — please verify and assign division(s)");
       } else {
-        toast.message("AI extraction unavailable", { description: data?.error || "Fill fields manually." });
+        // Extraction failed for some reason — don't block the upload.
+        console.warn("[invoice] AI extraction unavailable:", data?.error);
+        toast.message("AI extraction unavailable — please fill in fields manually");
       }
     } catch (e: any) {
-      toast.error(e?.message || "Extraction failed");
+      // Network/unexpected failure: still let the user continue manually.
+      console.warn("[invoice] AI extraction error:", e?.message);
+      toast.message("AI extraction unavailable — please fill in fields manually");
     } finally {
       setExtracting(false);
     }
