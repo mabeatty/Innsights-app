@@ -12,7 +12,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { createNotifications } from "@/lib/notify";
 import {
-  Invoice, InvoiceApproval, ApproverRole, APPROVER_ROLES,
+  Invoice, InvoiceApproval, InvoiceLineItem, ApproverRole, APPROVER_ROLES,
   statusBadgeClasses, formatCurrency,
 } from "./types";
 
@@ -30,6 +30,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
   const { user, accessLevel } = useAuth();
   const { members } = useTeamMembers();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
+  const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
   const [approvals, setApprovals] = useState<InvoiceApproval[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -45,12 +46,14 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
 
   const load = useCallback(async () => {
     if (!invoiceId) return;
-    const [{ data: inv }, { data: appr }, { data: c }] = await Promise.all([
+    const [{ data: inv }, { data: appr }, { data: c }, { data: li }] = await Promise.all([
       supabase.from("invoices").select("*, projects(id, name)").eq("id", invoiceId).single(),
       supabase.from("invoice_approvals").select("*").eq("invoice_id", invoiceId),
       supabase.from("invoice_comments").select("*").eq("invoice_id", invoiceId).order("created_at"),
+      supabase.from("invoice_line_items").select("*").eq("invoice_id", invoiceId).order("category"),
     ]);
     setInvoice(inv as Invoice);
+    setLineItems((li as InvoiceLineItem[]) ?? []);
     setApprovals((appr as InvoiceApproval[]) ?? []);
     setComments((c as Comment[]) ?? []);
   }, [invoiceId]);
@@ -222,6 +225,46 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                 <div className="col-span-2"><span className="text-muted-foreground">Submitted by:</span><br/>{invoice.submitted_by_email || "—"} · {format(new Date(invoice.submitted_at), "MMM d, yyyy")}</div>
                 {invoice.notes && <div className="col-span-2"><span className="text-muted-foreground">Notes:</span><br/>{invoice.notes}</div>}
               </div>
+
+              {/* Line items */}
+              {lineItems.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">Line items</div>
+                    <div className="rounded-md border overflow-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/50 text-muted-foreground text-left">
+                            <th className="px-2 py-1.5">Category</th>
+                            <th className="px-2 py-1.5 text-right">Amount</th>
+                            <th className="px-2 py-1.5 text-right">Retainage</th>
+                            <th className="px-2 py-1.5 text-right">Net Amount</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {lineItems.map((li) => (
+                            <tr key={li.id} className="border-t">
+                              <td className="px-2 py-1.5">{li.category || "—"}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(li.amount)}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(li.retainage_amount)}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(li.net_amount)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t bg-muted/50 font-semibold">
+                            <td className="px-2 py-1.5">Totals</td>
+                            <td className="px-2 py-1.5 text-right">{formatCurrency(lineItems.reduce((s, li) => s + Number(li.amount ?? 0), 0))}</td>
+                            <td className="px-2 py-1.5 text-right">{formatCurrency(lineItems.reduce((s, li) => s + Number(li.retainage_amount ?? 0), 0))}</td>
+                            <td className="px-2 py-1.5 text-right">{formatCurrency(lineItems.reduce((s, li) => s + Number(li.net_amount ?? 0), 0))}</td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
 
               <Separator />
 

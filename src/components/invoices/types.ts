@@ -59,6 +59,15 @@ export interface ProjectApprover {
   approver_id: string | null;
 }
 
+export interface InvoiceLineItem {
+  id: string;
+  invoice_id: string;
+  category: string | null;
+  amount: number | null;
+  retainage_amount: number | null;
+  net_amount: number | null;
+  created_at: string;
+}
 export interface Invoice {
   id: string;
   organization_id: string;

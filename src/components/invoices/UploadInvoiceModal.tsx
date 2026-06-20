@@ -22,11 +22,12 @@ interface LineItem {
   id: string;
   division: string;
   amount: number;
+  retainageAmount: number;
   description: string;
 }
 
 let lineCounter = 0;
-const newLine = (): LineItem => ({ id: `l-${++lineCounter}`, division: "", amount: 0, description: "" });
+const newLine = (): LineItem => ({ id: `l-${++lineCounter}`, division: "", amount: 0, retainageAmount: 0, description: "" });
 
 interface Props {
   open: boolean;
@@ -46,7 +47,6 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [transactionType, setTransactionType] = useState<string>("Vendor Invoice");
   const [documentLink, setDocumentLink] = useState("");
   const [notes, setNotes] = useState("");
-  const [retainage, setRetainage] = useState(0);
   const [lineItems, setLineItems] = useState<LineItem[]>([newLine()]);
 
   const [projects, setProjects] = useState<Project[]>([]);
@@ -58,7 +58,6 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setRetainage(0);
     setLineItems([newLine()]); setExtracted({}); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
@@ -73,7 +72,8 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     setLineItems((prev) => (prev.length > 1 ? prev.filter((li) => li.id !== id) : prev));
 
   const totalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
-  const netAmount = totalAmount - retainage;
+  const totalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
+  const totalNet = totalAmount - totalRetainage;
 
   const handleFile = async (f: File) => {
     setFile(f);
@@ -150,8 +150,8 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         invoice_number: invoiceNumber || null,
         invoice_date: invoiceDate ? format(invoiceDate, "yyyy-MM-dd") : null,
         amount: totalAmount,
-        retainage_amount: retainage,
-        net_amount: netAmount,
+        retainage_amount: totalRetainage,
+        net_amount: totalNet,
         cost_type: firstDiv?.cost_type === "hard" ? "Hard Cost" : firstDiv?.cost_type === "soft" ? "Soft Cost" : null,
         budget_line_item: budgetLineSummary,
         status,
@@ -173,6 +173,21 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       );
       if (apprErr) throw apprErr;
 
+      // 2b. Invoice line items (one row per division/category line).
+      const { error: liErr } = await supabase.from("invoice_line_items").insert(
+        validLines.map((li) => {
+          const div = ALL_DIVISIONS.find((d) => d.number === li.division);
+          return {
+            invoice_id: inv!.id,
+            category: div ? `${div.number} — ${div.name}` : li.division,
+            amount: li.amount,
+            retainage_amount: li.retainageAmount,
+            net_amount: li.amount - li.retainageAmount,
+          };
+        }),
+      );
+      if (liErr) throw liErr;
+
       // 3. Linked budget_transactions (one per division line) — reflected in the
       //    project's transactions sub-tab. Not draw-eligible until the invoice is approved.
       const { count } = await supabase
@@ -181,16 +196,9 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         .eq("project_id", projectId);
       const groupId = crypto.randomUUID();
       const txnDate = invoiceDate ? format(invoiceDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
-      // Distribute the invoice-level retainage across division lines proportionally
-      // by amount, so the linked transactions sum back to the invoice retainage
-      // (the last line absorbs any rounding remainder).
-      let retRemaining = Math.round(retainage * 100) / 100;
-      const txnRows = validLines.map((li, idx) => {
+      const txnRows = validLines.map((li) => {
         const div = ALL_DIVISIONS.find((d) => d.number === li.division);
-        const isLast = idx === validLines.length - 1;
-        const raw = totalAmount > 0 ? (li.amount / totalAmount) * retainage : 0;
-        const retAmt = isLast ? retRemaining : Math.round(raw * 100) / 100;
-        retRemaining = Math.round((retRemaining - retAmt) * 100) / 100;
+        const retAmt = li.retainageAmount;
         return {
           project_id: projectId,
           invoice_id: inv!.id,
@@ -307,8 +315,10 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/50 text-muted-foreground text-left text-xs">
-                    <th className="px-2 py-1.5 min-w-[180px]">Division</th>
-                    <th className="px-2 py-1.5 w-32">Amount</th>
+                    <th className="px-2 py-1.5 min-w-[180px]">Category</th>
+                    <th className="px-2 py-1.5 w-28">Amount</th>
+                    <th className="px-2 py-1.5 w-28">Retainage</th>
+                    <th className="px-2 py-1.5 w-28 text-right">Net Amount</th>
                     <th className="px-2 py-1.5">Description</th>
                     <th className="px-2 py-1.5 w-8" />
                   </tr>
@@ -318,7 +328,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                     <tr key={li.id} className="border-t">
                       <td className="px-2 py-1.5">
                         <Select value={li.division} onValueChange={(v) => updateLine(li.id, "division", v)}>
-                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select division" /></SelectTrigger>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select category" /></SelectTrigger>
                           <SelectContent>
                             {ALL_DIVISIONS.map((d) => <SelectItem key={d.number} value={d.number}>{d.number} — {d.name}</SelectItem>)}
                           </SelectContent>
@@ -327,6 +337,10 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                       <td className="px-2 py-1.5">
                         <Input type="number" step="0.01" className="h-8 text-xs" value={li.amount || ""} onChange={(e) => updateLine(li.id, "amount", Number(e.target.value) || 0)} />
                       </td>
+                      <td className="px-2 py-1.5">
+                        <Input type="number" step="0.01" min="0" placeholder="0.00" className="h-8 text-xs" value={li.retainageAmount || ""} onChange={(e) => updateLine(li.id, "retainageAmount", Number(e.target.value) || 0)} />
+                      </td>
+                      <td className="px-2 py-1.5 text-xs text-muted-foreground text-right">{fmtDecimal(li.amount - li.retainageAmount)}</td>
                       <td className="px-2 py-1.5">
                         <Input className="h-8 text-xs" value={li.description} onChange={(e) => updateLine(li.id, "description", e.target.value)} />
                       </td>
@@ -340,39 +354,18 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                 </tbody>
                 <tfoot>
                   <tr className="border-t bg-muted/50 font-semibold text-xs">
-                    <td className="px-2 py-1.5">Total Amount</td>
+                    <td className="px-2 py-1.5">Totals</td>
                     <td className="px-2 py-1.5">{fmtDecimal(totalAmount)}</td>
+                    <td className="px-2 py-1.5">{fmtDecimal(totalRetainage)}</td>
+                    <td className="px-2 py-1.5 text-right">{fmtDecimal(totalNet)}</td>
                     <td colSpan={2} />
                   </tr>
                 </tfoot>
               </table>
             </div>
             <Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={() => setLineItems((prev) => [...prev, newLine()])}>
-              <Plus className="h-3 w-3" /> Add Division
+              <Plus className="h-3 w-3" /> Add Line Item
             </Button>
-          </div>
-
-          {/* Retainage & Net Amount (invoice-level) */}
-          <div className="grid grid-cols-3 gap-3">
-            <div className="space-y-1.5">
-              <Label>Total Amount</Label>
-              <Input value={fmtDecimal(totalAmount)} readOnly tabIndex={-1} className="bg-muted/50" />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Retainage</Label>
-              <Input
-                type="number"
-                step="0.01"
-                min="0"
-                placeholder="0.00"
-                value={retainage || ""}
-                onChange={(e) => setRetainage(Number(e.target.value) || 0)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Net Amount</Label>
-              <Input value={fmtDecimal(netAmount)} readOnly tabIndex={-1} className="bg-muted/50" />
-            </div>
           </div>
 
           <div className="space-y-1.5">
