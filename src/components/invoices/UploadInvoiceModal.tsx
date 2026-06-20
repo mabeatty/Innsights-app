@@ -252,7 +252,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl w-[95vw] max-h-[92vh] overflow-y-auto">
+      <DialogContent className="max-w-[57.6rem] w-[95vw] max-h-[92vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Upload Invoice</DialogTitle></DialogHeader>
 
         <div className="space-y-4 py-2">
