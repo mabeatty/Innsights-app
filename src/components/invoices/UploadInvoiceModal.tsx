@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Sparkles, Upload, Loader2, Plus, Trash2, Link as LinkIcon } from "lucide-react";
+import { Sparkles, Upload, Loader2, Plus, Trash2, Link as LinkIcon, FileText, Image as ImageIcon, File as FileIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ import { APPROVER_ROLES } from "./types";
 import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
 import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
+import { uploadInvoiceDocument, formatFileSize } from "./invoiceDocuments";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -58,13 +59,26 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [docType, setDocType] = useState<string | null>(null);
   const [aiaDetailRows, setAiaDetailRows] = useState<AIADetailRow[]>([]);
   const [excelFallback, setExcelFallback] = useState(false);
+  const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
   const [saving, setSaving] = useState(false);
+
+  const fileIconFor = (type: string | null, name: string) => {
+    const t = (type || "").toLowerCase();
+    const n = name.toLowerCase();
+    if (t.includes("pdf") || n.endsWith(".pdf")) return <FileText className="h-4 w-4 text-red-500 shrink-0" />;
+    if (t.startsWith("image/") || /\.(png|jpe?g|gif|webp|heic)$/.test(n)) return <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />;
+    return <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />;
+  };
+  const addSupporting = (files: FileList | File[] | null) => {
+    if (!files) return;
+    setSupportingFiles((prev) => [...prev, ...Array.from(files)]);
+  };
 
   useEffect(() => { if (open) {
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setProjectId(defaultProjectId || "");
+    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSupportingFiles([]); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
   useEffect(() => {
@@ -385,6 +399,20 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       const { error: txnErr } = await supabase.from("budget_transactions").insert(txnRows);
       if (txnErr) throw txnErr;
 
+      // Supporting documents (optional) — upload to {project}/{invoice}/supporting/.
+      if (supportingFiles.length > 0) {
+        let failed = 0;
+        for (const sf of supportingFiles) {
+          try {
+            await uploadInvoiceDocument(projectId, inv!.id, sf, user.id);
+          } catch (docErr: any) {
+            failed++;
+            console.warn("[invoice] supporting doc upload failed:", sf.name, docErr?.message);
+          }
+        }
+        if (failed > 0) toast.message(`${failed} supporting document(s) failed to upload — you can re-add them from the invoice.`);
+      }
+
       await supabase.from("invoice_audit_trail").insert({
         invoice_id: inv!.id, action: "Invoice submitted", performed_by: user.id,
         performed_by_name: user.email, notes: `Vendor: ${vendor}${invoiceNumber ? ` · ${invoiceNumber}` : ""}`,
@@ -551,6 +579,36 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
             <Button variant="outline" size="sm" className="mt-2 gap-1.5" onClick={() => setLineItems((prev) => [...prev, newLine()])}>
               <Plus className="h-3 w-3" /> Add Line Item
             </Button>
+          </div>
+
+          {/* Supporting Documents (optional) */}
+          <div>
+            <Label className="text-xs text-muted-foreground mb-2 block">Supporting Documents <span className="font-normal">(optional)</span></Label>
+            <label
+              onDragOver={(e) => { e.preventDefault(); }}
+              onDrop={(e) => { e.preventDefault(); addSupporting(e.dataTransfer.files); }}
+              className="flex flex-col items-center justify-center gap-1 border border-dashed rounded-md px-3 py-4 cursor-pointer hover:bg-muted/50 text-sm text-muted-foreground"
+            >
+              <Upload className="h-4 w-4" />
+              <span>Drag &amp; drop files here, or click to browse</span>
+              <span className="text-[11px]">Signed pay app, lien waivers, invoices, photos — any file type</span>
+              <input type="file" multiple className="hidden" onChange={(e) => { addSupporting(e.target.files); e.currentTarget.value = ""; }} />
+            </label>
+            {supportingFiles.length > 0 && (
+              <div className="mt-2 space-y-1">
+                {supportingFiles.map((sf, i) => (
+                  <div key={`${sf.name}-${i}`} className="flex items-center gap-2 border rounded-md px-2 py-1.5 text-xs">
+                    {fileIconFor(sf.type, sf.name)}
+                    <span className="truncate flex-1">{sf.name}</span>
+                    <span className="text-muted-foreground shrink-0">{formatFileSize(sf.size)}</span>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive shrink-0"
+                      onClick={() => setSupportingFiles((prev) => prev.filter((_, idx) => idx !== i))}>
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
