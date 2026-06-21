@@ -43,22 +43,24 @@ const cellNum = (sheet: XLSX.WorkSheet, r: number, c: number): number => {
   return isNaN(n) ? NaN : n;
 };
 
-// A row is a subtotal / section header (not a real line item) when its
-// description matches these markers. Careful: "Construction Mgmt Fees" is a
-// real line and must NOT be treated as the "Construction" subtotal.
+// A row is a subtotal / total / section header (not a real line item).
+// We match conservatively so legitimate lines like "Construction Mgmt Fees 4% -
+// GC" are kept: skip only when the (uppercased, trimmed) description contains
+// SUBTOTAL anywhere, starts with TOTAL/GRAND TOTAL, or exactly equals a known
+// section-total label.
+const SECTION_TOTAL_LABELS = new Set([
+  "HARD COSTS",
+  "SOFT COSTS",
+  "CONSTRUCTION HARD COSTS",
+  "CONSTRUCTION SOFT COSTS",
+]);
+
 const isSubtotalRow = (desc: string): boolean => {
-  const d = desc.toLowerCase();
-  if (d.includes("subtotal")) return true;
-  if (d.includes("hard cost")) return true;
-  if (d.includes("soft cost")) return true;
-  if (
-    d.includes("construction") &&
-    !d.includes("mgmt") &&
-    !d.includes("management") &&
-    !d.includes("fee")
-  ) {
-    return true;
-  }
+  const d = desc.toUpperCase().trim();
+  if (d.includes("SUBTOTAL")) return true;
+  if (d.startsWith("TOTAL")) return true;
+  if (d.startsWith("GRAND TOTAL")) return true;
+  if (SECTION_TOTAL_LABELS.has(d)) return true;
   return false;
 };
 
