@@ -18,6 +18,9 @@ const SCOPE = "https://www.googleapis.com/auth/drive.readonly";
 const API_KEY = (import.meta as any).env?.VITE_GOOGLE_API_KEY as string | undefined;
 const CLIENT_ID = (import.meta as any).env?.VITE_GOOGLE_CLIENT_ID as string | undefined;
 
+// TEMP: confirm env vars are present in the deployed bundle (booleans only).
+console.log("[drive-picker] env present:", { VITE_GOOGLE_API_KEY: !!API_KEY, VITE_GOOGLE_CLIENT_ID: !!CLIENT_ID });
+
 let gisPromise: Promise<void> | null = null;
 let pickerPromise: Promise<void> | null = null;
 
