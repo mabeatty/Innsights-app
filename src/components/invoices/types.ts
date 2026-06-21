@@ -105,6 +105,7 @@ export interface Invoice {
   notes: string | null;
   pdf_url: string | null;
   pdf_path: string | null;
+  drive_url: string | null;
   source: string;
   needs_review: boolean;
   routed_to: string | null;

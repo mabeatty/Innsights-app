@@ -4,11 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, Download, Upload, Trash2, FileText, Image as ImageIcon, File as FileIcon, Loader2 } from "lucide-react";
-import {
-  InvoiceDocument, listInvoiceDocuments, uploadInvoiceDocument,
-  deleteInvoiceDocument, getDocumentUrl, formatFileSize,
-} from "./invoiceDocuments";
+import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -35,9 +31,6 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
   const { members } = useTeamMembers();
   const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [lineItems, setLineItems] = useState<InvoiceLineItem[]>([]);
-  const [documents, setDocuments] = useState<InvoiceDocument[]>([]);
-  const [uploadingDocs, setUploadingDocs] = useState(false);
-  const [docToDelete, setDocToDelete] = useState<string | null>(null);
   const [approvals, setApprovals] = useState<InvoiceApproval[]>([]);
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
@@ -63,53 +56,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     setLineItems((li as InvoiceLineItem[]) ?? []);
     setApprovals((appr as InvoiceApproval[]) ?? []);
     setComments((c as Comment[]) ?? []);
-    setDocuments(await listInvoiceDocuments(invoiceId));
   }, [invoiceId]);
-
-  const isManager = accessLevel === "edit" || accessLevel === "admin";
-
-  const docIconFor = (type: string | null, name: string) => {
-    const t = (type || "").toLowerCase();
-    const n = name.toLowerCase();
-    if (t.includes("pdf") || n.endsWith(".pdf")) return <FileText className="h-4 w-4 text-red-500 shrink-0" />;
-    if (t.startsWith("image/") || /\.(png|jpe?g|gif|webp|heic)$/.test(n)) return <ImageIcon className="h-4 w-4 text-blue-500 shrink-0" />;
-    return <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />;
-  };
-  const isPdf = (d: InvoiceDocument) =>
-    (d.file_type || "").toLowerCase().includes("pdf") || d.file_name.toLowerCase().endsWith(".pdf");
-
-  const openDoc = async (d: InvoiceDocument, download: boolean) => {
-    const url = await getDocumentUrl(d.storage_path, download ? d.file_name : undefined);
-    if (url) window.open(url, "_blank");
-    else toast.error("Could not open the file.");
-  };
-
-  const handleUploadDocs = async (files: FileList | null) => {
-    if (!files || !invoice) return;
-    setUploadingDocs(true);
-    try {
-      for (const f of Array.from(files)) {
-        await uploadInvoiceDocument(invoice.project_id ?? "", invoice.id, f, user?.id ?? null);
-      }
-      toast.success("Supporting document(s) added.");
-      setDocuments(await listInvoiceDocuments(invoice.id));
-    } catch (e: any) {
-      toast.error(e?.message || "Upload failed.");
-    } finally {
-      setUploadingDocs(false);
-    }
-  };
-
-  const handleDeleteDoc = async (d: InvoiceDocument) => {
-    try {
-      await deleteInvoiceDocument(d);
-      setDocToDelete(null);
-      setDocuments((prev) => prev.filter((x) => x.id !== d.id));
-      toast.success("Document deleted.");
-    } catch (e: any) {
-      toast.error(e?.message || "Delete failed.");
-    }
-  };
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (!invoiceId) { setPending(null); setMoreInfoOpen(false); setActionNotes(""); } }, [invoiceId]);
@@ -319,53 +266,22 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                 </>
               )}
 
-              {/* Supporting Documents */}
+              {/* Draw Backup Folder (Google Drive) */}
               <Separator />
               <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-medium">Supporting Documents</div>
-                  {isManager && (
-                    <label className="text-xs text-primary hover:underline cursor-pointer inline-flex items-center gap-1">
-                      {uploadingDocs ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
-                      Add files
-                      <input type="file" multiple className="hidden" disabled={uploadingDocs}
-                        onChange={(e) => { handleUploadDocs(e.target.files); e.currentTarget.value = ""; }} />
-                    </label>
-                  )}
-                </div>
-                {documents.length === 0 ? (
-                  <div className="text-xs text-muted-foreground">No supporting documents.</div>
+                <div className="text-sm font-medium">Draw Backup</div>
+                {(invoice as any).drive_url ? (
+                  <Button
+                    variant="outline"
+                    className="w-full justify-center gap-2 border-primary/40 text-primary hover:bg-primary/10"
+                    onClick={() => window.open((invoice as any).drive_url, "_blank", "noopener,noreferrer")}
+                  >
+                    <FolderOpen className="h-4 w-4" />
+                    Open Draw Backup Folder
+                    <ExternalLink className="h-3.5 w-3.5" />
+                  </Button>
                 ) : (
-                  <div className="space-y-1">
-                    {documents.map((d) => (
-                      <div key={d.id} className="flex items-center gap-2 border rounded-md px-2 py-1.5 text-xs">
-                        {docIconFor(d.file_type, d.file_name)}
-                        <span className="truncate flex-1">{d.file_name}</span>
-                        <span className="text-muted-foreground shrink-0">{formatFileSize(d.file_size)}</span>
-                        <span className="text-muted-foreground shrink-0 hidden sm:inline">{format(new Date(d.uploaded_at), "MMM d, yyyy")}</span>
-                        {isPdf(d) && (
-                          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="Preview" onClick={() => openDoc(d, false)}>
-                            <ExternalLink className="h-3.5 w-3.5" />
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="Download" onClick={() => openDoc(d, true)}>
-                          <Download className="h-3.5 w-3.5" />
-                        </Button>
-                        {isManager && (
-                          docToDelete === d.id ? (
-                            <span className="flex items-center gap-1 shrink-0">
-                              <Button variant="destructive" size="sm" className="h-6 px-2 text-[11px]" onClick={() => handleDeleteDoc(d)}>Delete</Button>
-                              <Button variant="ghost" size="sm" className="h-6 px-2 text-[11px]" onClick={() => setDocToDelete(null)}>Cancel</Button>
-                            </span>
-                          ) : (
-                            <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive shrink-0" title="Delete" onClick={() => setDocToDelete(d.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  <div className="text-xs text-muted-foreground">No backup folder link provided.</div>
                 )}
               </div>
 
