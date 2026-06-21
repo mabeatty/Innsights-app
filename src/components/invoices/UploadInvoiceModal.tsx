@@ -52,13 +52,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [projects, setProjects] = useState<Project[]>([]);
   const [extracting, setExtracting] = useState(false);
   const [extracted, setExtracted] = useState<Record<string, boolean>>({});
+  const [docType, setDocType] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (open) {
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setLineItems([newLine()]); setExtracted({}); setProjectId(defaultProjectId || "");
+    setLineItems([newLine()]); setExtracted({}); setDocType(null); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
   useEffect(() => {
@@ -96,15 +97,33 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         if (fields.invoice_number) { setInvoiceNumber(String(fields.invoice_number)); flagged.invoice_number = true; }
         if (fields.invoice_date) { const d = new Date(fields.invoice_date); if (!isNaN(d.getTime())) { setInvoiceDate(d); flagged.invoice_date = true; } }
 
-        const total = fields.total_amount ?? fields.amount;
-        if (total != null) {
-          // Pre-fill the first row's amount with the extracted total. Line items
-          // and categories are always entered manually.
-          setLineItems((prev) => prev.map((li, i) => (i === 0 ? { ...li, amount: Number(total) || 0 } : li)));
-          flagged.amount = true;
+        setDocType(fields.document_type ?? null);
+
+        if (fields.document_type === "aia_pay_app") {
+          // AIA pay app: total is computed from G703 lines, so leave the Amount
+          // field blank and auto-populate the line items with this-period amounts.
+          const items = Array.isArray(fields.line_items) ? fields.line_items : [];
+          if (items.length > 0) {
+            lineCounter = 0;
+            const rows: LineItem[] = items.map((li: any) => ({
+              ...newLine(),
+              amount: Number(li?.amount) || 0,
+              description: typeof li?.description === "string" ? li.description : "",
+            }));
+            setLineItems(rows);
+          }
+          setTransactionType("Contractor Pay Application");
+          toast.success("AIA pay application detected — verify line items and assign categories");
+        } else {
+          // Regular invoice: pre-fill the first row's amount with the total.
+          const total = fields.total_amount ?? fields.amount;
+          if (total != null) {
+            setLineItems((prev) => prev.map((li, i) => (i === 0 ? { ...li, amount: Number(total) || 0 } : li)));
+            flagged.amount = true;
+          }
+          toast.success("AI extracted header fields — please add line items and categories");
         }
         setExtracted(flagged);
-        toast.success("AI extracted header fields — please add line items and categories");
       } else {
         // Extraction failed for some reason — don't block the upload.
         console.warn("[invoice] AI extraction unavailable:", data?.error);
@@ -260,7 +279,17 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[57.6rem] w-[95vw] max-h-[92vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>Upload Invoice</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            Upload Invoice
+            {docType && (
+              <Badge variant="outline" className="text-[10px] gap-1 bg-blue-50 text-blue-700 border-blue-200">
+                <Sparkles className="h-2.5 w-2.5" />
+                {docType === "aia_pay_app" ? "AIA Pay Application" : "Standard Invoice"}
+              </Badge>
+            )}
+          </DialogTitle>
+        </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">

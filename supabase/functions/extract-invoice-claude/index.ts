@@ -10,8 +10,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT =
-  "Extract the following fields from this invoice PDF and return only a JSON object with these exact keys: vendor_name, invoice_number, invoice_date (YYYY-MM-DD format), total_amount (number only, no currency symbols). If a field cannot be found return null. Return only the JSON object with no preamble, explanation, or markdown formatting.";
+const SYSTEM_PROMPT = `You are extracting data from an invoice or payment application PDF. First identify the document type.
+
+If this is an AIA G702/G703 Pay Application:
+- Set document_type to 'aia_pay_app'
+- Extract vendor_name (the Contractor name)
+- Extract invoice_number (the Application No)
+- Extract invoice_date (the Period To date, YYYY-MM-DD format)
+- Do NOT extract a total_amount — set it to null
+- Extract line_items from the G703 continuation sheet: for each line item row that has a non-zero 'Work Completed This Period' (Column E), extract the description (Column B) and the this-period amount (Column E as a number)
+
+If this is a regular invoice:
+- Set document_type to 'regular_invoice'
+- Extract vendor_name, invoice_number, invoice_date (YYYY-MM-DD), total_amount (number only)
+- Set line_items to empty array
+
+Return only a JSON object with keys: document_type, vendor_name, invoice_number, invoice_date, total_amount, line_items (array of {description, amount}). No preamble or markdown.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
