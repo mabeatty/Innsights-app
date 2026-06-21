@@ -14,6 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APPROVER_ROLES } from "./types";
 import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
+import { parseAIAExcel } from "./aiaExcel";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -144,8 +145,59 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const totalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
   const totalNet = totalAmount - totalRetainage;
 
+  // Deterministically parse an AIA workbook (.xlsx with '702'/'703' sheets).
+  const handleExcel = async (f: File) => {
+    setExtracting(true);
+    try {
+      const buf = await f.arrayBuffer();
+      const res = parseAIAExcel(buf);
+      if (!res.isAIA) {
+        toast.message("Not a recognized AIA Excel (needs a '703' sheet) — fill in fields manually");
+        return;
+      }
+      const flagged: Record<string, boolean> = {};
+      if (res.vendor_name) { setVendor(res.vendor_name); flagged.vendor = true; }
+      if (res.invoice_number) { setInvoiceNumber(String(res.invoice_number)); flagged.invoice_number = true; }
+      if (res.invoice_date) {
+        const d = new Date(res.invoice_date);
+        if (!isNaN(d.getTime())) { setInvoiceDate(d); flagged.invoice_date = true; }
+      }
+      setDocType("aia_pay_app");
+      setTransactionType("Contractor Pay Application");
+
+      if (res.line_items.length > 0) {
+        const { resolve } = await buildBudgetMatcher(projectId);
+        lineCounter = 0;
+        const rows: LineItem[] = res.line_items.map((li) => ({
+          ...newLine(),
+          division: resolve(null, li.description),
+          amount: li.amount,
+          retainageAmount: li.retainage || 0,
+          description: li.description,
+          fromAI: true,
+          aiCategory: null,
+        }));
+        setLineItems(rows);
+        flagged.amount = true;
+      }
+      setExtracted(flagged);
+      toast.success(`AIA Excel parsed — ${res.line_items.length} line items read from the 703 sheet`);
+    } catch (e: any) {
+      console.warn("[invoice] Excel parse error:", e?.message);
+      toast.message("Couldn't parse this Excel file — fill in fields manually");
+    } finally {
+      setExtracting(false);
+    }
+  };
+
   const handleFile = async (f: File) => {
     setFile(f);
+    const name = f.name.toLowerCase();
+    if (name.endsWith(".xlsx") || f.type.includes("spreadsheetml")) {
+      // Prefer deterministic Excel parsing when the GC provides the AIA as .xlsx.
+      await handleExcel(f);
+      return;
+    }
     if (f.type !== "application/pdf") return;
     setExtracting(true);
     try {
@@ -371,15 +423,21 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
         <div className="space-y-4 py-2">
           <div className="space-y-1.5">
-            <Label>PDF *</Label>
+            <Label>PDF or Excel *</Label>
             <div className="flex items-center gap-2">
               <label className="flex-1 flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/50 text-sm">
                 <Upload className="h-4 w-4" />
-                <span className="truncate">{file ? file.name : "Choose PDF file…"}</span>
-                <input type="file" accept="application/pdf" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
+                <span className="truncate">{file ? file.name : "Choose PDF or Excel file…"}</span>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                  className="hidden"
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                />
               </label>
               {extracting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
             </div>
+            <p className="text-[11px] text-muted-foreground">Excel AIA files (with 702/703 sheets) are parsed directly; PDFs use AI extraction.</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
