@@ -112,35 +112,28 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
       const g = (window as any).google;
       if (!g?.picker) { console.error("[drive-picker] google.picker NOT available after load"); throw new Error("Picker library not available"); }
 
-      // Build a navigable, folder-selectable view. We intentionally do NOT call
-      // setMimeTypes() (that flattens the tree). Optional methods are guarded so a
-      // missing one can't make Picker fall back to a default (upload) view.
-      const makeFolderView = (configure?: (v: any) => void) => {
-        const v = new g.picker.DocsView(g.picker.ViewId.FOLDERS);
-        v.setIncludeFolders(true);
-        v.setSelectFolderEnabled(true);
-        try { configure?.(v); } catch (e) { console.warn("[drive-picker] optional view config skipped:", e); }
-        return v;
-      };
-      const myDriveView = makeFolderView((v) => v.setParent("root"));            // My Drive tree
-      const sharedDrivesView = makeFolderView((v) => v.setEnableDrives(true));    // Shared Drives tree
+      // MINIMAL CONFIG (isolating the upload dialog): a single folders DocsView,
+      // NO features (no SUPPORT_DRIVES), NO shared-drives view, NO upload view.
+      // Once we confirm the OS file dialog is gone, we re-add Shared Drives.
+      const view = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+        .setSelectFolderEnabled(true)
+        .setIncludeFolders(true);
 
-      // IMPORTANT: only folder-browsing views are added. We deliberately do NOT
-      // add a DocsUploadView (that is what opens the native OS file dialog) and
-      // enable no upload feature — this picker is browse + select folders only.
-      //
-      // setOrigin is required so the picker iframe can postMessage the selection
-      // back to this app — without it the callback never fires (selection is lost),
-      // especially when launched from inside a modal/SPA.
-      console.log("[drive-picker] origin:", window.location.origin);
+      console.log("[drive-picker] ADDING view: DocsView(ViewId.FOLDERS) [selectFolderEnabled, includeFolders]");
+      console.log("[drive-picker] FEATURES enabled: NONE");
+      console.log("[drive-picker] picker config before build:", {
+        hasToken: !!token,
+        hasDeveloperKey: !!API_KEY,
+        origin: window.location.origin,
+        views: ["DocsView(FOLDERS)"],
+        features: [],
+      });
+
       const picker = new g.picker.PickerBuilder()
-        .enableFeature(g.picker.Feature.SUPPORT_DRIVES) // navigate Shared Drives
-        .setOrigin(window.location.origin)
-        .setTitle("Select the draw backup folder")
         .setOAuthToken(token)
         .setDeveloperKey(API_KEY)
-        .addView(myDriveView)
-        .addView(sharedDrivesView)
+        .setOrigin(window.location.origin)
+        .addView(view)
         .setCallback((data: any) => {
           // Log the full payload so we can see exactly what's returned.
           try { console.log("[drive-picker] callback data:", JSON.stringify(data)); }
