@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,8 @@ interface LineItem {
   amount: number;
   retainageAmount: number;
   description: string;
+  fromAI?: boolean;        // populated by AI extraction (eligible for re-matching)
+  aiCategory?: string | null; // Claude's suggested category string, for re-matching
 }
 
 let lineCounter = 0;
@@ -72,6 +74,72 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const removeLine = (id: string) =>
     setLineItems((prev) => (prev.length > 1 ? prev.filter((li) => li.id !== id) : prev));
 
+  // Fetch a project's budget categories and return both the category labels (to
+  // send to the edge function) and a resolver that maps an AI category/description
+  // to a budget division number. Used at extraction time AND when the project
+  // changes afterwards, so matching works regardless of upload order.
+  const buildBudgetMatcher = useCallback(async (pid: string) => {
+    const catToDivision = new Map<string, string>();
+    const budgetCats: { number: string; name: string }[] = [];
+    const categories: string[] = [];
+    if (pid) {
+      const { data: budget } = await supabase
+        .from("project_budget")
+        .select("division_number, division_name")
+        .eq("project_id", pid)
+        .order("division_number");
+      for (const r of (budget ?? []) as { division_number: string; division_name: string }[]) {
+        const label = `${r.division_number} — ${r.division_name}`;
+        categories.push(label);
+        catToDivision.set(label.toLowerCase().trim(), r.division_number);
+        budgetCats.push({ number: r.division_number, name: r.division_name });
+      }
+    }
+    const tokenize = (s: string) =>
+      s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
+    const fuzzy = (textRaw: string): string => {
+      const text = (textRaw || "").toLowerCase().trim();
+      if (!text) return "";
+      if (catToDivision.has(text)) return catToDivision.get(text)!;
+      const numHit = text.match(/^(\d{1,2})\b/);
+      if (numHit) {
+        const padded = numHit[1].padStart(2, "0");
+        const c = budgetCats.find((b) => b.number === padded);
+        if (c) return c.number;
+      }
+      const words = tokenize(text);
+      let best = ""; let bestScore = 0;
+      for (const c of budgetCats) {
+        const name = c.name.toLowerCase();
+        const score = words.filter((w) => name.includes(w)).length;
+        if (score > bestScore) { bestScore = score; best = c.number; }
+      }
+      return bestScore > 0 ? best : "";
+    };
+    const resolve = (category: string | null | undefined, description: string): string => {
+      const cat = typeof category === "string" ? category : "";
+      const fromCat = cat ? (catToDivision.get(cat.toLowerCase().trim()) || fuzzy(cat)) : "";
+      return fromCat || fuzzy(description || "");
+    };
+    return { categories, resolve };
+  }, []);
+
+  // Re-run category matching whenever the project changes (e.g. a PDF was dropped
+  // before a project was chosen, or the user switches projects after extraction).
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { resolve } = await buildBudgetMatcher(projectId);
+      if (cancelled) return;
+      setLineItems((prev) =>
+        prev.some((li) => li.fromAI)
+          ? prev.map((li) => (li.fromAI ? { ...li, division: resolve(li.aiCategory, li.description) } : li))
+          : prev,
+      );
+    })();
+    return () => { cancelled = true; };
+  }, [projectId, buildBudgetMatcher]);
+
   const totalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
   const totalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
   const totalNet = totalAmount - totalRetainage;
@@ -88,52 +156,9 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         reader.readAsDataURL(f);
       });
       // Send the selected project's budget categories so Claude can map each
-      // line item to a real category (verbatim from this list, or null).
-      const catToDivision = new Map<string, string>();
-      const budgetCats: { number: string; name: string }[] = [];
-      let categories: string[] = [];
-      if (projectId) {
-        const { data: budget } = await supabase
-          .from("project_budget")
-          .select("division_number, division_name")
-          .eq("project_id", projectId)
-          .order("division_number");
-        for (const r of (budget ?? []) as { division_number: string; division_name: string }[]) {
-          const label = `${r.division_number} — ${r.division_name}`;
-          categories.push(label);
-          catToDivision.set(label.toLowerCase().trim(), r.division_number);
-          budgetCats.push({ number: r.division_number, name: r.division_name });
-        }
-      }
-
-      // Resolve a line item to a budget division: try Claude's verbatim category
-      // first, then fuzzy-match (category, then description) against the budget.
-      const tokenize = (s: string) =>
-        s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
-      const fuzzyDivision = (textRaw: string): string => {
-        const text = (textRaw || "").toLowerCase().trim();
-        if (!text) return "";
-        if (catToDivision.has(text)) return catToDivision.get(text)!;
-        const numHit = text.match(/^(\d{1,2})\b/);
-        if (numHit) {
-          const padded = numHit[1].padStart(2, "0");
-          const c = budgetCats.find((b) => b.number === padded);
-          if (c) return c.number;
-        }
-        const words = tokenize(text);
-        let best = ""; let bestScore = 0;
-        for (const c of budgetCats) {
-          const name = c.name.toLowerCase();
-          const score = words.filter((w) => name.includes(w)).length;
-          if (score > bestScore) { bestScore = score; best = c.number; }
-        }
-        return bestScore > 0 ? best : "";
-      };
-      const resolveDivision = (li: any): string => {
-        const cat = typeof li?.category === "string" ? li.category : "";
-        const fromCat = cat ? (catToDivision.get(cat.toLowerCase().trim()) || fuzzyDivision(cat)) : "";
-        return fromCat || fuzzyDivision(typeof li?.description === "string" ? li.description : "");
-      };
+      // line item to a real category. If no project is selected yet, categories
+      // is empty and matching is deferred until the user picks one.
+      const { categories, resolve: resolveDivision } = await buildBudgetMatcher(projectId);
 
       const { data } = await supabase.functions.invoke("extract-invoice-claude", {
         body: { pdfBase64: b64, mimeType: "application/pdf", categories },
@@ -157,9 +182,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
             lineCounter = 0;
             const rows: LineItem[] = items.map((li: any) => ({
               ...newLine(),
-              division: resolveDivision(li),
+              division: resolveDivision(li?.category, typeof li?.description === "string" ? li.description : ""),
               amount: Number(li?.amount) || 0,
               description: typeof li?.description === "string" ? li.description : "",
+              fromAI: true,
+              aiCategory: typeof li?.category === "string" ? li.category : null,
             }));
             setLineItems(rows);
           }
@@ -376,6 +403,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                   {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                 </SelectContent>
               </Select>
+              <p className="text-[11px] text-muted-foreground">Select a project to auto-match line item categories</p>
             </div>
             <div className="space-y-1.5">
               <Label>Transaction Type</Label>
