@@ -57,13 +57,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [extracted, setExtracted] = useState<Record<string, boolean>>({});
   const [docType, setDocType] = useState<string | null>(null);
   const [aiaDetailRows, setAiaDetailRows] = useState<AIADetailRow[]>([]);
+  const [excelFallback, setExcelFallback] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (open) {
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setProjectId(defaultProjectId || "");
+    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
   useEffect(() => {
@@ -153,9 +154,10 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       const buf = await f.arrayBuffer();
       const res = parseAIAExcel(buf);
       if (!res.isAIA) {
-        toast.message("Not a recognized AIA Excel (needs a 'Detail' tab) — fill in fields manually");
+        toast.message("Not a recognized AIA Excel (needs a Detail or 703 sheet) — fill in fields manually");
         return;
       }
+      setExcelFallback(res.source === "703");
       const flagged: Record<string, boolean> = {};
       if (res.vendor_name) { setVendor(res.vendor_name); flagged.vendor = true; }
       if (res.invoice_number) { setInvoiceNumber(String(res.invoice_number)); flagged.invoice_number = true; }
@@ -195,7 +197,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   const handleFile = async (f: File) => {
     setFile(f);
-    setAiaDetailRows([]); // reset audit detail; set again only for AIA Excel
+    setAiaDetailRows([]); setExcelFallback(false); // reset; set again only for AIA Excel
     const name = f.name.toLowerCase();
     if (name.endsWith(".xlsx") || f.type.includes("spreadsheetml")) {
       // Prefer deterministic Excel parsing when the GC provides the AIA as .xlsx.
@@ -489,6 +491,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
           {/* Division line items */}
           <div>
             <Label className="text-xs text-muted-foreground mb-2 block">Division Line Items * {extracted.amount && <AIBadge />}</Label>
+            {excelFallback && (
+              <p className="text-[11px] text-amber-600 mb-2">
+                Parsed from G703 summary — no Detail tab found, retainage may need manual entry.
+              </p>
+            )}
             <div className="rounded-lg border overflow-auto">
               <table className="w-full text-sm">
                 <thead>

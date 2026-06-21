@@ -38,6 +38,7 @@ export interface AIAExcelLine {
 
 export interface AIAExcelResult {
   isAIA: boolean;
+  source: "detail" | "703";          // how line items were derived
   vendor_name: string | null;
   invoice_number: string | null;     // = application/draw number
   invoice_date: string | null;       // YYYY-MM-DD
@@ -46,6 +47,19 @@ export interface AIAExcelResult {
   detail_rows: AIADetailRow[];
   totals: { amount: number; retainage: number; net: number };
 }
+
+// A 703 row is a subtotal/total/section header (not a real line item). Matches
+// conservatively so lines like "Construction Mgmt Fees 4% - GC" are kept.
+const SECTION_TOTAL_LABELS = new Set([
+  "HARD COSTS", "SOFT COSTS", "CONSTRUCTION HARD COSTS", "CONSTRUCTION SOFT COSTS",
+]);
+const isSubtotalRow = (desc: string): boolean => {
+  const d = desc.toUpperCase().trim();
+  if (d.includes("SUBTOTAL")) return true;
+  if (d.startsWith("TOTAL")) return true;
+  if (d.startsWith("GRAND TOTAL")) return true;
+  return SECTION_TOTAL_LABELS.has(d);
+};
 
 // ── cell helpers ────────────────────────────────────────────────────────────
 const cellText = (sheet: XLSX.WorkSheet, r: number, c: number): string => {
@@ -173,12 +187,12 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
   const sheet702 = wb.Sheets["702"] ?? findSheet(wb, /^g?702/i);
 
   const empty: AIAExcelResult = {
-    isAIA: false, vendor_name: null, invoice_number: null, invoice_date: null,
+    isAIA: false, source: "detail", vendor_name: null, invoice_number: null, invoice_date: null,
     application_number: null, line_items: [], detail_rows: [],
     totals: { amount: 0, retainage: 0, net: 0 },
   };
-  // Detail tab is required as the source of truth.
-  if (!detail) return empty;
+  // Need either a Detail tab (preferred source of truth) or a 703 (fallback).
+  if (!detail && !sheet703) return empty;
 
   // 702 header fields.
   const vendor_name = sheet702 ? findLabeledValue(sheet702, ["from contractor", "contractor"]) : null;
@@ -205,12 +219,16 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
   }
 
   // Walk the Detail tab, keep rows for the current draw, group by AIA item.
-  const drawTarget = normDraw(application_number ?? "");
-  const groups = new Map<string, { amount: number; retainage: number }>();
+  const line_items: AIAExcelLine[] = [];
   const detail_rows: AIADetailRow[] = [];
+  let source: "detail" | "703" = "detail";
 
-  const ref = detail["!ref"];
-  if (ref) {
+  if (detail) {
+   const drawTarget = normDraw(application_number ?? "");
+   const groups = new Map<string, { amount: number; retainage: number }>();
+
+   const ref = detail["!ref"];
+   if (ref) {
     const range = XLSX.utils.decode_range(ref);
     for (let r = range.s.r; r <= range.e.r; r++) {
       const drawCell = normDraw(cellText(detail, r, 2)); // Column C
@@ -249,18 +267,40 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
         remarks: cellText(detail, r, 9),
       });
     }
+   }
+
+   for (const [aia, g] of groups) {
+     if (!g.amount) continue; // non-zero divisions only
+     line_items.push({
+       aia_item: aia,
+       description: itemNames.get(aia) ?? "",
+       amount: g.amount,
+       retainage: g.retainage,
+     });
+   }
+  } else if (sheet703) {
+    // Fallback: no Detail tab — read the G703 summary directly.
+    //   Column A(0)=AIA item  B(1)=description  G(6)=This Period  L(11)=retainage
+    source = "703";
+    const ref = sheet703["!ref"];
+    if (ref) {
+      const range = XLSX.utils.decode_range(ref);
+      // Line items start at row 11 (index 10).
+      for (let r = 10; r <= range.e.r; r++) {
+        const desc = cellText(sheet703, r, 1); // Column B
+        if (!desc || isSubtotalRow(desc)) continue;
+        const amount = cellNum(sheet703, r, 6); // Column G — This Period
+        if (!amount) continue;                  // non-zero only
+        line_items.push({
+          aia_item: normAia(cellText(sheet703, r, 0)), // Column A
+          description: desc,
+          amount,
+          retainage: cellNum(sheet703, r, 11),  // Column L
+        });
+      }
+    }
   }
 
-  const line_items: AIAExcelLine[] = [];
-  for (const [aia, g] of groups) {
-    if (!g.amount) continue; // non-zero divisions only
-    line_items.push({
-      aia_item: aia,
-      description: itemNames.get(aia) ?? "",
-      amount: g.amount,
-      retainage: g.retainage,
-    });
-  }
   // Order by AIA number ascending for a clean table.
   line_items.sort((a, b) => {
     const na = parseInt(a.aia_item, 10);
@@ -276,6 +316,7 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
 
   return {
     isAIA: true,
+    source,
     vendor_name: vendor_name && isMeaningful(vendor_name) ? vendor_name : null,
     invoice_number: application_number,
     invoice_date,
