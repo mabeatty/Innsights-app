@@ -40,6 +40,7 @@ export interface AIAExcelResult {
   isAIA: boolean;
   source: "detail" | "703";          // how line items were derived
   vendor_name: string | null;
+  project_name: string | null;       // 702 'PROJECT:' field — used to auto-match a project
   invoice_number: string | null;     // = application/draw number
   invoice_date: string | null;       // YYYY-MM-DD
   application_number: string | null;
@@ -247,7 +248,7 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
   const sheet702 = wb.Sheets["702"] ?? findSheet(wb, /^g?702/i);
 
   const empty: AIAExcelResult = {
-    isAIA: false, source: "detail", vendor_name: null, invoice_number: null, invoice_date: null,
+    isAIA: false, source: "detail", vendor_name: null, project_name: null, invoice_number: null, invoice_date: null,
     application_number: null, line_items: [], detail_rows: [],
     totals: { amount: 0, retainage: 0, net: 0 },
   };
@@ -256,6 +257,7 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
 
   // 702 header fields.
   const vendor_name = sheet702 ? extractContractor(sheet702) : null;
+  const project_name = sheet702 ? findLabeledValue(sheet702, ["project:", "project name", "project"]) : null;
   const appRaw = sheet702
     ? findLabeledValue(sheet702, ["application no", "application number", "application #", "application"])
     : null;
@@ -378,6 +380,7 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
     isAIA: true,
     source,
     vendor_name: vendor_name && isMeaningful(vendor_name) ? vendor_name : null,
+    project_name: project_name && isMeaningful(project_name) ? project_name : null,
     invoice_number: application_number,
     invoice_date,
     application_number,

@@ -33,6 +33,42 @@ interface LineItem {
 let lineCounter = 0;
 const newLine = (): LineItem => ({ id: `l-${++lineCounter}`, division: "", amount: 0, retainageAmount: 0, description: "" });
 
+// Tokens to ignore when matching an AIA file/project field to a project name.
+const PROJECT_STOPWORDS = new Set([
+  "aia", "g702", "g703", "702", "703", "draw", "application", "app", "pay", "payment",
+  "certificate", "continuation", "sheet", "copy", "final", "invoice", "xlsx", "xls", "pdf",
+  "the", "and", "of", "for", "llc", "lp", "inc",
+]);
+const projTokens = (s: string): string[] =>
+  (s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").split(/\s+/)
+    .filter((w) => w.length > 1 && !PROJECT_STOPWORDS.has(w) && !/^\d+$/.test(w));
+
+// Identify a project from AIA signals (file name + 702 project field) against the
+// project list (name + entity). Confident = a unique top scorer; otherwise we
+// surface it as a suggestion for one-click accept.
+function identifyProject(
+  candidates: string[],
+  projects: { id: string; name: string; search: string }[],
+): { match?: { id: string; name: string }; suggestion?: { id: string; name: string } } {
+  const cand = new Set(candidates.flatMap(projTokens));
+  if (cand.size === 0) return {};
+  const scored = projects
+    .map((p) => {
+      const pt = new Set(projTokens(p.search));
+      let score = 0;
+      for (const t of cand) if (pt.has(t)) score++;
+      return { p, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score);
+  if (scored.length === 0) return {};
+  const best = scored[0];
+  const second = scored[1];
+  const confident = !second || best.score > second.score;
+  const hit = { id: best.p.id, name: best.p.name };
+  return confident ? { match: hit } : { suggestion: hit };
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -54,6 +90,8 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [lineItems, setLineItems] = useState<LineItem[]>([newLine()]);
 
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectEntities, setProjectEntities] = useState<Record<string, string>>({});
+  const [suggestedProject, setSuggestedProject] = useState<{ id: string; name: string } | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [extracted, setExtracted] = useState<Record<string, boolean>>({});
   const [docType, setDocType] = useState<string | null>(null);
@@ -79,12 +117,17 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSupportingFiles([]); setDragActive(false); setProjectId(defaultProjectId || "");
+    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSupportingFiles([]); setDragActive(false); setSuggestedProject(null); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
   useEffect(() => {
     if (!open) return;
     supabase.from("projects").select("id, name").order("name").then(({ data }) => setProjects(data ?? []));
+    supabase.from("project_info").select("project_id, entity_name").then(({ data }) => {
+      const m: Record<string, string> = {};
+      (data ?? []).forEach((r: any) => { if (r.entity_name) m[r.project_id] = r.entity_name; });
+      setProjectEntities(m);
+    });
   }, [open]);
 
   const updateLine = (id: string, field: keyof LineItem, value: any) =>
@@ -184,6 +227,20 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       setTransactionType("Contractor Pay Application");
       setAiaDetailRows(res.detail_rows);
 
+      // Auto-identify the project from the file name + 702 PROJECT field, unless
+      // the modal is already scoped to a project. A confident, unique match is
+      // selected (which also triggers the category re-matcher); otherwise we
+      // surface a one-click suggestion.
+      if (!defaultProjectId) {
+        const searchProjects = projects.map((p) => ({
+          id: p.id, name: p.name, search: `${p.name} ${projectEntities[p.id] ?? ""}`,
+        }));
+        const { match, suggestion } = identifyProject([f.name, res.project_name ?? ""], searchProjects);
+        if (match) { setProjectId(match.id); setSuggestedProject(null); }
+        else if (suggestion) { setSuggestedProject(suggestion); }
+        console.log("[aia] project match:", { file: f.name, projectField: res.project_name, match, suggestion });
+      }
+
       if (res.line_items.length > 0) {
         // The dropdown value IS the division number, which matches the AIA item
         // number — so set it directly for a guaranteed auto-select (no fuzzy
@@ -212,7 +269,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   const handleFile = async (f: File) => {
     setFile(f);
-    setAiaDetailRows([]); setExcelFallback(false); // reset; set again only for AIA Excel
+    setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); // reset; set again only for AIA Excel
     const name = f.name.toLowerCase();
     if (name.endsWith(".xlsx") || f.type.includes("spreadsheetml")) {
       // Prefer deterministic Excel parsing when the GC provides the AIA as .xlsx.
@@ -498,6 +555,18 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">Select a project to auto-match line item categories</p>
+              {suggestedProject && !projectId && (
+                <p className="text-[11px] text-primary">
+                  Suggested:{" "}
+                  <button
+                    type="button"
+                    className="underline font-medium"
+                    onClick={() => { setProjectId(suggestedProject.id); setSuggestedProject(null); }}
+                  >
+                    {suggestedProject.name}
+                  </button>?
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Transaction Type</Label>
