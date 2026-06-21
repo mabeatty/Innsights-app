@@ -10,22 +10,24 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const BASE_PROMPT = `You are extracting data from an invoice or payment application PDF. First identify the document type.
+const BASE_PROMPT = `You are extracting data from an invoice or payment application PDF.
 
-If this is an AIA G702/G703 Pay Application:
+If this is an AIA G702/G703 Pay Application (look for 'Application and Certificate for Payment' or 'Continuation Sheet'):
 - Set document_type to 'aia_pay_app'
-- Extract vendor_name (the Contractor name)
-- Extract invoice_number (the Application No)
-- Extract invoice_date (the Period To date, YYYY-MM-DD format)
-- Do NOT extract a total_amount — set it to null
-- Extract line_items from the G703 continuation sheet: for each line item row that has a non-zero 'Work Completed This Period' (Column E), extract the description (Column B) and the this-period amount (Column E as a number)
+- Extract vendor_name from the Contractor field on G702
+- Extract invoice_number from the Application No field on G702
+- Extract invoice_date from the Period To field on G702 (YYYY-MM-DD format)
+- Set total_amount to null
+- From the G703 Continuation Sheet, extract ONLY the line items where Column E ('Work Completed This Period') is greater than zero
+- For each such line item extract: the description from Column B, and the amount from Column E ONLY (This Period column) — NOT Column C (Scheduled Value), NOT Column D (From Previous Application), NOT Column G (Total Completed)
+- Column E is specifically labeled 'This Period' and represents only what is being billed in the current draw
 
 If this is a regular invoice:
 - Set document_type to 'regular_invoice'
 - Extract vendor_name, invoice_number, invoice_date (YYYY-MM-DD), total_amount (number only)
 - Set line_items to empty array
 
-Return only a JSON object with keys: document_type, vendor_name, invoice_number, invoice_date, total_amount, line_items (array of {description, amount, category}). No preamble or markdown.`;
+Return only a JSON object: { document_type, vendor_name, invoice_number, invoice_date, total_amount, line_items: [{description, amount, category}] }. No preamble or markdown.`;
 
 // Append category-matching instructions. When the caller provides the project's
 // budget categories, Claude must map each line item to one of those exact
