@@ -20,10 +20,14 @@ interface ProjectRow {
   _completionDate?: string | null;
   _infoType?: string | null;
   _projectCost?: number | null;
+  _completedToDate?: number | null;
 }
 
 const fmtCost = (v: number) =>
   "$" + Math.round(v).toLocaleString("en-US");
+
+const fmtCents = (v: number) =>
+  "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Dashboard() {
   const { isConsultant, consultantProjectIds, accessLevel } = useAuth();
@@ -52,7 +56,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: projData }, { data: infoData }, { data: phaseData }, { data: budgetData }] = await Promise.all([
+      const [{ data: projData }, { data: infoData }, { data: phaseData }, { data: budgetData }, { data: txnData }] = await Promise.all([
         supabase
           .from("projects")
           .select("id, name, updated_at, project_type, brands(name)")
@@ -67,6 +71,9 @@ export default function Dashboard() {
         supabase
           .from("project_budget")
           .select("project_id, scheduled_value"),
+        supabase
+          .from("budget_transactions")
+          .select("project_id, amount, status"),
       ]);
 
       const statusMap = new Map<string, string>();
@@ -88,6 +95,15 @@ export default function Dashboard() {
         costMap.set(b.project_id, (costMap.get(b.project_id) ?? 0) + Number(b.scheduled_value));
       }
 
+      // Completed to Date = sum of approved/paid/deferred transaction amounts,
+      // matching the Executive Summary "Completed to Date" stat.
+      const completedMap = new Map<string, number>();
+      for (const t of txnData ?? []) {
+        if (t.status === "Approved" || t.status === "Paid" || t.status === "Deferred") {
+          completedMap.set(t.project_id, (completedMap.get(t.project_id) ?? 0) + Number(t.amount));
+        }
+      }
+
       let rows = ((projData as unknown as ProjectRow[]) ?? []).map(p => ({
         ...p,
         _status: statusMap.get(p.id) || "Draft",
@@ -95,6 +111,7 @@ export default function Dashboard() {
         _completionDate: completionMap.get(p.id) ?? null,
         _infoType: infoTypeMap.get(p.id) ?? p.project_type ?? null,
         _projectCost: costMap.has(p.id) && costMap.get(p.id)! > 0 ? costMap.get(p.id)! : null,
+        _completedToDate: completedMap.has(p.id) && completedMap.get(p.id)! > 0 ? completedMap.get(p.id)! : null,
       }));
 
       // Filter for consultants
@@ -160,17 +177,19 @@ export default function Dashboard() {
               <div key={typeGroup.label} className="border rounded-md overflow-hidden bg-card">
                 <table className="w-full table-dense" style={{ tableLayout: 'fixed' }}>
                   <colgroup>
-                    <col style={{ width: '25%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '20%' }} />
-                    <col style={{ width: '15%' }} />
-                    <col style={{ width: '20%' }} />
+                    <col style={{ width: '22%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '18%' }} />
+                    <col style={{ width: '16%' }} />
+                    <col style={{ width: '12%' }} />
+                    <col style={{ width: '16%' }} />
                   </colgroup>
                   {groupIdx === 0 && (
                     <thead className="bg-muted/50">
                       <tr>
                         <th className="text-center">Project</th>
                         <th className="text-center">Project Cost</th>
+                        <th className="text-center">Completed to Date</th>
                         <th className="text-center">Construction Start</th>
                         <th className="text-center">Completion Date</th>
                         <th className="text-center">Last Updated</th>
@@ -182,7 +201,7 @@ export default function Dashboard() {
                       className="cursor-pointer select-none"
                       onClick={() => toggleType(typeGroup.label)}
                     >
-                      <td colSpan={5} className="bg-sidebar-accent py-2 px-3 text-left">
+                      <td colSpan={6} className="bg-sidebar-accent py-2 px-3 text-left">
                         <div className="flex items-center gap-2">
                           <ChevronRight className={`h-3.5 w-3.5 text-sidebar-accent-foreground transition-transform duration-200 ${typeCollapsed ? "" : "rotate-90"}`} />
                           <span className="text-xs font-bold uppercase tracking-wider text-sidebar-accent-foreground">
@@ -201,7 +220,7 @@ export default function Dashboard() {
                             className="cursor-pointer select-none"
                             onClick={() => toggleStatus(statusKey)}
                           >
-                            <td colSpan={5} className="bg-muted py-1.5 px-6 text-left">
+                            <td colSpan={6} className="bg-muted py-1.5 px-6 text-left">
                               <div className="flex items-center gap-2">
                                 <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${statusCollapsed ? "" : "rotate-90"}`} />
                                 <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -225,6 +244,9 @@ export default function Dashboard() {
                               </td>
                               <td className="text-center text-foreground">
                                 {p._projectCost != null ? fmtCost(p._projectCost) : "—"}
+                              </td>
+                              <td className="text-center text-foreground">
+                                {p._completedToDate != null ? fmtCents(p._completedToDate) : "—"}
                               </td>
                               <td className="text-center text-muted-foreground">
                                 {p._constructionStart
