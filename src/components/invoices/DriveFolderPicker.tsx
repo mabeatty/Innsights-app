@@ -111,15 +111,28 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
       console.log("[drive-picker] building picker…");
       const g = (window as any).google;
       if (!g?.picker) { console.error("[drive-picker] google.picker NOT available after load"); throw new Error("Picker library not available"); }
-      const view = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
-        .setSelectFolderEnabled(true)
-        .setMimeTypes("application/vnd.google-apps.folder")
-        .setIncludeFolders(true);
+
+      // My Drive — navigable folder tree starting at the root. We intentionally
+      // do NOT call setMimeTypes(): that flattens the view into a search-style
+      // list and breaks folder navigation. setIncludeFolders + setSelectFolderEnabled
+      // keep the tree browsable while still allowing a folder to be selected.
+      const myDriveView = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+        .setParent("root")
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true);
+
+      // Shared Drives — navigable hierarchy (Shared Drive → Project → … → Draw).
+      const sharedDrivesView = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+        .setEnableDrives(true)
+        .setIncludeFolders(true)
+        .setSelectFolderEnabled(true);
+
       const picker = new g.picker.PickerBuilder()
         .enableFeature(g.picker.Feature.SUPPORT_DRIVES) // show Shared Drives
         .setOAuthToken(token)
         .setDeveloperKey(API_KEY)
-        .addView(view)
+        .addView(myDriveView)
+        .addView(sharedDrivesView)
         .setCallback((data: any) => {
           console.log("[drive-picker] picker callback action:", data?.action);
           if (data.action === g.picker.Action.PICKED) {
