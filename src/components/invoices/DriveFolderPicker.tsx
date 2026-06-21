@@ -127,20 +127,37 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
         .setIncludeFolders(true)
         .setSelectFolderEnabled(true);
 
+      // IMPORTANT: only folder-browsing views are added. We deliberately do NOT
+      // add a DocsUploadView (that is what opens the native OS file dialog) and
+      // enable no upload feature — this picker is browse + select folders only.
       const picker = new g.picker.PickerBuilder()
-        .enableFeature(g.picker.Feature.SUPPORT_DRIVES) // show Shared Drives
+        .enableFeature(g.picker.Feature.SUPPORT_DRIVES) // navigate Shared Drives
         .setOAuthToken(token)
         .setDeveloperKey(API_KEY)
         .addView(myDriveView)
         .addView(sharedDrivesView)
         .setCallback((data: any) => {
-          console.log("[drive-picker] picker callback action:", data?.action);
-          if (data.action === g.picker.Action.PICKED) {
-            const doc = data.docs?.[0];
-            console.log("[drive-picker] picked:", doc?.name, doc?.id);
+          // Log the full payload so we can see exactly what's returned.
+          try { console.log("[drive-picker] callback data:", JSON.stringify(data)); }
+          catch { console.log("[drive-picker] callback data (raw):", data); }
+
+          // Read via the official response constants, with plain-key fallbacks.
+          const action = data?.[g.picker.Response.ACTION] ?? data?.action;
+          console.log("[drive-picker] action:", action);
+
+          if (action === g.picker.Action.PICKED) {
+            const docs = data?.[g.picker.Response.DOCUMENTS] ?? data?.docs ?? [];
+            const doc = docs[0];
+            console.log("[drive-picker] selected doc:", doc);
             if (doc) {
-              onChange(doc.url || `https://drive.google.com/drive/folders/${doc.id}`);
-              setFolderName(doc.name || "Selected folder");
+              const id = doc[g.picker.Document.ID] ?? doc.id;
+              const url = doc[g.picker.Document.URL] ?? doc.url ?? (id ? `https://drive.google.com/drive/folders/${id}` : "");
+              const name = doc[g.picker.Document.NAME] ?? doc.name ?? "Selected folder";
+              console.log("[drive-picker] saving →", { name, id, url });
+              if (url) { onChange(url); setFolderName(name); }
+              else console.error("[drive-picker] no URL/ID on selected doc");
+            } else {
+              console.error("[drive-picker] PICKED but no documents in payload");
             }
           }
         })
