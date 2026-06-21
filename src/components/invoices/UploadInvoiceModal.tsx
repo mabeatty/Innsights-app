@@ -87,8 +87,25 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         reader.onerror = reject;
         reader.readAsDataURL(f);
       });
+      // Send the selected project's budget categories so Claude can map each
+      // line item to a real category (verbatim from this list, or null).
+      const catToDivision = new Map<string, string>();
+      let categories: string[] = [];
+      if (projectId) {
+        const { data: budget } = await supabase
+          .from("project_budget")
+          .select("division_number, division_name")
+          .eq("project_id", projectId)
+          .order("division_number");
+        for (const r of (budget ?? []) as { division_number: string; division_name: string }[]) {
+          const label = `${r.division_number} — ${r.division_name}`;
+          categories.push(label);
+          catToDivision.set(label.toLowerCase().trim(), r.division_number);
+        }
+      }
+
       const { data } = await supabase.functions.invoke("extract-invoice-claude", {
-        body: { pdfBase64: b64, mimeType: "application/pdf" },
+        body: { pdfBase64: b64, mimeType: "application/pdf", categories },
       });
       if (data?.ok && data.fields) {
         const fields = data.fields;
@@ -105,11 +122,15 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
           const items = Array.isArray(fields.line_items) ? fields.line_items : [];
           if (items.length > 0) {
             lineCounter = 0;
-            const rows: LineItem[] = items.map((li: any) => ({
-              ...newLine(),
-              amount: Number(li?.amount) || 0,
-              description: typeof li?.description === "string" ? li.description : "",
-            }));
+            const rows: LineItem[] = items.map((li: any) => {
+              const catStr = typeof li?.category === "string" ? li.category.toLowerCase().trim() : "";
+              return {
+                ...newLine(),
+                division: catToDivision.get(catStr) ?? "",
+                amount: Number(li?.amount) || 0,
+                description: typeof li?.description === "string" ? li.description : "",
+              };
+            });
             setLineItems(rows);
           }
           setTransactionType("Contractor Pay Application");

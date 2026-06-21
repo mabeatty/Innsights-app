@@ -10,7 +10,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `You are extracting data from an invoice or payment application PDF. First identify the document type.
+const BASE_PROMPT = `You are extracting data from an invoice or payment application PDF. First identify the document type.
 
 If this is an AIA G702/G703 Pay Application:
 - Set document_type to 'aia_pay_app'
@@ -25,7 +25,24 @@ If this is a regular invoice:
 - Extract vendor_name, invoice_number, invoice_date (YYYY-MM-DD), total_amount (number only)
 - Set line_items to empty array
 
-Return only a JSON object with keys: document_type, vendor_name, invoice_number, invoice_date, total_amount, line_items (array of {description, amount}). No preamble or markdown.`;
+Return only a JSON object with keys: document_type, vendor_name, invoice_number, invoice_date, total_amount, line_items (array of {description, amount, category}). No preamble or markdown.`;
+
+// Append category-matching instructions. When the caller provides the project's
+// budget categories, Claude must map each line item to one of those exact
+// strings (or null) — far more reliable than fuzzy string matching client-side.
+function buildPrompt(categories?: unknown): string {
+  const list = Array.isArray(categories)
+    ? categories.filter((c) => typeof c === "string" && c.trim()).map((c) => (c as string).trim())
+    : [];
+  if (list.length === 0) {
+    return BASE_PROMPT + `\n\nFor each line item, set "category" to null.`;
+  }
+  return (
+    BASE_PROMPT +
+    `\n\nFor each line item's "category", choose the SINGLE best match from this exact list of the project's budget categories and copy that string VERBATIM (including the number prefix). Match on the meaning of the work, not just exact words (e.g. "electrical rough-in" matches "26 — Electrical"). If no category is a reasonable match, set "category" to null. Never invent a category that is not in this list.\n` +
+    list.map((c) => `- ${c}`).join("\n")
+  );
+}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -47,10 +64,11 @@ Deno.serve(async (req) => {
     // (e.g. claude-haiku-4-5 for a cheaper/faster option) without redeploying.
     const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-opus-4-8";
 
-    const { pdfBase64, mimeType } = await req.json();
+    const { pdfBase64, mimeType, categories } = await req.json();
     if (!pdfBase64) {
       return json({ ok: false, error: "Missing pdfBase64." });
     }
+    const systemPrompt = buildPrompt(categories);
 
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -62,7 +80,7 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model,
         max_tokens: 1024,
-        system: SYSTEM_PROMPT,
+        system: systemPrompt,
         messages: [
           {
             role: "user",
