@@ -140,6 +140,66 @@ const findLabeledValue = (sheet: XLSX.WorkSheet, keywords: string[]): string | n
   return null;
 };
 
+// Labels that appear in the 702 distribution block (OWNER / ARCHITECT /
+// CONTRACTOR / FIELD / Bank) — these are NOT the contractor's name.
+const FORM_LABELS = new Set([
+  "FIELD", "OWNER", "ARCHITECT", "BANK", "CONTRACTOR", "FROM CONTRACTOR",
+  "TO OWNER", "VIA ARCHITECT", "SURETY", "LENDER", "COPY TO", "PROJECT",
+  "DISTRIBUTION TO", "DISTRIBUTION", "ENGINEER",
+]);
+
+// A plausible contractor name: has a letter, isn't a bare form label, isn't
+// just punctuation.
+const looksLikeName = (s: string): boolean => {
+  const t = s.trim();
+  if (t.length < 3) return false;
+  if (!/[a-zA-Z]/.test(t)) return false;
+  if (FORM_LABELS.has(t.toUpperCase())) return false;
+  return isMeaningful(t);
+};
+
+// Find the contractor name on the 702, avoiding the distribution-block labels.
+// Prefers the "FROM CONTRACTOR" field in the form body over a bare "CONTRACTOR".
+const extractContractor = (sheet: XLSX.WorkSheet): string | null => {
+  const ref = sheet["!ref"];
+  if (!ref) return null;
+  const range = XLSX.utils.decode_range(ref);
+  const scan = (keyword: string): string | null => {
+    for (let r = range.s.r; r <= range.e.r; r++) {
+      for (let c = range.s.c; c <= range.e.c; c++) {
+        const raw = cellText(sheet, r, c);
+        if (!raw.toLowerCase().includes(keyword)) continue;
+        const addr = XLSX.utils.encode_cell({ r, c });
+        console.log(`[aia 702] '${keyword}' label at ${addr}: "${raw}"`);
+        // Inline "Label: value"
+        if (raw.includes(":")) {
+          const after = raw.split(":").slice(1).join(":").trim();
+          if (after) {
+            console.log(`[aia 702]   inline candidate: "${after}"`);
+            if (looksLikeName(after)) return after;
+          }
+        }
+        // To the right.
+        for (let cc = c + 1; cc <= range.e.c; cc++) {
+          const v = cellText(sheet, r, cc);
+          if (!v) continue;
+          console.log(`[aia 702]   right ${XLSX.utils.encode_cell({ r, c: cc })}: "${v}"`);
+          if (looksLikeName(v)) return v;
+        }
+        // Below (address block can wrap to the next row).
+        for (let rr = r + 1; rr <= Math.min(r + 3, range.e.r); rr++) {
+          const v = cellText(sheet, rr, c);
+          if (!v) continue;
+          console.log(`[aia 702]   below ${XLSX.utils.encode_cell({ r: rr, c })}: "${v}"`);
+          if (looksLikeName(v)) return v;
+        }
+      }
+    }
+    return null;
+  };
+  return scan("from contractor") ?? scan("contractor");
+};
+
 const findLabeledDate = (sheet: XLSX.WorkSheet, keywords: string[]): string | null => {
   const ref = sheet["!ref"];
   if (!ref) return null;
@@ -195,7 +255,7 @@ export function parseAIAExcel(buf: ArrayBuffer): AIAExcelResult {
   if (!detail && !sheet703) return empty;
 
   // 702 header fields.
-  const vendor_name = sheet702 ? findLabeledValue(sheet702, ["from contractor", "contractor"]) : null;
+  const vendor_name = sheet702 ? extractContractor(sheet702) : null;
   const appRaw = sheet702
     ? findLabeledValue(sheet702, ["application no", "application number", "application #", "application"])
     : null;

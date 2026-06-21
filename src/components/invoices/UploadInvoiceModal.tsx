@@ -60,6 +60,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [aiaDetailRows, setAiaDetailRows] = useState<AIADetailRow[]>([]);
   const [excelFallback, setExcelFallback] = useState(false);
   const [supportingFiles, setSupportingFiles] = useState<File[]>([]);
+  const [dragActive, setDragActive] = useState(false);
   const [saving, setSaving] = useState(false);
 
   const fileIconFor = (type: string | null, name: string) => {
@@ -78,7 +79,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSupportingFiles([]); setProjectId(defaultProjectId || "");
+    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSupportingFiles([]); setDragActive(false); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
   useEffect(() => {
@@ -583,15 +584,23 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
           {/* Supporting Documents (optional) */}
           <div>
-            <Label className="text-xs text-muted-foreground mb-2 block">Supporting Documents <span className="font-normal">(optional)</span></Label>
+            <Label className="text-sm font-medium mb-2 block">Supporting Documents <span className="text-xs font-normal text-muted-foreground">(optional)</span></Label>
             <label
-              onDragOver={(e) => { e.preventDefault(); }}
-              onDrop={(e) => { e.preventDefault(); addSupporting(e.dataTransfer.files); }}
-              className="flex flex-col items-center justify-center gap-1 border border-dashed rounded-md px-3 py-4 cursor-pointer hover:bg-muted/50 text-sm text-muted-foreground"
+              onDragEnter={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setDragActive(false); }}
+              onDrop={(e) => { e.preventDefault(); setDragActive(false); addSupporting(e.dataTransfer.files); }}
+              className={`flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-4 py-8 cursor-pointer text-center transition-colors ${
+                dragActive
+                  ? "border-primary bg-primary/10"
+                  : "border-primary/40 bg-primary/5 hover:border-primary/70 hover:bg-primary/10"
+              }`}
             >
-              <Upload className="h-4 w-4" />
-              <span>Drag &amp; drop files here, or click to browse</span>
-              <span className="text-[11px]">Signed pay app, lien waivers, invoices, photos — any file type</span>
+              <div className={`rounded-full p-2.5 ${dragActive ? "bg-primary/20" : "bg-primary/10"}`}>
+                <Upload className={`h-6 w-6 ${dragActive ? "text-primary" : "text-primary/70"}`} />
+              </div>
+              <span className="text-sm font-medium text-foreground">Drag and drop files here, or click to browse</span>
+              <span className="text-xs text-muted-foreground">Signed pay app, lien waivers, invoices, photos — any file type</span>
               <input type="file" multiple className="hidden" onChange={(e) => { addSupporting(e.target.files); e.currentTarget.value = ""; }} />
             </label>
             {supportingFiles.length > 0 && (
