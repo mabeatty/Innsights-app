@@ -24,41 +24,10 @@ interface LineItem {
   amount: number;
   retainageAmount: number;
   description: string;
-  aiExtracted?: boolean;
 }
 
 let lineCounter = 0;
 const newLine = (): LineItem => ({ id: `l-${++lineCounter}`, division: "", amount: 0, retainageAmount: 0, description: "" });
-
-// Best-effort map an AI-extracted category string to a project budget division.
-// Returns the division number, or "" if there's no reasonable match.
-const matchDivision = (category: string | null | undefined): string => {
-  if (!category) return "";
-  const c = category.toLowerCase().trim();
-  if (!c) return "";
-  // Exact "07 — Thermal" / leading-number match first.
-  const numMatch = c.match(/^(\d{1,2})\b/);
-  if (numMatch) {
-    const padded = numMatch[1].padStart(2, "0");
-    const byNum = ALL_DIVISIONS.find((d) => d.number === padded);
-    if (byNum) return byNum.number;
-  }
-  // Name contains / contained-by match.
-  const hit = ALL_DIVISIONS.find((d) => {
-    const n = d.name.toLowerCase();
-    return n === c || n.includes(c) || c.includes(n);
-  });
-  if (hit) return hit.number;
-  // Token-overlap fallback: pick the division sharing the most words.
-  const words = c.split(/[^a-z0-9]+/).filter((w) => w.length > 2);
-  let best = ""; let bestScore = 0;
-  for (const d of ALL_DIVISIONS) {
-    const dn = d.name.toLowerCase();
-    const score = words.filter((w) => dn.includes(w)).length;
-    if (score > bestScore) { bestScore = score; best = d.number; }
-  }
-  return bestScore > 0 ? best : "";
-};
 
 interface Props {
   open: boolean;
@@ -128,28 +97,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         if (fields.invoice_date) { const d = new Date(fields.invoice_date); if (!isNaN(d.getTime())) { setInvoiceDate(d); flagged.invoice_date = true; } }
 
         const total = fields.total_amount ?? fields.amount;
-        const items = Array.isArray(fields.line_items) ? fields.line_items : [];
-
-        if (items.length > 0) {
-          // Auto-populate one editable row per extracted line item, mapping the
-          // category to the closest project budget division where possible.
-          lineCounter = 0;
-          const rows: LineItem[] = items.map((li: any) => ({
-            ...newLine(),
-            division: matchDivision(li?.category),
-            amount: Number(li?.amount) || 0,
-            description: typeof li?.description === "string" ? li.description : "",
-            aiExtracted: true,
-          }));
-          setLineItems(rows.length ? rows : [newLine()]);
-          flagged.amount = true;
-        } else if (total != null) {
-          // No line items — pre-fill the first row's amount with the total.
-          setLineItems((prev) => prev.map((li, i) => (i === 0 ? { ...li, amount: Number(total) || 0, aiExtracted: true } : li)));
+        if (total != null) {
+          // Pre-fill the first row's amount with the extracted total. Line items
+          // and categories are always entered manually.
+          setLineItems((prev) => prev.map((li, i) => (i === 0 ? { ...li, amount: Number(total) || 0 } : li)));
           flagged.amount = true;
         }
         setExtracted(flagged);
-        toast.success("AI extracted fields — please verify and assign categories");
+        toast.success("AI extracted header fields — please add line items and categories");
       } else {
         // Extraction failed for some reason — don't block the upload.
         console.warn("[invoice] AI extraction unavailable:", data?.error);
@@ -379,19 +334,12 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                   {lineItems.map((li) => (
                     <tr key={li.id} className="border-t">
                       <td className="px-2 py-1.5">
-                        <div className="flex items-center gap-1">
-                          <Select value={li.division} onValueChange={(v) => updateLine(li.id, "division", v)}>
-                            <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select category" /></SelectTrigger>
-                            <SelectContent>
-                              {ALL_DIVISIONS.map((d) => <SelectItem key={d.number} value={d.number}>{d.number} — {d.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                          {li.aiExtracted && (
-                            <Badge variant="outline" className="text-[9px] gap-0.5 bg-purple-50 text-purple-700 border-purple-200 shrink-0 px-1">
-                              <Sparkles className="h-2.5 w-2.5" />AI
-                            </Badge>
-                          )}
-                        </div>
+                        <Select value={li.division} onValueChange={(v) => updateLine(li.id, "division", v)}>
+                          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select category" /></SelectTrigger>
+                          <SelectContent>
+                            {ALL_DIVISIONS.map((d) => <SelectItem key={d.number} value={d.number}>{d.number} — {d.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
                       </td>
                       <td className="px-2 py-1.5">
                         <Input type="number" step="0.01" className="h-8 text-xs" value={li.amount || ""} onChange={(e) => updateLine(li.id, "amount", Number(e.target.value) || 0)} />
