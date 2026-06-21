@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Sparkles, Upload, Loader2, Plus, Trash2, Link as LinkIcon } from "lucide-react";
+import { Sparkles, Upload, Loader2, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -15,6 +15,7 @@ import { APPROVER_ROLES } from "./types";
 import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
 import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
+import DriveFolderPicker from "./DriveFolderPicker";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -551,10 +552,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
             </div>
             <div className="space-y-1.5">
               <Label>Draw Backup Folder (Google Drive)</Label>
-              <div className="relative">
-                <LinkIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                <Input className="pl-7" placeholder="Paste Google Drive folder URL (invoices, lien waivers, signed pay app)" value={documentLink} onChange={(e) => setDocumentLink(e.target.value)} />
-              </div>
+              <DriveFolderPicker value={documentLink} onChange={setDocumentLink} />
             </div>
           </div>
 
