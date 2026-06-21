@@ -112,20 +112,29 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
       const g = (window as any).google;
       if (!g?.picker) { console.error("[drive-picker] google.picker NOT available after load"); throw new Error("Picker library not available"); }
 
-      // MINIMAL CONFIG (isolating the upload dialog): a single folders DocsView,
-      // NO features (no SUPPORT_DRIVES), NO shared-drives view, NO upload view.
-      // Once we confirm the OS file dialog is gone, we re-add Shared Drives.
-      const view = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+      // Navigable folder hierarchy, NO upload affordance.
+      // - setParent('root') makes the FOLDERS view a navigable tree (not a flat
+      //   search list).
+      // - Shared Drives navigation is enabled per-VIEW via setEnableDrives(true),
+      //   NOT via the global Feature.SUPPORT_DRIVES — that global feature is what
+      //   was adding the upload tab / native file dialog.
+      const myDriveView = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+        .setParent("root")
         .setSelectFolderEnabled(true)
         .setIncludeFolders(true);
 
-      console.log("[drive-picker] ADDING view: DocsView(ViewId.FOLDERS) [selectFolderEnabled, includeFolders]");
-      console.log("[drive-picker] FEATURES enabled: NONE");
+      const sharedDrivesView = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+        .setEnableDrives(true)
+        .setSelectFolderEnabled(true)
+        .setIncludeFolders(true);
+
+      console.log("[drive-picker] ADDING views: My Drive=DocsView(FOLDERS, parent=root), Shared=DocsView(FOLDERS, enableDrives)");
+      console.log("[drive-picker] FEATURES enabled: NONE (no global SUPPORT_DRIVES)");
       console.log("[drive-picker] picker config before build:", {
         hasToken: !!token,
         hasDeveloperKey: !!API_KEY,
         origin: window.location.origin,
-        views: ["DocsView(FOLDERS)"],
+        views: ["My Drive (FOLDERS, parent=root)", "Shared Drives (FOLDERS, enableDrives)"],
         features: [],
       });
 
@@ -133,7 +142,8 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
         .setOAuthToken(token)
         .setDeveloperKey(API_KEY)
         .setOrigin(window.location.origin)
-        .addView(view)
+        .addView(myDriveView)
+        .addView(sharedDrivesView)
         .setCallback((data: any) => {
           // Log the full payload so we can see exactly what's returned.
           try { console.log("[drive-picker] callback data:", JSON.stringify(data)); }
