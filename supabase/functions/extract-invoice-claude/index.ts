@@ -29,6 +29,7 @@ If this is an AIA G702/G703 Pay Application (look for 'Application and Certifica
 - The G703 Continuation Sheet has these columns: B=Description, C=Scheduled Value, D=From Previous Application, E=Work Completed This Period, F=Materials Stored, G=Total Completed, H=%, I=Balance to Finish.
 - Extract ONLY the line items where Column E (Work Completed This Period) is non-zero
 - For each such line item extract: the description from Column B, and the amount from Column E value ONLY (This Period column) — NOT Column C (Scheduled Value), NOT Column D (From Previous Application), NOT Column F (Materials Stored), NOT Column G (Total Completed)
+- Be thorough — scan every row of the G703 table. Do not skip any row that has a non-zero value in the This Period column, even if the value appears small.
 
 If this is a regular invoice:
 - Set document_type to 'regular_invoice'
@@ -48,7 +49,7 @@ function categorySuffix(categories?: unknown): string {
     return `\n\nFor each line item, set "category" to null.`;
   }
   return (
-    `\n\nFor each line item's "category", choose the SINGLE best match from this exact list of the project's budget categories and copy that string VERBATIM (including the number prefix). Match on the meaning of the work, not just exact words (e.g. "electrical rough-in" matches "26 — Electrical"). If no category is a reasonable match, set "category" to null. Never invent a category that is not in this list.\n` +
+    `\n\nFor each line item's "category", choose the SINGLE best match from this exact list of the project's budget categories and copy that string VERBATIM (including the number prefix). Match on the MEANING of the work, not just exact words — e.g. "General Conditions - GC" matches "General Requirements", "Architectural Design - OC" matches "Architecture", "electrical rough-in" matches "26 — Electrical". If no category is a reasonable match, set "category" to null. Never invent a category that is not in this list.\n` +
     list.map((c) => `- ${c}`).join("\n")
   );
 }

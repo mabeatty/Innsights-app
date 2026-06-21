@@ -90,6 +90,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       // Send the selected project's budget categories so Claude can map each
       // line item to a real category (verbatim from this list, or null).
       const catToDivision = new Map<string, string>();
+      const budgetCats: { number: string; name: string }[] = [];
       let categories: string[] = [];
       if (projectId) {
         const { data: budget } = await supabase
@@ -101,8 +102,38 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
           const label = `${r.division_number} — ${r.division_name}`;
           categories.push(label);
           catToDivision.set(label.toLowerCase().trim(), r.division_number);
+          budgetCats.push({ number: r.division_number, name: r.division_name });
         }
       }
+
+      // Resolve a line item to a budget division: try Claude's verbatim category
+      // first, then fuzzy-match (category, then description) against the budget.
+      const tokenize = (s: string) =>
+        s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
+      const fuzzyDivision = (textRaw: string): string => {
+        const text = (textRaw || "").toLowerCase().trim();
+        if (!text) return "";
+        if (catToDivision.has(text)) return catToDivision.get(text)!;
+        const numHit = text.match(/^(\d{1,2})\b/);
+        if (numHit) {
+          const padded = numHit[1].padStart(2, "0");
+          const c = budgetCats.find((b) => b.number === padded);
+          if (c) return c.number;
+        }
+        const words = tokenize(text);
+        let best = ""; let bestScore = 0;
+        for (const c of budgetCats) {
+          const name = c.name.toLowerCase();
+          const score = words.filter((w) => name.includes(w)).length;
+          if (score > bestScore) { bestScore = score; best = c.number; }
+        }
+        return bestScore > 0 ? best : "";
+      };
+      const resolveDivision = (li: any): string => {
+        const cat = typeof li?.category === "string" ? li.category : "";
+        const fromCat = cat ? (catToDivision.get(cat.toLowerCase().trim()) || fuzzyDivision(cat)) : "";
+        return fromCat || fuzzyDivision(typeof li?.description === "string" ? li.description : "");
+      };
 
       const { data } = await supabase.functions.invoke("extract-invoice-claude", {
         body: { pdfBase64: b64, mimeType: "application/pdf", categories },
@@ -119,18 +150,17 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         if (fields.document_type === "aia_pay_app") {
           // AIA pay app: total is computed from G703 lines, so leave the Amount
           // field blank and auto-populate the line items with this-period amounts.
-          const items = Array.isArray(fields.line_items) ? fields.line_items : [];
+          // Filter out any $0 / null lines — never show empty rows.
+          const items = (Array.isArray(fields.line_items) ? fields.line_items : [])
+            .filter((li: any) => Number(li?.amount) > 0);
           if (items.length > 0) {
             lineCounter = 0;
-            const rows: LineItem[] = items.map((li: any) => {
-              const catStr = typeof li?.category === "string" ? li.category.toLowerCase().trim() : "";
-              return {
-                ...newLine(),
-                division: catToDivision.get(catStr) ?? "",
-                amount: Number(li?.amount) || 0,
-                description: typeof li?.description === "string" ? li.description : "",
-              };
-            });
+            const rows: LineItem[] = items.map((li: any) => ({
+              ...newLine(),
+              division: resolveDivision(li),
+              amount: Number(li?.amount) || 0,
+              description: typeof li?.description === "string" ? li.description : "",
+            }));
             setLineItems(rows);
           }
           setTransactionType("Contractor Pay Application");
