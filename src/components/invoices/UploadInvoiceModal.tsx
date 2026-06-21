@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { APPROVER_ROLES } from "./types";
 import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
-import { parseAIAExcel } from "./aiaExcel";
+import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -56,13 +56,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [extracting, setExtracting] = useState(false);
   const [extracted, setExtracted] = useState<Record<string, boolean>>({});
   const [docType, setDocType] = useState<string | null>(null);
+  const [aiaDetailRows, setAiaDetailRows] = useState<AIADetailRow[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => { if (open) {
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
-    setLineItems([newLine()]); setExtracted({}); setDocType(null); setProjectId(defaultProjectId || "");
+    setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
   useEffect(() => {
@@ -145,14 +146,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const totalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
   const totalNet = totalAmount - totalRetainage;
 
-  // Deterministically parse an AIA workbook (.xlsx with '702'/'703' sheets).
+  // Deterministically parse an AIA workbook (.xlsx with a Detail tab + 702/703).
   const handleExcel = async (f: File) => {
     setExtracting(true);
     try {
       const buf = await f.arrayBuffer();
       const res = parseAIAExcel(buf);
       if (!res.isAIA) {
-        toast.message("Not a recognized AIA Excel (needs a '703' sheet) — fill in fields manually");
+        toast.message("Not a recognized AIA Excel (needs a 'Detail' tab) — fill in fields manually");
         return;
       }
       const flagged: Record<string, boolean> = {};
@@ -164,24 +165,26 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       }
       setDocType("aia_pay_app");
       setTransactionType("Contractor Pay Application");
+      setAiaDetailRows(res.detail_rows);
 
       if (res.line_items.length > 0) {
-        const { resolve } = await buildBudgetMatcher(projectId);
+        // The dropdown value IS the division number, which matches the AIA item
+        // number — so set it directly for a guaranteed auto-select (no fuzzy
+        // matching, and no need for a project to be selected first). Not flagged
+        // fromAI, so the project-change re-matcher leaves these exact matches alone.
         lineCounter = 0;
         const rows: LineItem[] = res.line_items.map((li) => ({
           ...newLine(),
-          division: resolve(null, li.description),
+          division: li.aia_item,
           amount: li.amount,
           retainageAmount: li.retainage || 0,
           description: li.description,
-          fromAI: true,
-          aiCategory: null,
         }));
         setLineItems(rows);
         flagged.amount = true;
       }
       setExtracted(flagged);
-      toast.success(`AIA Excel parsed — ${res.line_items.length} line items read from the 703 sheet`);
+      toast.success(`AIA Excel parsed — ${res.line_items.length} divisions for draw ${res.application_number ?? ""} (net ${fmtDecimal(res.totals.net)})`);
     } catch (e: any) {
       console.warn("[invoice] Excel parse error:", e?.message);
       toast.message("Couldn't parse this Excel file — fill in fields manually");
@@ -192,6 +195,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   const handleFile = async (f: File) => {
     setFile(f);
+    setAiaDetailRows([]); // reset audit detail; set again only for AIA Excel
     const name = f.name.toLowerCase();
     if (name.endsWith(".xlsx") || f.type.includes("spreadsheetml")) {
       // Prefer deterministic Excel parsing when the GC provides the AIA as .xlsx.
@@ -308,6 +312,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         amount: totalAmount,
         retainage_amount: totalRetainage,
         net_amount: totalNet,
+        aia_detail_rows: aiaDetailRows.length ? aiaDetailRows : null,
         cost_type: firstDiv?.cost_type === "hard" ? "Hard Cost" : firstDiv?.cost_type === "soft" ? "Soft Cost" : null,
         budget_line_item: budgetLineSummary,
         status,

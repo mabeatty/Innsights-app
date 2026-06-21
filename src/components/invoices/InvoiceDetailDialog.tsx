@@ -266,6 +266,46 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                 </>
               )}
 
+              {/* AIA Detail rows (audit/backup of the source Detail tab) */}
+              {Array.isArray(invoice.aia_detail_rows) && invoice.aia_detail_rows.length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <div className="text-sm font-medium">AIA Detail (source transactions)</div>
+                    <div className="rounded-md border overflow-auto max-h-60">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-muted/50 text-muted-foreground text-left">
+                            <th className="px-2 py-1.5">Vendor</th>
+                            <th className="px-2 py-1.5">Invoice</th>
+                            <th className="px-2 py-1.5">Item</th>
+                            <th className="px-2 py-1.5">Cost Type</th>
+                            <th className="px-2 py-1.5 text-right">Cost</th>
+                            <th className="px-2 py-1.5 text-right">Retainage</th>
+                            <th className="px-2 py-1.5">Check #</th>
+                            <th className="px-2 py-1.5">Date</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {invoice.aia_detail_rows.map((d, i) => (
+                            <tr key={i} className="border-t">
+                              <td className="px-2 py-1.5">{d.vendor || "—"}</td>
+                              <td className="px-2 py-1.5">{d.invoice || "—"}</td>
+                              <td className="px-2 py-1.5">{d.aia_item || "—"}</td>
+                              <td className="px-2 py-1.5">{d.cost_type || "—"}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(d.cost)}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(d.retainage)}</td>
+                              <td className="px-2 py-1.5">{d.check || "—"}</td>
+                              <td className="px-2 py-1.5">{d.date || "—"}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </>
+              )}
+
               <Separator />
 
               {/* Approval panel */}

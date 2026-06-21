@@ -59,6 +59,18 @@ export interface ProjectApprover {
   approver_id: string | null;
 }
 
+export interface AIADetailLine {
+  vendor: string;
+  invoice: string;
+  aia_item: string;
+  cost_type: string;
+  cost: number;
+  retainage: number;
+  total: number;
+  check: string;
+  date: string | null;
+  remarks: string;
+}
 export interface InvoiceLineItem {
   id: string;
   invoice_id: string;
@@ -78,6 +90,7 @@ export interface Invoice {
   amount: number | null;
   retainage_amount: number | null;
   net_amount: number | null;
+  aia_detail_rows: AIADetailLine[] | null;
   partial_approved_amount: number | null;
   type: string | null;
   budget_line_item: string | null;
