@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreVertical, Info, FolderOpen, CalendarDays, Gavel, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileCheck } from "lucide-react";
+import { MoreVertical, Info, FolderOpen, CalendarDays, Gavel, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfoSummary } from "@/components/ProjectInfoSummary";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -34,7 +34,6 @@ import CapitalPlanningModule from "@/components/CapitalPlanningModule";
 import ProcurementModule from "@/components/ProcurementModule";
 import ReportsModule from "@/components/ReportsModule";
 import TasksModule from "@/components/TasksModule";
-import InvoicesTable from "@/components/invoices/InvoicesTable";
 
 /* ── Types ── */
 interface Project {
@@ -221,11 +220,6 @@ export default function ProjectView() {
           <TabsTrigger value="procurement" className="gap-1.5">
             <Gavel className="h-3.5 w-3.5" /> Procurement
           </TabsTrigger>
-          {accessLevel !== "view" && !isConsultant && (
-            <TabsTrigger value="invoices" className="gap-1.5">
-              <FileCheck className="h-3.5 w-3.5" /> Invoices
-            </TabsTrigger>
-          )}
           <TabsTrigger value="reports" className="gap-1.5">
             <NotebookPen className="h-3.5 w-3.5" /> Reports
           </TabsTrigger>
@@ -258,10 +252,6 @@ export default function ProjectView() {
 
         <TabsContent value="procurement">
           <ProcurementModule projectId={id!} projectName={project.name} brandId={project.brand_id} />
-        </TabsContent>
-
-        <TabsContent value="invoices">
-          <InvoicesTable projectId={id!} projectName={project.name} hideProjectColumn />
         </TabsContent>
 
         <TabsContent value="capital">
