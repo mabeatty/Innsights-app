@@ -66,17 +66,21 @@ export default function ProjectAccountingModule({
     retainagePctMaterials: "10",
   });
 
-  // Sync project info into form
+  // Keep the project name in sync with the currently selected project at ALL
+  // times (used for both the export filename and the in-file G702 Project field).
+  // The owner/architect/contractor fields are only filled when project_info is
+  // available — previously projectName was gated behind that too, which left a
+  // stale name (e.g. a prior project's) when a project had no project_info row.
   useEffect(() => {
-    if (projectInfo) {
-      setG702Form(prev => ({
-        ...prev,
+    setG702Form(prev => ({
+      ...prev,
+      projectName,
+      ...(projectInfo ? {
         ownerName: projectInfo.owner_name || projectInfo.entity_name || prev.ownerName,
         architectName: projectInfo.architect ?? prev.architectName,
         contractorName: projectInfo.general_contractor ?? prev.contractorName,
-        projectName,
-      }));
-    }
+      } : {}),
+    }));
   }, [projectInfo, projectName]);
 
   // Sync draws into form
