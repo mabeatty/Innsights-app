@@ -127,13 +127,22 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
         .setSelectFolderEnabled(true)
         .setIncludeFolders(true);
 
-      console.log("[drive-picker] ADDING view: My Drive=DocsView(FOLDERS, parent=root) [folder-select, includeFolders]");
-      console.log("[drive-picker] FEATURES enabled: NONE; Shared Drives view: OMITTED (upload-dialog fix pending)");
+      // TEST (option 1): surface folders shared with me (incl. shared drive
+      // content) via setOwnedByMe(false), WITHOUT setEnableDrives (which adds the
+      // upload affordance). If this still shows nothing or triggers the OS file
+      // dialog, the next step is option 3 (Feature.SUPPORT_DRIVES + folders-only).
+      const sharedView = new g.picker.DocsView(g.picker.ViewId.FOLDERS)
+        .setOwnedByMe(false)
+        .setSelectFolderEnabled(true)
+        .setIncludeFolders(true);
+
+      console.log("[drive-picker] ADDING views: My Drive=DocsView(FOLDERS, parent=root), Shared=DocsView(FOLDERS, ownedByMe=false)");
+      console.log("[drive-picker] FEATURES enabled: NONE (no SUPPORT_DRIVES, no setEnableDrives)");
       console.log("[drive-picker] picker config before build:", {
         hasToken: !!token,
         hasDeveloperKey: !!API_KEY,
         origin: window.location.origin,
-        views: ["My Drive (FOLDERS, parent=root)"],
+        views: ["My Drive (FOLDERS, parent=root)", "Shared (FOLDERS, ownedByMe=false)"],
         features: [],
       });
 
@@ -142,6 +151,7 @@ export default function DriveFolderPicker({ value, onChange }: Props) {
         .setDeveloperKey(API_KEY)
         .setOrigin(window.location.origin)
         .addView(myDriveView)
+        .addView(sharedView)
         .setCallback((data: any) => {
           // Log the full payload so we can see exactly what's returned.
           try { console.log("[drive-picker] callback data:", JSON.stringify(data)); }
