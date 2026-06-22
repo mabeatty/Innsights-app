@@ -46,7 +46,6 @@ export default function ProjectAccountingModule({
 }: Props) {
   const [draws, setDraws] = useState<DrawRecord[]>([]);
   const [closeDrawOpen, setCloseDrawOpen] = useState(false);
-  const [exportAIAOpen, setExportAIAOpen] = useState(false);
   const [drawMonth, setDrawMonth] = useState("");
   const [drawBackupUrl, setDrawBackupUrl] = useState("");
   const [drawNotes, setDrawNotes] = useState("");
@@ -216,9 +215,10 @@ export default function ProjectAccountingModule({
           variant="outline"
           size="sm"
           className="gap-1.5"
-          onClick={() => setExportAIAOpen(true)}
+          disabled={exporting}
+          onClick={() => handleExportAIA()}
         >
-          <FileSpreadsheet className="h-3.5 w-3.5" /> Export AIA
+          <FileSpreadsheet className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export AIA"}
         </Button>
       </div>
 
@@ -302,57 +302,6 @@ export default function ProjectAccountingModule({
         </DialogContent>
       </Dialog>
 
-      {/* Export AIA Dialog */}
-      <Dialog open={exportAIAOpen} onOpenChange={setExportAIAOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Export AIA G702/G703</DialogTitle>
-          </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            Set retainage percentages for the exported document.
-          </p>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">5a. Retainage % of Completed Work</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  className="h-8 text-sm w-24 border-primary/20 bg-background focus:border-primary"
-                  value={g702Form.retainagePctWork}
-                  onChange={(e) => handleG702FormChange("retainagePctWork", e.target.value)}
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">5b. Retainage % of Stored Materials</Label>
-              <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  className="h-8 text-sm w-24 border-primary/20 bg-background focus:border-primary"
-                  value={g702Form.retainagePctMaterials}
-                  onChange={(e) => handleG702FormChange("retainagePctMaterials", e.target.value)}
-                />
-                <span className="text-sm text-muted-foreground">%</span>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExportAIAOpen(false)}>Cancel</Button>
-            <Button
-              disabled={exporting}
-              onClick={async () => {
-                await handleExportAIA();
-                setExportAIAOpen(false);
-              }}
-              className="gap-1.5"
-            >
-              <FileSpreadsheet className="h-3.5 w-3.5" />
-              {exporting ? "Exporting…" : "Export"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

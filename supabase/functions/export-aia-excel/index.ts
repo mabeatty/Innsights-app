@@ -456,6 +456,27 @@ Deno.serve(async (req) => {
 
     // Fix label
     xml703 = setCellValue(xml703, "B52", "FF&E", ss);
+
+    // Fix the G703 'This Period' (column E) draw filter. The template's SUMIFS
+    // hardcodes the draw number, e.g.
+    //   =SUMIFS(Detail!$G$3:$G$92, Detail!$D$3:$D$92, "01", Detail!$E$3:$E$92, '703'!A13)
+    // so it always pulls Draw 1. Repoint the draw criterion (the value compared
+    // against Detail column D) to the draw actually being exported — the same
+    // number shown on G702 (U3) and written to Detail column D for this period.
+    const drawNo = String(applicationNo ?? "").trim();
+    if (drawNo) {
+      // Detail column D values for this export are written as the plain draw
+      // number string (see Detail sheet write), so match that exact text.
+      xml703 = xml703.replace(
+        /(Detail!\$D\$3:\$D\$92,)"[^"]*"/g,
+        `$1"${drawNo}"`,
+      );
+      xml703 = xml703.replace(
+        /(Detail!\$D\$3:\$D\$92,)&quot;[^&]*?&quot;/g,
+        `$1&quot;${drawNo}&quot;`,
+      );
+    }
+
     zip.file(sheet703Path, xml703);
 
     // ── Detail Sheet ──
