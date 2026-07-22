@@ -712,6 +712,9 @@ export type Database = {
           contract_type: string
           created_at: string
           default_retainage_percent: number
+          document_name: string | null
+          document_path: string | null
+          document_url: string | null
           executed_date: string | null
           id: string
           notes: string | null
@@ -729,6 +732,9 @@ export type Database = {
           contract_type?: string
           created_at?: string
           default_retainage_percent?: number
+          document_name?: string | null
+          document_path?: string | null
+          document_url?: string | null
           executed_date?: string | null
           id?: string
           notes?: string | null
@@ -746,6 +752,9 @@ export type Database = {
           contract_type?: string
           created_at?: string
           default_retainage_percent?: number
+          document_name?: string | null
+          document_path?: string | null
+          document_url?: string | null
           executed_date?: string | null
           id?: string
           notes?: string | null

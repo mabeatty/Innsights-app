@@ -29,6 +29,9 @@ export interface Contract {
   executed_date: string | null;
   status: ContractStatus;
   notes: string | null;
+  document_url: string | null;
+  document_name: string | null;
+  document_path: string | null;
   created_at: string;
   updated_at: string;
 }

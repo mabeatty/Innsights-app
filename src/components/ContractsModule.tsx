@@ -11,10 +11,13 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Plus, Pencil, Trash2, Link as LinkIcon, ExternalLink, Upload, X } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { pushToResources, RESOURCE_FOLDERS, ResourceFolder } from "@/lib/resources";
 import {
   Contract, ContractType, ContractStatus, BillingMode,
   CONTRACT_TYPES, CONTRACT_STATUSES, fmt,
@@ -39,6 +42,7 @@ const statusPillClasses = (status: string) =>
   );
 
 export default function ContractsModule({ projectId, projectName }: Props) {
+  const { user } = useAuth();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
@@ -64,6 +68,14 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const [formExecuted, setFormExecuted] = useState<Date | null>(null);
   const [formStatus, setFormStatus] = useState<ContractStatus>("Active");
   const [formNotes, setFormNotes] = useState("");
+
+  // Document (link or uploaded file) + optional push to Resources
+  const [formDocUrl, setFormDocUrl] = useState("");
+  const [formDocName, setFormDocName] = useState("");
+  const [formDocPath, setFormDocPath] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [pushToResourcesFlag, setPushToResourcesFlag] = useState(false);
+  const [resourceFolder, setResourceFolder] = useState<ResourceFolder>("Contracts");
 
   const load = useCallback(async () => {
     const [projectRes, contractsRes, vendorsRes] = await Promise.all([
@@ -181,6 +193,11 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     setFormExecuted(null);
     setFormStatus("Active");
     setFormNotes("");
+    setFormDocUrl("");
+    setFormDocName("");
+    setFormDocPath(null);
+    setPushToResourcesFlag(false);
+    setResourceFolder("Contracts");
   };
 
   const openEdit = (c: Contract) => {
@@ -195,7 +212,39 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     setFormExecuted(c.executed_date ? new Date(c.executed_date) : null);
     setFormStatus(c.status);
     setFormNotes(c.notes ?? "");
+    setFormDocUrl(c.document_url ?? "");
+    setFormDocName(c.document_name ?? "");
+    setFormDocPath(c.document_path ?? null);
+    setPushToResourcesFlag(false);
+    setResourceFolder("Contracts");
     setDialogOpen(true);
+  };
+
+  const handleFileUpload = async (file: File) => {
+    setUploading(true);
+    try {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const path = `${projectId}/contracts/${Date.now()}-${safeName}`;
+      const { error: upErr } = await supabase.storage
+        .from("project-documents")
+        .upload(path, file, { contentType: file.type || "application/octet-stream", upsert: false });
+      if (upErr) throw upErr;
+      const { data: pub } = supabase.storage.from("project-documents").getPublicUrl(path);
+      setFormDocUrl(pub.publicUrl);
+      setFormDocName(file.name);
+      setFormDocPath(path);
+      toast.success("File uploaded.");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Upload failed.");
+    }
+    setUploading(false);
+  };
+
+  const clearDocument = () => {
+    setFormDocUrl("");
+    setFormDocName("");
+    setFormDocPath(null);
+    setPushToResourcesFlag(false);
   };
 
   const handleSave = async () => {
@@ -216,6 +265,9 @@ export default function ContractsModule({ projectId, projectName }: Props) {
         executed_date: formExecuted ? format(formExecuted, "yyyy-MM-dd") : null,
         status: formStatus,
         notes: formNotes || null,
+        document_url: formDocUrl || null,
+        document_name: formDocName || null,
+        document_path: formDocPath,
       };
 
       if (editingId) {
@@ -227,6 +279,22 @@ export default function ContractsModule({ projectId, projectName }: Props) {
         const { error } = await supabase.from("contracts").insert({ ...payload, project_id: projectId, org_id: orgId });
         if (error) throw error;
         toast.success("Contract added.");
+      }
+
+      // Optionally push the document to the Resources tab
+      if (pushToResourcesFlag && formDocUrl && user) {
+        try {
+          await pushToResources({
+            projectId,
+            folder: resourceFolder,
+            documentName: formDocName || formNumber || "Contract",
+            url: formDocUrl,
+            addedBy: user.id,
+          });
+          toast.success(`Added to Resources → ${resourceFolder}.`);
+        } catch (err: any) {
+          toast.error(err?.message ?? "Saved, but failed to push to Resources.");
+        }
       }
       setDialogOpen(false);
       setEditingId(null);
@@ -326,6 +394,11 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                 <td className="px-3 py-2"><span className={statusPillClasses(c.status)}>{c.status}</span></td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1">
+                    {c.document_url && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
+                        <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
@@ -434,6 +507,51 @@ export default function ContractsModule({ projectId, projectName }: Props) {
             <div className="space-y-1">
               <Label className="text-xs">Notes</Label>
               <Textarea className="min-h-[60px]" value={formNotes} onChange={e => setFormNotes(e.target.value)} />
+            </div>
+
+            {/* Contract document: upload or link, optionally push to Resources */}
+            <div className="space-y-2 rounded-md border p-3">
+              <Label className="text-xs font-medium">Contract Document</Label>
+              {formDocPath ? (
+                <div className="flex items-center justify-between gap-2 rounded-md bg-muted/50 px-2 py-1.5">
+                  <a href={formDocUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary truncate">
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{formDocName || formDocUrl}</span>
+                  </a>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={clearDocument}><X className="h-3.5 w-3.5" /></Button>
+                </div>
+              ) : (
+                <label
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); const f = e.dataTransfer.files?.[0]; if (f) handleFileUpload(f); }}
+                  className="flex cursor-pointer flex-col items-center justify-center gap-1 rounded-md border border-dashed py-4 text-center text-xs text-muted-foreground hover:bg-muted/40"
+                >
+                  <Upload className="h-4 w-4" />
+                  <span>{uploading ? "Uploading…" : "Drag & drop a file, or click to upload"}</span>
+                  <input type="file" className="hidden" disabled={uploading}
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); }} />
+                </label>
+              )}
+              <div className="relative">
+                <LinkIcon className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input className="h-8 pl-7 text-xs" placeholder="…or paste a link (e.g. Google Drive)"
+                  value={formDocPath ? "" : formDocUrl}
+                  disabled={!!formDocPath}
+                  onChange={e => setFormDocUrl(e.target.value)} />
+              </div>
+              <div className="flex items-center gap-2 pt-1">
+                <Checkbox id="push-resources" checked={pushToResourcesFlag} disabled={!formDocUrl}
+                  onCheckedChange={(c) => setPushToResourcesFlag(c === true)} />
+                <Label htmlFor="push-resources" className={cn("text-xs", !formDocUrl && "text-muted-foreground/50")}>Also add to Resources</Label>
+                {pushToResourcesFlag && (
+                  <Select value={resourceFolder} onValueChange={(v) => setResourceFolder(v as ResourceFolder)}>
+                    <SelectTrigger className="h-7 w-32 text-xs ml-auto"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {RESOURCE_FOLDERS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
           </div>
           <DialogFooter>
