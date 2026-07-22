@@ -207,7 +207,7 @@ export default function ProjectAccountingModule({
   return (
     <div className="pt-2">
       {/* Top bar */}
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-end gap-2 mb-1">
         <Button size="sm" className="gap-1.5" onClick={() => {
           const now = new Date();
           setDrawMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
