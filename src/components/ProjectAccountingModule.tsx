@@ -208,7 +208,7 @@ export default function ProjectAccountingModule({
     <div className="pt-2">
       {/* Top bar */}
       <div className="flex items-center justify-end gap-2 mb-1">
-        <Button size="sm" variant="secondary" className="gap-1.5 bg-primary/10 text-primary hover:bg-primary/20" onClick={() => {
+        <Button size="sm" variant="secondary" className="gap-1.5 bg-blue-100 text-blue-900 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-200 dark:hover:bg-blue-900/50" onClick={() => {
           const now = new Date();
           setDrawMonth(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`);
           setCloseDrawOpen(true);
