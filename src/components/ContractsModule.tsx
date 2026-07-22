@@ -94,6 +94,67 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     [contracts]
   );
 
+  // Prefix derived from project name: first letter of each word (with any
+  // digits kept), but all-caps acronym words preserved whole.
+  // "Ashland Home2" -> "AH2", "Cleveland AC" -> "CAC", "Intech TPS" -> "ITPS".
+  const contractPrefix = useMemo(() => {
+    const words = projectName.trim().split(/\s+/).filter(Boolean);
+    const parts = words.map((w) => {
+      const letters = w.replace(/[^A-Za-z]/g, "");
+      const isAcronym = letters.length > 1 && letters === letters.toUpperCase();
+      if (isAcronym) return w.toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const firstLetter = (w.match(/[A-Za-z]/)?.[0] ?? "").toUpperCase();
+      const digits = w.replace(/[^0-9]/g, "");
+      return firstLetter + digits;
+    });
+    return parts.join("") || "CON";
+  }, [projectName]);
+
+  const nextContractNumber = useCallback(() => {
+    const re = new RegExp(`^${contractPrefix}-(\\d+)$`, "i");
+    let max = 0;
+    for (const c of contracts) {
+      const m = c.contract_number?.match(re);
+      if (m) max = Math.max(max, parseInt(m[1], 10));
+    }
+    return `${contractPrefix}-${String(max + 1).padStart(3, "0")}`;
+  }, [contracts, contractPrefix]);
+
+  // Add-vendor (select-or-add)
+  const [vendorDialogOpen, setVendorDialogOpen] = useState(false);
+  const [vendorSaving, setVendorSaving] = useState(false);
+  const [newVendorName, setNewVendorName] = useState("");
+  const [newVendorContact, setNewVendorContact] = useState("");
+  const [newVendorEmail, setNewVendorEmail] = useState("");
+  const [newVendorPhone, setNewVendorPhone] = useState("");
+
+  const handleAddVendor = async () => {
+    if (!newVendorName.trim()) { toast.error("Vendor name is required."); return; }
+    setVendorSaving(true);
+    try {
+      const { data, error } = await supabase
+        .from("vendors")
+        .insert({
+          project_id: projectId,
+          name: newVendorName.trim(),
+          contact_name: newVendorContact || null,
+          email: newVendorEmail || null,
+          phone: newVendorPhone || null,
+        })
+        .select("id, name")
+        .single();
+      if (error) throw error;
+      setVendors((prev) => [...prev, data as VendorOption].sort((a, b) => a.name.localeCompare(b.name)));
+      setFormVendor(data.id);
+      toast.success("Vendor added.");
+      setVendorDialogOpen(false);
+      setNewVendorName(""); setNewVendorContact(""); setNewVendorEmail(""); setNewVendorPhone("");
+    } catch (err: any) {
+      toast.error(err?.message ?? "Failed to add vendor.");
+    }
+    setVendorSaving(false);
+  };
+
   const changeBillingMode = async (mode: BillingMode) => {
     if (mode === billingMode) return;
     setSavingMode(true);
@@ -229,7 +290,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               : "One aggregated G702/G703 per draw."}
           </span>
         </div>
-        <Button size="sm" className="gap-1.5" onClick={() => { resetForm(); setEditingId(null); setDialogOpen(true); }}>
+        <Button size="sm" className="gap-1.5" onClick={() => { resetForm(); setEditingId(null); setFormNumber(nextContractNumber()); setDialogOpen(true); }}>
           <Plus className="h-3.5 w-3.5" /> New Contract
         </Button>
       </div>
@@ -297,8 +358,8 @@ export default function ContractsModule({ projectId, projectName }: Props) {
           <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Contract #</Label>
-                <Input className="h-8" value={formNumber} onChange={e => setFormNumber(e.target.value)} placeholder="e.g. GC-001" />
+                <Label className="text-xs">Contract # <span className="text-muted-foreground">(auto, editable)</span></Label>
+                <Input className="h-8" value={formNumber} onChange={e => setFormNumber(e.target.value)} placeholder={`${contractPrefix}-001`} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Type</Label>
@@ -319,11 +380,17 @@ export default function ContractsModule({ projectId, projectName }: Props) {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Vendor</Label>
-                <Select value={formVendor || "__none__"} onValueChange={(v) => setFormVendor(v === "__none__" ? "" : v)}>
+                <Select value={formVendor || "__none__"} onValueChange={(v) => {
+                  if (v === "__add_new__") { setVendorDialogOpen(true); }
+                  else setFormVendor(v === "__none__" ? "" : v);
+                }}>
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Optional" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
                     {vendors.map(v => <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>)}
+                    <SelectItem value="__add_new__" className="text-primary font-medium">
+                      <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Vendor</span>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -372,6 +439,41 @@ export default function ContractsModule({ projectId, projectName }: Props) {
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSave} disabled={saving}>{saving ? "Saving…" : editingId ? "Save Changes" : "Add Contract"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Vendor Dialog */}
+      <Dialog open={vendorDialogOpen} onOpenChange={setVendorDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Add Vendor</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="space-y-1">
+              <Label className="text-xs">Name *</Label>
+              <Input className="h-8" value={newVendorName} onChange={e => setNewVendorName(e.target.value)} />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">Contact</Label>
+              <Input className="h-8" value={newVendorContact} onChange={e => setNewVendorContact(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Email</Label>
+                <Input className="h-8" value={newVendorEmail} onChange={e => setNewVendorEmail(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Phone</Label>
+                <Input className="h-8" value={newVendorPhone} onChange={e => setNewVendorPhone(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setVendorDialogOpen(false)}>Cancel</Button>
+            <Button onClick={handleAddVendor} disabled={vendorSaving} className="gap-1.5">
+              <Plus className="h-3.5 w-3.5" /> {vendorSaving ? "Adding…" : "Add Vendor"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
