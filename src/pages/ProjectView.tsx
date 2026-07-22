@@ -205,7 +205,7 @@ export default function ProjectView() {
           (Executive Summary, etc.) doesn't render beneath the panel. */}
       {!infoOpen && (
       <Tabs defaultValue="executive-summary">
-        <TabsList className="bg-sidebar-accent text-sidebar-accent-foreground">
+        <TabsList className="bg-primary/10 text-primary">
           <TabsTrigger value="executive-summary" className="gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" /> Summary
           </TabsTrigger>
