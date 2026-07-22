@@ -253,6 +253,7 @@ export type Database = {
       budget_transactions: {
         Row: {
           amount: number
+          contract_id: string | null
           created_at: string
           date: string
           description: string
@@ -267,6 +268,7 @@ export type Database = {
           payee: string
           project_id: string
           retainage_amount: number
+          retainage_mode: string
           retainage_percent: number
           status: string
           transaction_group_id: string | null
@@ -276,6 +278,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          contract_id?: string | null
           created_at?: string
           date?: string
           description?: string
@@ -290,6 +293,7 @@ export type Database = {
           payee?: string
           project_id: string
           retainage_amount?: number
+          retainage_mode?: string
           retainage_percent?: number
           status?: string
           transaction_group_id?: string | null
@@ -299,6 +303,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          contract_id?: string | null
           created_at?: string
           date?: string
           description?: string
@@ -313,6 +318,7 @@ export type Database = {
           payee?: string
           project_id?: string
           retainage_amount?: number
+          retainage_mode?: string
           retainage_percent?: number
           status?: string
           transaction_group_id?: string | null
@@ -321,6 +327,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "budget_transactions_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "budget_transactions_draw_id_fkey"
             columns: ["draw_id"]
@@ -557,6 +570,7 @@ export type Database = {
         Row: {
           amount: number
           co_number: number
+          contract_id: string | null
           created_at: string
           date: string
           description: string
@@ -572,6 +586,7 @@ export type Database = {
         Insert: {
           amount?: number
           co_number: number
+          contract_id?: string | null
           created_at?: string
           date?: string
           description?: string
@@ -587,6 +602,7 @@ export type Database = {
         Update: {
           amount?: number
           co_number?: number
+          contract_id?: string | null
           created_at?: string
           date?: string
           description?: string
@@ -600,6 +616,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "change_orders_contract_id_fkey"
+            columns: ["contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "change_orders_project_id_fkey"
             columns: ["project_id"]
@@ -679,6 +702,89 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contracts: {
+        Row: {
+          contract_number: string
+          contract_type: string
+          created_at: string
+          default_retainage_percent: number
+          executed_date: string | null
+          id: string
+          notes: string | null
+          org_id: string
+          original_amount: number
+          parent_contract_id: string | null
+          project_id: string
+          scope_summary: string
+          status: string
+          updated_at: string
+          vendor_id: string | null
+        }
+        Insert: {
+          contract_number?: string
+          contract_type?: string
+          created_at?: string
+          default_retainage_percent?: number
+          executed_date?: string | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          original_amount?: number
+          parent_contract_id?: string | null
+          project_id: string
+          scope_summary?: string
+          status?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Update: {
+          contract_number?: string
+          contract_type?: string
+          created_at?: string
+          default_retainage_percent?: number
+          executed_date?: string | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          original_amount?: number
+          parent_contract_id?: string | null
+          project_id?: string
+          scope_summary?: string
+          status?: string
+          updated_at?: string
+          vendor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contracts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_parent_contract_id_fkey"
+            columns: ["parent_contract_id"]
+            isOneToOne: false
+            referencedRelation: "contracts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contracts_vendor_id_fkey"
+            columns: ["vendor_id"]
+            isOneToOne: false
+            referencedRelation: "vendors"
             referencedColumns: ["id"]
           },
         ]
@@ -2072,6 +2178,7 @@ export type Database = {
       }
       projects: {
         Row: {
+          billing_mode: string
           brand_id: string
           clickup_list_id: string | null
           created_at: string
@@ -2086,6 +2193,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          billing_mode?: string
           brand_id: string
           clickup_list_id?: string | null
           created_at?: string
@@ -2100,6 +2208,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          billing_mode?: string
           brand_id?: string
           clickup_list_id?: string | null
           created_at?: string

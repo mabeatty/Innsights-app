@@ -7,9 +7,42 @@ export interface BudgetRow {
   notes: string | null;
 }
 
+export type BillingMode = "project_rollup" | "contract_native";
+
+export type RetainageMode = "default" | "custom" | "exempt";
+
+export type ContractType = "Prime" | "Subcontract" | "Owner-Direct" | "Supply";
+
+export type ContractStatus = "Draft" | "Active" | "Closed";
+
+export interface Contract {
+  id: string;
+  org_id: string;
+  project_id: string;
+  vendor_id: string | null;
+  parent_contract_id: string | null;
+  contract_type: ContractType;
+  contract_number: string;
+  scope_summary: string;
+  original_amount: number;
+  default_retainage_percent: number;
+  executed_date: string | null;
+  status: ContractStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const CONTRACT_TYPES: ContractType[] = ["Prime", "Subcontract", "Owner-Direct", "Supply"];
+
+export const CONTRACT_STATUSES: ContractStatus[] = ["Draft", "Active", "Closed"];
+
+export const RETAINAGE_MODES: RetainageMode[] = ["default", "custom", "exempt"];
+
 export interface BudgetTransaction {
   id: string;
   project_id: string;
+  contract_id: string | null;
   transaction_type: string;
   transaction_number: number;
   date: string;
@@ -20,6 +53,7 @@ export interface BudgetTransaction {
   amount: number;
   retainage_percent: number;
   retainage_amount: number;
+  retainage_mode: RetainageMode;
   net_amount: number;
   status: string;
   notes: string | null;
