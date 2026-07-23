@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
   BudgetTransaction, ALL_DIVISIONS, TRANSACTION_TYPES, TRANSACTION_STATUSES, fmtDecimal,
+  Contract, RetainageMode,
 } from "./types";
 import type { DrawRecord } from "./DrawHistoryTab";
 import InvoiceDetailDialog from "@/components/invoices/InvoiceDetailDialog";
@@ -34,6 +35,7 @@ interface LineItem {
   divisionNumber: string;
   amount: number;
   retainageAmount: number;
+  retainageMode: RetainageMode;
   description: string;
 }
 
@@ -71,6 +73,7 @@ const newLineItem = (): LineItem => ({
   divisionNumber: "",
   amount: 0,
   retainageAmount: 0,
+  retainageMode: "custom",
   description: "",
 });
 
@@ -139,6 +142,8 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   const [formNotes, setFormNotes] = useState("");
   const [formDocumentUrl, setFormDocumentUrl] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([newLineItem()]);
+  const [formContractId, setFormContractId] = useState<string>("");
+  const [contracts, setContracts] = useState<Contract[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Vendors
@@ -162,6 +167,15 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setVendors((data as Vendor[]) ?? []);
   }, [projectId]);
 
+  const loadContracts = useCallback(async () => {
+    const { data } = await supabase
+      .from("contracts")
+      .select("*")
+      .eq("project_id", projectId)
+      .order("contract_number");
+    setContracts((data as Contract[]) ?? []);
+  }, [projectId]);
+
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("budget_transactions")
@@ -177,7 +191,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setLoading(false);
   }, [projectId, onTransactionsChange]);
 
-  useEffect(() => { load(); loadVendors(); }, [load, loadVendors]);
+  useEffect(() => { load(); loadVendors(); loadContracts(); }, [load, loadVendors, loadContracts]);
 
   // Split transactions into current (no draw_id) and past (has draw_id)
   const currentTransactions = useMemo(() => transactions.filter(t => !(t as any).draw_id), [transactions]);
@@ -220,6 +234,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setFormStatus("Pending");
     setFormNotes("");
     setFormDocumentUrl("");
+    setFormContractId("");
     lineItemCounter = 0;
     setLineItems([newLineItem()]);
   };
@@ -233,11 +248,13 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setFormStatus(g.status);
     setFormNotes(g.notes ?? "");
     setFormDocumentUrl(g.documentUrl ?? "");
+    setFormContractId((g.items[0] as any).contract_id ?? "");
     setLineItems(g.items.map(t => ({
       id: t.id,
       divisionNumber: t.division_number,
       amount: Number(t.amount),
       retainageAmount: Number(t.retainage_amount),
+      retainageMode: ((t as any).retainage_mode as RetainageMode) ?? "custom",
       description: t.description,
     })));
     setDialogOpen(true);
@@ -258,8 +275,22 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setLineItems(prev => prev.length > 1 ? prev.filter(li => li.id !== id) : prev);
   };
 
+  const selectedContract = useMemo(
+    () => contracts.find(c => c.id === formContractId) ?? null,
+    [contracts, formContractId]
+  );
+
+  const lineRetainage = useCallback((li: LineItem): number => {
+    if (li.retainageMode === "exempt") return 0;
+    if (li.retainageMode === "default") {
+      const pct = selectedContract ? Number(selectedContract.default_retainage_percent) : 0;
+      return Math.round(li.amount * pct) / 100;
+    }
+    return li.retainageAmount;
+  }, [selectedContract]);
+
   const formTotalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
-  const formTotalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
+  const formTotalRetainage = lineItems.reduce((s, li) => s + lineRetainage(li), 0);
   const formTotalNet = formTotalAmount - formTotalRetainage;
 
   const updateDrawSnapshot = async (drawId: string) => {
@@ -337,10 +368,11 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
 
       const rows = validLines.map(li => {
         const div = ALL_DIVISIONS.find(d => d.number === li.divisionNumber);
-        const retAmt = li.retainageAmount;
+        const retAmt = lineRetainage(li);
         return {
           project_id: projectId,
           transaction_group_id: groupId,
+          contract_id: formContractId || null,
           transaction_type: formType,
           transaction_number: txnNumber,
           date: format(formDate, "yyyy-MM-dd"),
@@ -351,6 +383,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           amount: li.amount,
           retainage_percent: li.amount > 0 ? (retAmt / li.amount) * 100 : 0,
           retainage_amount: retAmt,
+          retainage_mode: li.retainageMode,
           net_amount: li.amount - retAmt,
           status: formStatus,
           notes: formNotes || null,
@@ -855,6 +888,29 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
               </div>
             </div>
 
+            {/* Contract association */}
+            <div className="grid grid-cols-5 gap-3">
+              <div className="space-y-1 col-span-2">
+                <Label className="text-xs">Contract</Label>
+                <Select value={formContractId || "__none__"} onValueChange={(v) => setFormContractId(v === "__none__" ? "" : v)}>
+                  <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None (unassigned)" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">None</SelectItem>
+                    {contracts.map(c => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {(c.contract_number || c.scope_summary)} — {c.default_retainage_percent}% ret.
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {selectedContract && (
+                <div className="col-span-3 flex items-end pb-1 text-xs text-muted-foreground">
+                  Lines set to "Default" inherit {selectedContract.default_retainage_percent}% retainage from this contract.
+                </div>
+              )}
+            </div>
+
             {/* Division Line Items Table */}
             <div>
               <Label className="text-xs text-muted-foreground mb-2 block">Division Line Items</Label>
@@ -864,6 +920,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                     <tr className="bg-muted/50 text-muted-foreground text-left text-xs">
                       <th className="px-2 py-1.5 min-w-[200px]">Division</th>
                       <th className="px-2 py-1.5 w-28">Amount</th>
+                      <th className="px-2 py-1.5 w-28">Retainage Mode</th>
                       <th className="px-2 py-1.5 w-28">Retainage</th>
                       <th className="px-2 py-1.5 w-28">Net</th>
                       <th className="px-2 py-1.5">Description</th>
@@ -872,7 +929,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                   </thead>
                   <tbody>
                     {lineItems.map(li => {
-                      const retAmt = li.retainageAmount;
+                      const retAmt = lineRetainage(li);
                       const netAmt = li.amount - retAmt;
                       return (
                         <tr key={li.id} className="border-t">
@@ -888,7 +945,23 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                             <Input type="number" step="0.01" className="h-7 text-xs" value={li.amount || ""} onChange={e => updateLineItem(li.id, "amount", Number(e.target.value) || 0)} />
                           </td>
                           <td className="px-2 py-1.5">
-                            <Input type="number" step="0.01" min="0" className="h-7 text-xs" value={li.retainageAmount || ""} onChange={e => updateLineItem(li.id, "retainageAmount", Number(e.target.value) || 0)} />
+                            <Select value={li.retainageMode} onValueChange={v => updateLineItem(li.id, "retainageMode", v as RetainageMode)}>
+                              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="default" disabled={!selectedContract}>
+                                  Default{selectedContract ? ` (${selectedContract.default_retainage_percent}%)` : ""}
+                                </SelectItem>
+                                <SelectItem value="custom">Custom</SelectItem>
+                                <SelectItem value="exempt">Exempt</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="px-2 py-1.5">
+                            {li.retainageMode === "custom" ? (
+                              <Input type="number" step="0.01" min="0" className="h-7 text-xs" value={li.retainageAmount || ""} onChange={e => updateLineItem(li.id, "retainageAmount", Number(e.target.value) || 0)} />
+                            ) : (
+                              <div className="flex h-7 items-center text-xs text-muted-foreground">{fmtDecimal(retAmt)}</div>
+                            )}
                           </td>
                           <td className="px-2 py-1.5 text-xs text-muted-foreground text-right">{fmtDecimal(netAmt)}</td>
                           <td className="px-2 py-1.5">
@@ -907,6 +980,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                     <tr className="border-t bg-muted/50 font-semibold text-xs">
                       <td className="px-2 py-1.5">Totals</td>
                       <td className="px-2 py-1.5 text-right">{fmtDecimal(formTotalAmount)}</td>
+                      <td className="px-2 py-1.5" />
                       <td className="px-2 py-1.5 text-right">{fmtDecimal(formTotalRetainage)}</td>
                       <td className="px-2 py-1.5 text-right">{fmtDecimal(formTotalNet)}</td>
                       <td colSpan={2} />
