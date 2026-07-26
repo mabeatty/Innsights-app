@@ -587,7 +587,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
             <span className="inline-flex items-center gap-2">
               <span
                 title={hasContract ? "Tagged to a contract" : "No contract"}
-                className={cn("inline-block h-2 w-2 shrink-0 rounded-full", hasContract ? "bg-green-500" : "bg-muted-foreground/40")}
+                className={cn("inline-block h-2 w-2 shrink-0 rounded-full", hasContract ? "bg-green-500" : "bg-foreground")}
               />
               <span className="truncate">{g.payee}{hasMultiple && <span className="ml-1.5 text-xs text-muted-foreground">({g.items.length} lines)</span>}</span>
             </span>
