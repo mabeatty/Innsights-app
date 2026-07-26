@@ -386,7 +386,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               <th className="px-3 py-2">Scope</th>
               <th className="px-3 py-2 w-32">Type</th>
               <th className="px-3 py-2 w-40">Vendor</th>
-              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Original Amount</th>
+              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Contract Amount</th>
               <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Amount Billed</th>
               <th className="px-3 py-2 text-right w-24">Retainage</th>
               <th className="px-3 py-2 w-24">Status</th>
@@ -498,7 +498,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
-                <Label className="text-xs">Original Amount</Label>
+                <Label className="text-xs">Contract Amount</Label>
                 <Input type="number" className="h-8" value={formAmount || ""} onChange={e => setFormAmount(Number(e.target.value) || 0)} />
               </div>
               <div className="space-y-1">
