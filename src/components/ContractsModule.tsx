@@ -386,8 +386,8 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               <th className="px-3 py-2">Scope</th>
               <th className="px-3 py-2 w-32">Type</th>
               <th className="px-3 py-2 w-40">Vendor</th>
-              <th className="px-3 py-2 text-right w-32">Original Amount</th>
-              <th className="px-3 py-2 text-right w-32">Amount Billed</th>
+              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Original Amount</th>
+              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Amount Billed</th>
               <th className="px-3 py-2 text-right w-24">Retainage</th>
               <th className="px-3 py-2 w-24">Status</th>
               <th className="px-3 py-2 w-20" />
