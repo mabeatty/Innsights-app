@@ -16,13 +16,14 @@ import { Plus, Pencil, Trash2, ExternalLink, Link } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { BudgetRow, ALL_DIVISIONS, fmt } from "./types";
+import { BudgetRow, ALL_DIVISIONS, fmt, Contract } from "./types";
 
 const CO_STATUSES = ["Proposed", "Under Review", "Approved", "Rejected"] as const;
 
 export interface ChangeOrder {
   id: string;
   project_id: string;
+  contract_id: string | null;
   co_number: number;
   date: string;
   description: string;
@@ -44,6 +45,8 @@ interface Props {
 
 export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload }: Props) {
   const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [vendors, setVendors] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
 
   // Form state
   const [formDate, setFormDate] = useState<Date>(new Date());
+  const [formContractId, setFormContractId] = useState<string>("");
   const [formDescription, setFormDescription] = useState("");
   const [formDivision, setFormDivision] = useState("");
   const [formAmount, setFormAmount] = useState<number>(0);
@@ -74,6 +78,25 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
   }, [projectId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    (async () => {
+      const [cRes, vRes] = await Promise.all([
+        supabase.from("contracts").select("*").eq("project_id", projectId).order("contract_number"),
+        supabase.from("vendors").select("id, name").eq("project_id", projectId).order("name"),
+      ]);
+      if (!cRes.error) setContracts((cRes.data ?? []) as Contract[]);
+      if (!vRes.error) setVendors((vRes.data ?? []) as { id: string; name: string }[]);
+    })();
+  }, [projectId]);
+
+  const contractLabel = useCallback((id: string | null) => {
+    if (!id) return null;
+    const c = contracts.find(x => x.id === id);
+    if (!c) return null;
+    const vName = vendors.find(v => v.id === c.vendor_id)?.name;
+    return `${c.contract_number || "—"}${vName ? ` · ${vName}` : ""}`;
+  }, [contracts, vendors]);
 
   // Summary calculations
   const originalContractValue = useMemo(
@@ -100,6 +123,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
 
   const resetForm = () => {
     setFormDate(new Date());
+    setFormContractId("");
     setFormDescription("");
     setFormDivision("");
     setFormAmount(0);
@@ -111,6 +135,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
   const openEdit = (co: ChangeOrder) => {
     setEditingId(co.id);
     setFormDate(new Date(co.date));
+    setFormContractId(co.contract_id ?? "");
     setFormDescription(co.description);
     setFormDivision(co.division_number);
     setFormAmount(Number(co.amount));
@@ -161,6 +186,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
         const { error } = await supabase
           .from("change_orders")
           .update({
+            contract_id: formContractId || null,
             date: format(formDate, "yyyy-MM-dd"),
             description: formDescription,
             division_number: formDivision,
@@ -183,6 +209,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
           .from("change_orders")
           .insert({
             project_id: projectId,
+            contract_id: formContractId || null,
             co_number: nextCoNumber,
             date: format(formDate, "yyyy-MM-dd"),
             description: formDescription,
@@ -271,6 +298,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
               <th className="px-3 py-2 w-20">CO #</th>
               <th className="px-3 py-2 w-24">Date</th>
               <th className="px-3 py-2">Description</th>
+              <th className="px-3 py-2 w-40">Contract</th>
               <th className="px-3 py-2 w-44">Division</th>
               <th className="px-3 py-2 text-right w-28">Amount</th>
               <th className="px-3 py-2 w-28">Status</th>
@@ -280,12 +308,13 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
           </thead>
           <tbody>
             {changeOrders.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No change orders yet.</td></tr>
+              <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No change orders yet.</td></tr>
             ) : changeOrders.map(co => (
               <tr key={co.id} className="border-t hover:bg-muted/30 transition-colors">
                 <td className="px-3 py-2 font-mono text-muted-foreground">CO-{String(co.co_number).padStart(3, "0")}</td>
                 <td className="px-3 py-2 text-xs">{co.date}</td>
                 <td className="px-3 py-2 text-sm">{co.description}</td>
+                <td className="px-3 py-2 text-xs">{contractLabel(co.contract_id) ?? <span className="text-muted-foreground">—</span>}</td>
                 <td className="px-3 py-2 text-xs">{co.division_number} — {co.division_name}</td>
                 <td className={cn("px-3 py-2 text-right", Number(co.amount) < 0 && "text-destructive")}>{fmt(Number(co.amount))}</td>
                 <td className="px-3 py-2">
@@ -346,6 +375,24 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
             <div className="space-y-1">
               <Label className="text-xs">Description *</Label>
               <Input className="h-8" value={formDescription} onChange={e => setFormDescription(e.target.value)} />
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs">Contract</Label>
+              <Select value={formContractId || "__none__"} onValueChange={(v) => setFormContractId(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None (unassigned)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None</SelectItem>
+                  {contracts.map(c => {
+                    const vName = vendors.find(v => v.id === c.vendor_id)?.name;
+                    return (
+                      <SelectItem key={c.id} value={c.id}>
+                        {(c.contract_number || "—")} · {vName ?? c.scope_summary}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
