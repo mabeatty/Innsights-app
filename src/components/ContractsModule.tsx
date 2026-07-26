@@ -498,6 +498,8 @@ export default function ContractsModule({ projectId, projectName }: Props) {
 
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
+                {/* NOTE: flat Contract Amount only. Fixed-fee + T&M schedule of
+                    values is a planned refinement — see docs/accounting-roadmap.md */}
                 <Label className="text-xs">Contract Amount</Label>
                 <Input type="number" className="h-8" value={formAmount || ""} onChange={e => setFormAmount(Number(e.target.value) || 0)} />
               </div>
