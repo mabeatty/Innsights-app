@@ -47,6 +47,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
   const [billingMode, setBillingMode] = useState<BillingMode>("project_rollup");
+  const [billedByContract, setBilledByContract] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [savingMode, setSavingMode] = useState(false);
 
@@ -78,10 +79,11 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const [resourceFolder, setResourceFolder] = useState<ResourceFolder>("Contracts");
 
   const load = useCallback(async () => {
-    const [projectRes, contractsRes, vendorsRes] = await Promise.all([
+    const [projectRes, contractsRes, vendorsRes, billedRes] = await Promise.all([
       supabase.from("projects").select("organization_id, billing_mode").eq("id", projectId).single(),
       supabase.from("contracts").select("*").eq("project_id", projectId).order("contract_number", { ascending: true }),
       supabase.from("vendors").select("id, name").eq("project_id", projectId).order("name", { ascending: true }),
+      supabase.from("budget_transactions").select("contract_id, amount").eq("project_id", projectId).not("contract_id", "is", null),
     ]);
     if (projectRes.error) toast.error("Failed to load project.");
     else {
@@ -91,6 +93,13 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     if (contractsRes.error) toast.error("Failed to load contracts.");
     else setContracts((contractsRes.data ?? []) as Contract[]);
     if (!vendorsRes.error) setVendors((vendorsRes.data ?? []) as VendorOption[]);
+    if (!billedRes.error) {
+      const map: Record<string, number> = {};
+      for (const r of billedRes.data ?? []) {
+        if (r.contract_id) map[r.contract_id] = (map[r.contract_id] ?? 0) + Number(r.amount);
+      }
+      setBilledByContract(map);
+    }
     setLoading(false);
   }, [projectId]);
 
@@ -104,6 +113,11 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const totalContractValue = useMemo(
     () => contracts.reduce((s, c) => s + Number(c.original_amount), 0),
     [contracts]
+  );
+
+  const totalBilled = useMemo(
+    () => Object.values(billedByContract).reduce((s, n) => s + n, 0),
+    [billedByContract]
   );
 
   // Prefix derived from project name: first letter of each word (with any
@@ -373,6 +387,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               <th className="px-3 py-2 w-32">Type</th>
               <th className="px-3 py-2 w-40">Vendor</th>
               <th className="px-3 py-2 text-right w-32">Original Amount</th>
+              <th className="px-3 py-2 text-right w-32">Amount Billed</th>
               <th className="px-3 py-2 text-right w-24">Retainage</th>
               <th className="px-3 py-2 w-24">Status</th>
               <th className="px-3 py-2 w-20" />
@@ -380,7 +395,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
           </thead>
           <tbody>
             {contracts.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No contracts yet.</td></tr>
+              <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No contracts yet.</td></tr>
             ) : contracts.map(c => (
               <tr key={c.id} className="border-t hover:bg-muted/30 transition-colors">
                 <td className="px-3 py-2 font-mono text-muted-foreground">{c.contract_number || "—"}</td>
@@ -390,6 +405,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                 <td className="px-3 py-2 text-xs">{c.contract_type}</td>
                 <td className="px-3 py-2 text-xs">{vendorName(c.vendor_id)}</td>
                 <td className="px-3 py-2 text-right">{fmt(Number(c.original_amount))}</td>
+                <td className="px-3 py-2 text-right">{fmt(billedByContract[c.id] ?? 0)}</td>
                 <td className="px-3 py-2 text-right">{Number(c.default_retainage_percent)}%</td>
                 <td className="px-3 py-2"><span className={statusPillClasses(c.status)}>{c.status}</span></td>
                 <td className="px-3 py-2">
@@ -415,6 +431,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               <tr className="border-t bg-muted/50 font-semibold">
                 <td className="px-3 py-2" colSpan={4}>Total contract value</td>
                 <td className="px-3 py-2 text-right">{fmt(totalContractValue)}</td>
+                <td className="px-3 py-2 text-right">{fmt(totalBilled)}</td>
                 <td className="px-3 py-2" colSpan={3} />
               </tr>
             </tfoot>

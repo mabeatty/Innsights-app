@@ -896,11 +896,14 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                   <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="None (unassigned)" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">None</SelectItem>
-                    {contracts.map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {(c.contract_number || c.scope_summary)} — {c.default_retainage_percent}% ret.
-                      </SelectItem>
-                    ))}
+                    {contracts.map(c => {
+                      const vName = vendors.find(v => v.id === c.vendor_id)?.name;
+                      return (
+                        <SelectItem key={c.id} value={c.id}>
+                          {(c.contract_number || "—")} · {vName ?? c.scope_summary} — {c.default_retainage_percent}% ret.
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
