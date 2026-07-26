@@ -568,6 +568,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   const renderGroupRow = (g: TransactionGroup, readOnly: boolean) => {
     const isExpanded = expandedGroups.has(g.groupId);
     const hasMultiple = g.items.length > 1;
+    const hasContract = !!(g.items[0] as any)?.contract_id;
     const sortedItems = [...g.items].sort(
       (a, b) => getCategoryNumber(a.division_number) - getCategoryNumber(b.division_number)
     );
@@ -582,7 +583,15 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           </td>
           <td className="px-3 py-2 text-xs truncate">{g.transactionType}</td>
           <td className="px-3 py-2 text-xs">{g.date}</td>
-          <td className="px-3 py-2 truncate">{g.payee}{hasMultiple && <span className="ml-1.5 text-xs text-muted-foreground">({g.items.length} lines)</span>}</td>
+          <td className="px-3 py-2 truncate">
+            <span className="inline-flex items-center gap-2">
+              <span
+                title={hasContract ? "Tagged to a contract" : "No contract"}
+                className={cn("inline-block h-2 w-2 shrink-0 rounded-full", hasContract ? "bg-green-500" : "bg-muted-foreground/40")}
+              />
+              <span className="truncate">{g.payee}{hasMultiple && <span className="ml-1.5 text-xs text-muted-foreground">({g.items.length} lines)</span>}</span>
+            </span>
+          </td>
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalAmount)}</td>
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalRetainage)}</td>
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalNet)}</td>
