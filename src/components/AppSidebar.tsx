@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { LayoutDashboard, FolderPlus, LogOut, FileText, Settings, Users, ChevronRight, Receipt, TrendingUp, GripVertical, AlertTriangle, FolderOpen, Building2, FileCheck } from "lucide-react";
+import { LayoutDashboard, FolderPlus, LogOut, FileText, Settings, Users, ChevronRight, Receipt, TrendingUp, GripVertical, AlertTriangle, FolderOpen, Building2, FileCheck, Banknote } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -26,6 +26,7 @@ const defaultDraggableItems = [
   { title: "Vendors", url: "/vendors", icon: Building2, requiresInvestmentAccess: false },
   { title: "Expense Reporting", url: "/expenses", icon: Receipt, requiresInvestmentAccess: false },
   { title: "Invoices", url: "/invoices", icon: FileCheck, requiresInvestmentAccess: false },
+  { title: "Payments", url: "/payments", icon: Banknote, requiresInvestmentAccess: false },
   { title: "New Project", url: "/new-project", icon: FolderPlus, requiresInvestmentAccess: false },
 ];
 
@@ -120,7 +121,7 @@ export function AppSidebar() {
     ? []
     : draggableItems
         .filter((item) => !item.requiresInvestmentAccess || investmentAccess)
-        .filter((item) => accessLevel !== "view" || (item.url !== "/internal-documents" && item.url !== "/vendors" && item.url !== "/invoices"));
+        .filter((item) => accessLevel !== "view" || (item.url !== "/internal-documents" && item.url !== "/vendors" && item.url !== "/invoices" && item.url !== "/payments"));
 
   const renderProjectList = (items: SidebarProject[]) => (
     <SidebarMenu>

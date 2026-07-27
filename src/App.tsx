@@ -19,6 +19,7 @@ import AdminExport from "./pages/AdminExport";
 import Settings from "./pages/Settings";
 import ExpenseReporting from "./pages/ExpenseReporting";
 import Invoices from "./pages/Invoices";
+import Payments from "./pages/Payments";
 import ExpenseSettings from "./pages/ExpenseSettings";
 import InvestmentManagement from "./pages/InvestmentManagement";
 import InternalDocuments from "./pages/InternalDocuments";
@@ -102,6 +103,7 @@ const App = () => (
             <Route path="/vendors/pricing" element={<ProtectedRoute><VendorPriceLibrary /></ProtectedRoute>} />
             <Route path="/expenses" element={<ProtectedRoute><ExpenseReporting /></ProtectedRoute>} />
             <Route path="/invoices" element={<ProtectedRoute><Invoices /></ProtectedRoute>} />
+            <Route path="/payments" element={<ProtectedRoute><Payments /></ProtectedRoute>} />
             <Route path="/expenses/settings" element={<ProtectedRoute><ExpenseSettings /></ProtectedRoute>} />
             <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
             <Route path="/admin/templates" element={<Navigate to="/settings?tab=templates" replace />} />
