@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library } from "lucide-react";
 import * as XLSX from "xlsx";
 import VendorImportDialog from "@/components/vendors/VendorImportDialog";
 
@@ -80,6 +80,7 @@ function StarRating({ value, onChange, size = 18 }: { value: number; onChange?: 
 }
 
 export default function Vendors() {
+  const navigate = useNavigate();
   const { accessLevel, organizationId, isConsultant } = useAuth();
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
@@ -286,6 +287,9 @@ export default function Vendors() {
           <p className="text-sm text-muted-foreground mt-1">Organization-wide vendor directory.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate("/vendors/pricing")} className="gap-2">
+            <Library className="h-4 w-4" /> Price Library
+          </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
             <Upload className="h-4 w-4" /> Import Vendors
           </Button>
