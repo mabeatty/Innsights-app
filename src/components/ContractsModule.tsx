@@ -19,7 +19,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { pushToResources, RESOURCE_FOLDERS, ResourceFolder } from "@/lib/resources";
 import {
-  Contract, ContractType, ContractStatus, BillingMode,
+  Contract, ContractType, ContractStatus,
   CONTRACT_TYPES, CONTRACT_STATUSES, fmt,
 } from "@/components/budget/types";
 
@@ -46,11 +46,9 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
   const [orgId, setOrgId] = useState<string | null>(null);
-  const [billingMode, setBillingMode] = useState<BillingMode>("project_rollup");
   const [billedByContract, setBilledByContract] = useState<Record<string, number>>({});
   const [coByContract, setCoByContract] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
-  const [savingMode, setSavingMode] = useState(false);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -81,17 +79,14 @@ export default function ContractsModule({ projectId, projectName }: Props) {
 
   const load = useCallback(async () => {
     const [projectRes, contractsRes, vendorsRes, billedRes, coRes] = await Promise.all([
-      supabase.from("projects").select("organization_id, billing_mode").eq("id", projectId).single(),
+      supabase.from("projects").select("organization_id").eq("id", projectId).single(),
       supabase.from("contracts").select("*").eq("project_id", projectId).order("contract_number", { ascending: true }),
       supabase.from("vendors").select("id, name").eq("project_id", projectId).order("name", { ascending: true }),
       supabase.from("budget_transactions").select("contract_id, amount").eq("project_id", projectId).not("contract_id", "is", null),
       supabase.from("change_orders").select("contract_id, amount, status").eq("project_id", projectId).eq("status", "Approved").not("contract_id", "is", null),
     ]);
     if (projectRes.error) toast.error("Failed to load project.");
-    else {
-      setOrgId(projectRes.data.organization_id);
-      setBillingMode((projectRes.data.billing_mode as BillingMode) ?? "project_rollup");
-    }
+    else setOrgId(projectRes.data.organization_id);
     if (contractsRes.error) toast.error("Failed to load contracts.");
     else setContracts((contractsRes.data ?? []) as Contract[]);
     if (!vendorsRes.error) setVendors((vendorsRes.data ?? []) as VendorOption[]);
@@ -193,21 +188,6 @@ export default function ContractsModule({ projectId, projectName }: Props) {
       toast.error(err?.message ?? "Failed to add vendor.");
     }
     setVendorSaving(false);
-  };
-
-  const changeBillingMode = async (mode: BillingMode) => {
-    if (mode === billingMode) return;
-    setSavingMode(true);
-    const prev = billingMode;
-    setBillingMode(mode);
-    const { error } = await supabase.from("projects").update({ billing_mode: mode }).eq("id", projectId);
-    if (error) {
-      setBillingMode(prev);
-      toast.error("Failed to update billing mode.");
-    } else {
-      toast.success(mode === "contract_native" ? "Billing mode: Contract-Native" : "Billing mode: Project Rollup");
-    }
-    setSavingMode(false);
   };
 
   const resetForm = () => {
@@ -354,38 +334,8 @@ export default function ContractsModule({ projectId, projectName }: Props) {
 
   return (
     <div className="space-y-4 pt-2">
-      {/* Billing mode + toolbar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <span className="text-xs font-medium text-muted-foreground">Billing mode</span>
-          <div className="inline-flex gap-0.5 rounded-lg bg-muted p-0.5">
-            <button
-              disabled={savingMode}
-              onClick={() => changeBillingMode("project_rollup")}
-              className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                billingMode === "project_rollup" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-              )}
-            >
-              Project Rollup
-            </button>
-            <button
-              disabled={savingMode}
-              onClick={() => changeBillingMode("contract_native")}
-              className={cn(
-                "rounded-md px-3 py-1 text-xs font-medium transition-all",
-                billingMode === "contract_native" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground",
-              )}
-            >
-              Contract-Native
-            </button>
-          </div>
-          <span className="text-xs text-muted-foreground">
-            {billingMode === "contract_native"
-              ? "Each contract bills its own G702/G703, rolled up to the owner draw."
-              : "One aggregated G702/G703 per draw."}
-          </span>
-        </div>
+      {/* Toolbar */}
+      <div className="flex items-center justify-end">
         <Button size="sm" className="gap-1.5" onClick={() => { resetForm(); setEditingId(null); setFormNumber(nextContractNumber()); setDialogOpen(true); }}>
           <Plus className="h-3.5 w-3.5" /> New Contract
         </Button>

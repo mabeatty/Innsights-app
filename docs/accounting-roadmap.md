@@ -18,7 +18,7 @@ this, and "% billed vs contract" is only meaningful for the fixed / NTE portions
 scope lines, each marked **Fixed** (with a scheduled value) or **T&M** (with an
 optional not-to-exceed, or left open). Billed amount rolls up per line; change
 orders adjust a specific line or add one; uncapped T&M lines show no
-percent-complete. This line structure is also what a contract-native G703 needs.
+percent-complete.
 
 **Open question to resolve when building:** Do T&M portions usually carry a
 not-to-exceed cap, or are they genuinely open-ended?

@@ -7,8 +7,6 @@ export interface BudgetRow {
   notes: string | null;
 }
 
-export type BillingMode = "project_rollup" | "contract_native";
-
 export type RetainageMode = "default" | "custom" | "exempt";
 
 export type ContractType = "Prime" | "Subcontract" | "Owner-Direct" | "Supply";
