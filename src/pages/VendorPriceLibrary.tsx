@@ -74,11 +74,20 @@ export default function VendorPriceLibrary() {
   const applyFilters = (r: Rec) =>
     (brandFilter === "all" || r.brand === brandFilter) && (projectFilter === "all" || r.project_label === projectFilter);
 
+  const itemFilterActive = selectedItemId !== "" || brandFilter !== "all" || projectFilter !== "all";
   const itemRows = useMemo(() => {
-    if (!selectedItemId) return [];
-    return recs.filter(r => r.catalog_item_id === selectedItemId).filter(applyFilters)
-      .sort((a, b) => (a.unit_price ?? a.gross_price ?? Infinity) - (b.unit_price ?? b.gross_price ?? Infinity));
-  }, [recs, selectedItemId, brandFilter, projectFilter]);
+    if (!itemFilterActive) return [];
+    const nameById = new Map(items.map(i => [i.id, i.canonical_name]));
+    return recs
+      .filter(r => !selectedItemId || r.catalog_item_id === selectedItemId)
+      .filter(applyFilters)
+      .sort((a, b) => {
+        const an = (a.item_name ?? (a.catalog_item_id ? nameById.get(a.catalog_item_id) : "") ?? "") as string;
+        const bn = (b.item_name ?? (b.catalog_item_id ? nameById.get(b.catalog_item_id) : "") ?? "") as string;
+        if (an !== bn) return an.localeCompare(bn);
+        return (a.unit_price ?? a.gross_price ?? Infinity) - (b.unit_price ?? b.gross_price ?? Infinity);
+      });
+  }, [recs, items, selectedItemId, brandFilter, projectFilter, itemFilterActive]);
 
   const vendorRows = useMemo(
     () => recs.filter(r => r.vendor_name === selectedVendor).filter(r => projectFilter === "all" || r.project_label === projectFilter),
@@ -147,11 +156,13 @@ export default function VendorPriceLibrary() {
             </div>
           </div>
 
-          {selectedItemId ? (
+          {itemFilterActive ? (
             <div className="rounded-lg border overflow-auto">
-              <table className="w-full text-sm min-w-[820px]">
+              <div className="px-3 py-2 text-xs text-muted-foreground border-b bg-muted/30">{itemRows.length} record{itemRows.length === 1 ? "" : "s"}</div>
+              <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="bg-muted/50 text-left text-muted-foreground">
+                    <th className="px-3 py-2">Item</th>
                     <th className="px-3 py-2">Vendor</th>
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2 text-right">Price</th>
@@ -162,22 +173,23 @@ export default function VendorPriceLibrary() {
                 </thead>
                 <tbody>
                   {itemRows.length === 0 ? (
-                    <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No pricing recorded for this item with the current filters.</td></tr>
+                    <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No pricing matches the current filters.</td></tr>
                   ) : itemRows.map(r => (
                     <tr key={r.id} className="border-t hover:bg-muted/30">
-                      <td className="px-3 py-2 font-medium">{r.vendor_name}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px]">{r.description}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{priceCell(r)}</td>
+                      <td className="px-3 py-2 font-medium">{r.item_name ?? "—"}</td>
+                      <td className="px-3 py-2">{r.vendor_name}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[260px]">{r.description}</td>
+                      <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{priceCell(r)}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.room_type}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={r.source_doc ?? ""}>{r.source_doc}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_doc}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Pick an item above to see every vendor's price for it.</p>
+            <p className="text-sm text-muted-foreground">Pick an item, a project, or a brand to populate pricing. Selecting a project alone shows every item in the library for that project.</p>
           )}
         </TabsContent>
 

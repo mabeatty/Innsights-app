@@ -117,6 +117,8 @@ export default function Vendors() {
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [projectFilter, setProjectFilter] = useState<string>("all");
+  const [projectVendorNames, setProjectVendorNames] = useState<Record<string, string[]>>({});
 
   const categoryOptions = useMemo(
     () => Array.from(new Set([...CATEGORIES, ...vendors.map(v => v.category)].filter(Boolean))).sort(),
@@ -151,6 +153,19 @@ export default function Vendors() {
       map[row.vendor_id].push(row.project_id);
     });
     setVendorProjectMap(map);
+
+    // Build project -> vendor-name associations from actual pricing data
+    const [{ data: vpRows }, { data: bliRows }] = await Promise.all([
+      supabase.from("vendor_pricing").select("vendor_name, project_label"),
+      supabase.from("bid_line_items").select("vendor_name, project_label"),
+    ]);
+    const pvn: Record<string, Set<string>> = {};
+    [...(vpRows ?? []), ...(bliRows ?? [])].forEach((row: any) => {
+      if (row.project_label && row.vendor_name) {
+        (pvn[row.project_label] ??= new Set<string>()).add(row.vendor_name);
+      }
+    });
+    setProjectVendorNames(Object.fromEntries(Object.entries(pvn).map(([k, v]) => [k, Array.from(v)])));
     setLoading(false);
   };
 
@@ -159,10 +174,17 @@ export default function Vendors() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId]);
 
+  const projectFilterOptions = useMemo(
+    () => Object.keys(projectVendorNames).sort(),
+    [projectVendorNames]
+  );
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
+    const projectSet = projectFilter !== "all" ? new Set(projectVendorNames[projectFilter] ?? []) : null;
     return vendors.filter((v) => {
       if (categoryFilter !== "all" && v.category !== categoryFilter) return false;
+      if (projectSet && !projectSet.has(v.vendor_name)) return false;
       if (!q) return true;
       return (
         v.vendor_name.toLowerCase().includes(q) ||
@@ -170,7 +192,7 @@ export default function Vendors() {
         (v.contact_name ?? "").toLowerCase().includes(q)
       );
     });
-  }, [vendors, search, categoryFilter]);
+  }, [vendors, search, categoryFilter, projectFilter, projectVendorNames]);
 
   if (isConsultant || accessLevel === "view") return <Navigate to="/dashboard" replace />;
 
@@ -353,6 +375,17 @@ export default function Vendors() {
             <SelectItem value="all">All Categories</SelectItem>
             {categoryOptions.map((c) => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={projectFilter} onValueChange={setProjectFilter}>
+          <SelectTrigger className="w-[220px]">
+            <SelectValue placeholder="All projects" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Projects</SelectItem>
+            {projectFilterOptions.map((p) => (
+              <SelectItem key={p} value={p}>{p}</SelectItem>
             ))}
           </SelectContent>
         </Select>
