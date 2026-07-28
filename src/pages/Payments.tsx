@@ -14,11 +14,37 @@ import { Plus, Pencil, Banknote } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import jsPDF from "jspdf";
 
 const db = supabase as any;
 
 const fmt = (n: number | null | undefined) =>
   n == null ? "—" : Number(n).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
+
+function amountToWords(amount: number): string {
+  const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
+    "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+  const chunk = (n: number): string => {
+    let s = "";
+    if (n >= 100) { s += ones[Math.floor(n / 100)] + " Hundred "; n %= 100; }
+    if (n >= 20) { s += tens[Math.floor(n / 10)] + " "; n %= 10; }
+    if (n > 0) s += ones[n] + " ";
+    return s;
+  };
+  const dollars = Math.floor(amount);
+  const cents = Math.round((amount - dollars) * 100);
+  if (dollars === 0) return `Zero and ${String(cents).padStart(2, "0")}/100`;
+  let words = "";
+  const scales = [["Million", 1e6], ["Thousand", 1e3], ["", 1]] as [string, number][];
+  let remaining = dollars;
+  for (const [name, value] of scales) {
+    const part = Math.floor(remaining / value);
+    if (part > 0) words += chunk(part) + (name ? name + " " : "");
+    remaining %= value;
+  }
+  return `${words.trim()} and ${String(cents).padStart(2, "0")}/100`;
+}
 
 interface BankAccount {
   id: string; name: string; institution_name: string | null; mask: string | null;
@@ -192,6 +218,71 @@ export default function Payments() {
     } catch (e: any) { toast.error(e?.message ?? "Failed to update payment."); }
   };
 
+  const printCheck = (p: Payment) => {
+    const acct = accounts.find(a => a.id === p.bank_account_id);
+    const inv = invoiceForPayment(p.id);
+    const doc = new jsPDF({ unit: "pt", format: "letter" });
+    const W = 612, M = 36, right = W - M;
+    const dateStr = p.payment_date ? format(new Date(p.payment_date), "MM/dd/yyyy") : format(new Date(), "MM/dd/yyyy");
+
+    // --- Check face (top 3.5in / 252pt) ---
+    doc.setDrawColor(180); doc.rect(M, M, W - 2 * M, 216);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.text(acct?.name ?? "Bank Account", M + 12, M + 24);
+    if (acct?.institution_name) { doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.text(acct.institution_name, M + 12, M + 37); }
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text(`Check #${p.check_number ?? ""}`, right - 12, M + 20, { align: "right" });
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    doc.text(`Date: ${dateStr}`, right - 12, M + 36, { align: "right" });
+
+    // Amount box
+    doc.setFont("helvetica", "bold"); doc.setFontSize(11);
+    doc.rect(right - 120, M + 70, 108, 26);
+    doc.text(`$ ${Number(p.amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}`, right - 16, M + 88, { align: "right" });
+
+    // Pay to the order of
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+    doc.text("PAY TO THE ORDER OF", M + 12, M + 78);
+    doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+    doc.text(p.payee_name, M + 12, M + 92);
+    doc.setDrawColor(120); doc.line(M + 12, M + 96, right - 130, M + 96);
+
+    // Amount in words
+    doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+    doc.text(`${amountToWords(Number(p.amount))} `.toUpperCase(), M + 12, M + 118);
+    doc.line(M + 12, M + 122, right - 12, M + 122);
+    doc.setFontSize(8); doc.text("DOLLARS", right - 12, M + 118, { align: "right" });
+
+    // Memo + signature
+    doc.setFontSize(9);
+    doc.text(`MEMO: ${p.memo ?? (inv?.invoice_number ? "Invoice " + inv.invoice_number : "")}`, M + 12, M + 170);
+    doc.line(right - 200, M + 176, right - 12, M + 176);
+    doc.setFontSize(8); doc.text("AUTHORIZED SIGNATURE", right - 12, M + 188, { align: "right" });
+
+    // MICR placeholder (NOT encoded magnetic ink)
+    doc.setFont("courier", "normal"); doc.setFontSize(11);
+    doc.text(`C${String(p.check_number ?? "").padStart(4, "0")}C   :ROUTING:   ACCOUNT ••${acct?.mask ?? ""}`, M + 12, M + 206);
+
+    // --- Stub ---
+    let y = M + 260;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text("Payment Detail", M, y); y += 16;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(9);
+    const line = (k: string, v: string) => { doc.text(k, M, y); doc.text(v, M + 120, y); y += 15; };
+    line("Payee:", p.payee_name);
+    line("Check #:", String(p.check_number ?? ""));
+    line("Date:", dateStr);
+    line("Account:", acct?.name ?? "—");
+    if (inv) { line("Invoice #:", inv.invoice_number ?? "—"); }
+    line("Amount:", fmt(p.amount));
+    if (p.memo) line("Memo:", p.memo);
+
+    doc.setFontSize(7); doc.setTextColor(150);
+    doc.text("Note: the MICR line above is a visual placeholder and is not encoded for magnetic-ink processing. Use bank-approved check stock/encoding for deposit.", M, 756, { maxWidth: W - 2 * M });
+
+    doc.save(`check-${p.check_number ?? "draft"}-${p.payee_name.replace(/[^a-z0-9]/gi, "_")}.pdf`);
+  };
+
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading payments…</div>;
 
   return (
@@ -257,6 +348,7 @@ export default function Payments() {
                       <td className="px-3 py-2 text-right">
                         <div className="flex justify-end gap-1">
                           {p.status === "pending" && <Button size="sm" variant="outline" onClick={() => issuePayment(p)}>Issue</Button>}
+                          {p.payment_method === "check" && p.check_number != null && p.status !== "voided" && <Button size="sm" variant="outline" onClick={() => printCheck(p)}>Print</Button>}
                           {(p.status === "issued" || p.status === "sent") && <Button size="sm" variant="outline" onClick={() => setStatus(p, "cleared")}>Cleared</Button>}
                           {p.status !== "voided" && p.status !== "cleared" && <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setStatus(p, "voided")}>Void</Button>}
                         </div>
