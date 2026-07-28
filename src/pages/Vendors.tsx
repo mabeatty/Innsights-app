@@ -21,11 +21,39 @@ import VendorImportDialog from "@/components/vendors/VendorImportDialog";
 const CATEGORIES = [
   "General Contractor",
   "Subcontractor",
-  "FF&E Supplier",
-  "OS&E Supplier",
   "Architect",
   "Civil Engineer",
   "Consultant",
+  "Procurement / Program Management",
+  "Casegoods & Soft Seating",
+  "Seating",
+  "Furniture",
+  "Office Furniture",
+  "Mattresses",
+  "Lighting",
+  "Mirrors",
+  "Artwork",
+  "Wall Graphics",
+  "Wallcoverings",
+  "Flooring & Carpet",
+  "Soft Goods / Textiles",
+  "Bath Textiles",
+  "Bath Accessories",
+  "Bath Surrounds",
+  "Countertops",
+  "Millwork",
+  "Public Area Millwork",
+  "Doors & Hardware",
+  "Access Control",
+  "Kitchen Equipment",
+  "Fitness Equipment",
+  "Site Accessories",
+  "Outdoor Furniture",
+  "Site Work",
+  "Closet Systems",
+  "Technology",
+  "Insurance",
+  "OS&E Supplier",
   "Other",
 ];
 
@@ -89,6 +117,11 @@ export default function Vendors() {
 
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+
+  const categoryOptions = useMemo(
+    () => Array.from(new Set([...CATEGORIES, ...vendors.map(v => v.category)].filter(Boolean))).sort(),
+    [vendors]
+  );
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Vendor | null>(null);
@@ -318,7 +351,7 @@ export default function Vendors() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Categories</SelectItem>
-            {CATEGORIES.map((c) => (
+            {categoryOptions.map((c) => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
           </SelectContent>
@@ -401,7 +434,7 @@ export default function Vendors() {
               <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
                 <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                  {categoryOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
