@@ -2,9 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -12,11 +10,11 @@ import { cn } from "@/lib/utils";
 const db = supabase as any;
 
 interface CatalogItem { id: string; canonical_name: string; category: string | null; synonyms: string[]; }
-interface LineItem {
-  id: string; vendor_name: string; catalog_item_id: string | null; item_name: string | null;
-  category: string | null; raw_description: string | null; quantity: number | null; unit: string | null;
-  unit_price: number | null; ext_price: number | null; room_type: string | null; project_label: string | null;
-  brand: string | null; price_basis: string | null; source_doc: string | null; status: string | null;
+interface Rec {
+  id: string; grain: "line" | "gross"; vendor_name: string; catalog_item_id: string | null;
+  item_name: string | null; description: string | null; unit_price: number | null; unit: string | null;
+  gross_price: number | null; price_text: string | null; quantity: number | null;
+  room_type: string | null; project_label: string | null; brand: string | null; source_doc: string | null;
 }
 
 const money = (n: number | null) =>
@@ -25,7 +23,7 @@ const money = (n: number | null) =>
 export default function VendorPriceLibrary() {
   const navigate = useNavigate();
   const [items, setItems] = useState<CatalogItem[]>([]);
-  const [rows, setRows] = useState<LineItem[]>([]);
+  const [recs, setRecs] = useState<Rec[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [itemQuery, setItemQuery] = useState("");
@@ -36,22 +34,36 @@ export default function VendorPriceLibrary() {
 
   useEffect(() => {
     (async () => {
-      const [iRes, pRes] = await Promise.all([
+      const [iRes, lRes, gRes] = await Promise.all([
         db.from("catalog_items").select("*").order("canonical_name"),
-        db.from("bid_line_items").select("*").order("unit_price", { ascending: true }),
+        db.from("bid_line_items").select("*"),
+        db.from("vendor_pricing").select("*"),
       ]);
-      setItems((iRes.data ?? []) as CatalogItem[]);
-      setRows((pRes.data ?? []) as LineItem[]);
+      const cats = (iRes.data ?? []) as CatalogItem[];
+      const nameById = new Map(cats.map((c: CatalogItem) => [c.id, c.canonical_name]));
+      const line: Rec[] = (lRes.data ?? []).map((r: any) => ({
+        id: "l_" + r.id, grain: "line", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
+        item_name: r.item_name, description: r.raw_description, unit_price: r.unit_price, unit: r.unit,
+        gross_price: r.ext_price, price_text: null, quantity: r.quantity, room_type: r.room_type,
+        project_label: r.project_label, brand: r.brand, source_doc: r.source_doc,
+      }));
+      const gross: Rec[] = (gRes.data ?? []).map((r: any) => ({
+        id: "g_" + r.id, grain: "gross", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
+        item_name: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.scope,
+        unit_price: null, unit: null, gross_price: r.gross_price, price_text: r.price_text, quantity: null,
+        room_type: null, project_label: r.project_label, brand: r.brand, source_doc: r.source_doc,
+      }));
+      setItems(cats);
+      setRecs([...line, ...gross]);
       setLoading(false);
     })();
   }, []);
 
-  const brands = useMemo(() => Array.from(new Set(rows.map(r => r.brand).filter(Boolean))) as string[], [rows]);
-  const projects = useMemo(() => Array.from(new Set(rows.map(r => r.project_label).filter(Boolean))) as string[], [rows]);
-  const vendors = useMemo(() => Array.from(new Set(rows.map(r => r.vendor_name))).sort(), [rows]);
+  const brands = useMemo(() => Array.from(new Set(recs.map(r => r.brand).filter(Boolean))) as string[], [recs]);
+  const projects = useMemo(() => Array.from(new Set(recs.map(r => r.project_label).filter(Boolean))) as string[], [recs]);
+  const vendors = useMemo(() => Array.from(new Set(recs.map(r => r.vendor_name))).sort(), [recs]);
+  const pricedItemIds = useMemo(() => new Set(recs.map(r => r.catalog_item_id).filter(Boolean)), [recs]);
 
-  // only items that actually have line-item pricing, plus synonym-aware search
-  const pricedItemIds = useMemo(() => new Set(rows.map(r => r.catalog_item_id)), [rows]);
   const matchedItems = useMemo(() => {
     const q = itemQuery.trim().toLowerCase();
     return items
@@ -59,21 +71,24 @@ export default function VendorPriceLibrary() {
       .filter(i => !q || i.canonical_name.toLowerCase().includes(q) || (i.synonyms ?? []).some(s => s.toLowerCase().includes(q)));
   }, [items, itemQuery, pricedItemIds]);
 
+  const applyFilters = (r: Rec) =>
+    (brandFilter === "all" || r.brand === brandFilter) && (projectFilter === "all" || r.project_label === projectFilter);
+
   const itemRows = useMemo(() => {
     if (!selectedItemId) return [];
-    return rows
-      .filter(r => r.catalog_item_id === selectedItemId)
-      .filter(r => brandFilter === "all" || r.brand === brandFilter)
-      .filter(r => projectFilter === "all" || r.project_label === projectFilter)
-      .sort((a, b) => (a.unit_price ?? Infinity) - (b.unit_price ?? Infinity));
-  }, [rows, selectedItemId, brandFilter, projectFilter]);
+    return recs.filter(r => r.catalog_item_id === selectedItemId).filter(applyFilters)
+      .sort((a, b) => (a.unit_price ?? a.gross_price ?? Infinity) - (b.unit_price ?? b.gross_price ?? Infinity));
+  }, [recs, selectedItemId, brandFilter, projectFilter]);
 
-  const vendorRows = useMemo(() => rows.filter(r => r.vendor_name === selectedVendor), [rows, selectedVendor]);
-  const vendorItems = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const r of vendorRows) if (r.catalog_item_id && r.item_name) m.set(r.catalog_item_id, r.item_name);
-    return Array.from(m.values()).sort();
-  }, [vendorRows]);
+  const vendorRows = useMemo(
+    () => recs.filter(r => r.vendor_name === selectedVendor).filter(r => projectFilter === "all" || r.project_label === projectFilter),
+    [recs, selectedVendor, projectFilter]
+  );
+  const vendorItems = useMemo(() => Array.from(new Set(vendorRows.map(r => r.item_name).filter(Boolean))) as string[], [vendorRows]);
+
+  const priceCell = (r: Rec) => r.grain === "line"
+    ? <span>{money(r.unit_price)}<span className="text-xs font-normal text-muted-foreground">{r.unit ? ` /${r.unit}` : ""}</span></span>
+    : <span>{money(r.gross_price)}<span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase text-muted-foreground">program</span></span>;
 
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading vendor price library…</div>;
 
@@ -84,7 +99,7 @@ export default function VendorPriceLibrary() {
       </button>
       <h1 className="mb-1 text-2xl font-bold text-primary">Vendor Price Library</h1>
       <p className="mb-5 text-sm text-muted-foreground">
-        Per-unit vendor pricing across projects. Search an item to see what each vendor charged per unit, or open a vendor to see everything they've supplied.
+        Vendor pricing across projects. Line items show per-unit prices; program rows show a vendor's gross total for a scope. Filter by project to isolate a property.
       </p>
 
       <Tabs defaultValue="by-item">
@@ -139,7 +154,7 @@ export default function VendorPriceLibrary() {
                   <tr className="bg-muted/50 text-left text-muted-foreground">
                     <th className="px-3 py-2">Vendor</th>
                     <th className="px-3 py-2">Description</th>
-                    <th className="px-3 py-2 text-right">Unit Price</th>
+                    <th className="px-3 py-2 text-right">Price</th>
                     <th className="px-3 py-2">Room / Location</th>
                     <th className="px-3 py-2">Project</th>
                     <th className="px-3 py-2">Source</th>
@@ -147,12 +162,12 @@ export default function VendorPriceLibrary() {
                 </thead>
                 <tbody>
                   {itemRows.length === 0 ? (
-                    <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No pricing recorded for this item yet.</td></tr>
+                    <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No pricing recorded for this item with the current filters.</td></tr>
                   ) : itemRows.map(r => (
                     <tr key={r.id} className="border-t hover:bg-muted/30">
                       <td className="px-3 py-2 font-medium">{r.vendor_name}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px]">{r.raw_description}</td>
-                      <td className="px-3 py-2 text-right font-semibold">{money(r.unit_price)}<span className="text-xs font-normal text-muted-foreground">{r.unit ? ` /${r.unit}` : ""}</span></td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px]">{r.description}</td>
+                      <td className="px-3 py-2 text-right font-semibold">{priceCell(r)}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.room_type}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground max-w-[200px] truncate" title={r.source_doc ?? ""}>{r.source_doc}</td>
@@ -162,33 +177,47 @@ export default function VendorPriceLibrary() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Pick an item above to see every vendor's per-unit price for it.</p>
+            <p className="text-sm text-muted-foreground">Pick an item above to see every vendor's price for it.</p>
           )}
         </TabsContent>
 
         <TabsContent value="by-vendor" className="mt-4 space-y-4">
-          <div className="max-w-sm space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Vendor</label>
-            <Select value={selectedVendor} onValueChange={setSelectedVendor}>
-              <SelectTrigger className="h-9"><SelectValue placeholder="Select a vendor" /></SelectTrigger>
-              <SelectContent>{vendors.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
-            </Select>
+          <div className="grid max-w-xl grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Vendor</label>
+              <Select value={selectedVendor} onValueChange={setSelectedVendor}>
+                <SelectTrigger className="h-9"><SelectValue placeholder="Select a vendor" /></SelectTrigger>
+                <SelectContent>{vendors.map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Project</label>
+              <Select value={projectFilter} onValueChange={setProjectFilter}>
+                <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Any project</SelectItem>
+                  {projects.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {selectedVendor && (
             <>
               <div className="flex gap-6 rounded-lg border bg-card p-4">
-                <div><div className="text-2xl font-bold text-primary">{vendorRows.length}</div><div className="text-xs text-muted-foreground">Line items</div></div>
+                <div><div className="text-2xl font-bold text-primary">{vendorRows.length}</div><div className="text-xs text-muted-foreground">Price records</div></div>
                 <div><div className="text-2xl font-bold text-primary">{new Set(vendorRows.map(r => r.project_label)).size}</div><div className="text-xs text-muted-foreground">Projects</div></div>
                 <div><div className="text-2xl font-bold text-primary">{vendorItems.length}</div><div className="text-xs text-muted-foreground">Items supplied</div></div>
               </div>
 
-              <div>
-                <div className="mb-1 text-sm font-semibold text-primary">Items supplied</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {vendorItems.map(name => <span key={name} className="rounded-full bg-muted px-2.5 py-1 text-xs">{name}</span>)}
+              {vendorItems.length > 0 && (
+                <div>
+                  <div className="mb-1 text-sm font-semibold text-primary">Items supplied</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {vendorItems.map(name => <span key={name} className="rounded-full bg-muted px-2.5 py-1 text-xs">{name}</span>)}
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div>
                 <div className="mb-1 text-sm font-semibold text-primary">Price history</div>
@@ -196,21 +225,21 @@ export default function VendorPriceLibrary() {
                   <table className="w-full text-sm min-w-[820px]">
                     <thead>
                       <tr className="bg-muted/50 text-left text-muted-foreground">
-                        <th className="px-3 py-2">Item</th>
-                        <th className="px-3 py-2">Description</th>
-                        <th className="px-3 py-2 text-right">Unit Price</th>
+                        <th className="px-3 py-2">Item / Scope</th>
+                        <th className="px-3 py-2 text-right">Price</th>
                         <th className="px-3 py-2 text-right">Qty</th>
                         <th className="px-3 py-2">Project</th>
+                        <th className="px-3 py-2">Source</th>
                       </tr>
                     </thead>
                     <tbody>
                       {vendorRows.map(r => (
                         <tr key={r.id} className="border-t hover:bg-muted/30">
-                          <td className="px-3 py-2">{r.item_name}</td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[280px]">{r.raw_description}</td>
-                          <td className="px-3 py-2 text-right font-semibold">{money(r.unit_price)}<span className="text-xs font-normal text-muted-foreground">{r.unit ? ` /${r.unit}` : ""}</span></td>
+                          <td className="px-3 py-2 max-w-[320px]"><div>{r.item_name ?? "—"}</div><div className="text-xs text-muted-foreground">{r.description}</div></td>
+                          <td className="px-3 py-2 text-right font-semibold">{priceCell(r)}</td>
                           <td className="px-3 py-2 text-right text-xs text-muted-foreground">{r.quantity ?? "—"}</td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
+                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_doc}</td>
                         </tr>
                       ))}
                     </tbody>
