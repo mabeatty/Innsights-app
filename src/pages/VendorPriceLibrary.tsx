@@ -14,7 +14,7 @@ interface Rec {
   id: string; grain: "line" | "gross"; vendor_name: string; catalog_item_id: string | null;
   item_name: string | null; description: string | null; unit_price: number | null; unit: string | null;
   gross_price: number | null; price_text: string | null; quantity: number | null;
-  room_type: string | null; project_label: string | null; brand: string | null; source_doc: string | null;
+  room_type: string | null; project_label: string | null; brand: string | null; source_doc: string | null; source_url: string | null;
 }
 
 const money = (n: number | null) =>
@@ -45,13 +45,13 @@ export default function VendorPriceLibrary() {
         id: "l_" + r.id, grain: "line", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
         item_name: r.item_name, description: r.raw_description, unit_price: r.unit_price, unit: r.unit,
         gross_price: r.ext_price, price_text: null, quantity: r.quantity, room_type: r.room_type,
-        project_label: r.project_label, brand: r.brand, source_doc: r.source_doc,
+        project_label: r.project_label, brand: r.brand, source_doc: r.source_doc, source_url: r.source_url,
       }));
       const gross: Rec[] = (gRes.data ?? []).map((r: any) => ({
         id: "g_" + r.id, grain: "gross", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
         item_name: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.scope,
         unit_price: null, unit: null, gross_price: r.gross_price, price_text: r.price_text, quantity: null,
-        room_type: null, project_label: r.project_label, brand: r.brand, source_doc: r.source_doc,
+        room_type: null, project_label: r.project_label, brand: r.brand, source_doc: r.source_doc, source_url: r.source_url,
       }));
       setItems(cats);
       setRecs([...line, ...gross]);
@@ -182,7 +182,7 @@ export default function VendorPriceLibrary() {
                       <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{priceCell(r)}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.room_type}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_doc}</td>
+                      <td className="px-3 py-2 text-xs max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_url ? <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.source_doc}</a> : <span className="text-muted-foreground">{r.source_doc}</span>}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -251,7 +251,7 @@ export default function VendorPriceLibrary() {
                           <td className="px-3 py-2 text-right font-semibold">{priceCell(r)}</td>
                           <td className="px-3 py-2 text-right text-xs text-muted-foreground">{r.quantity ?? "—"}</td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
-                          <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_doc}</td>
+                          <td className="px-3 py-2 text-xs max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_url ? <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.source_doc}</a> : <span className="text-muted-foreground">{r.source_doc}</span>}</td>
                         </tr>
                       ))}
                     </tbody>
