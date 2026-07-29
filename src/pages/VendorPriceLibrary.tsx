@@ -128,7 +128,7 @@ export default function VendorPriceLibrary() {
               <Select value={selectedItemId} onValueChange={setSelectedItemId}>
                 <SelectTrigger className="h-9"><SelectValue placeholder="Select an item" /></SelectTrigger>
                 <SelectContent>
-                  {matchedItems.map(i => <SelectItem key={i.id} value={i.id}>{i.canonical_name}{i.category ? ` · ${i.category}` : ""}</SelectItem>)}
+                  {matchedItems.map(i => <SelectItem key={i.id} value={i.id}>{i.canonical_name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
