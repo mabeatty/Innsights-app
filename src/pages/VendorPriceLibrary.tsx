@@ -12,7 +12,7 @@ const db = supabase as any;
 interface CatalogItem { id: string; canonical_name: string; category: string | null; synonyms: string[]; }
 interface Rec {
   id: string; grain: "line" | "gross"; vendor_name: string; catalog_item_id: string | null;
-  item_name: string | null; description: string | null; unit_price: number | null; unit: string | null;
+  item_name: string | null; category: string | null; description: string | null; unit_price: number | null; unit: string | null;
   gross_price: number | null; price_text: string | null; quantity: number | null;
   room_type: string | null; project_label: string | null; brand: string | null; source_doc: string | null; source_url: string | null;
 }
@@ -43,13 +43,14 @@ export default function VendorPriceLibrary() {
       const nameById = new Map(cats.map((c: CatalogItem) => [c.id, c.canonical_name]));
       const line: Rec[] = (lRes.data ?? []).map((r: any) => ({
         id: "l_" + r.id, grain: "line", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
-        item_name: r.item_name, description: r.raw_description, unit_price: r.unit_price, unit: r.unit,
+        item_name: r.item_name, category: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.raw_description, unit_price: r.unit_price, unit: r.unit,
         gross_price: r.ext_price, price_text: null, quantity: r.quantity, room_type: r.room_type,
         project_label: r.project_label, brand: r.brand, source_doc: r.source_doc, source_url: r.source_url,
       }));
       const gross: Rec[] = (gRes.data ?? []).map((r: any) => ({
         id: "g_" + r.id, grain: "gross", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
-        item_name: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.scope,
+        item_name: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null,
+        category: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.scope,
         unit_price: null, unit: null, gross_price: r.gross_price, price_text: r.price_text, quantity: null,
         room_type: null, project_label: r.project_label, brand: r.brand, source_doc: r.source_doc, source_url: r.source_url,
       }));
@@ -64,30 +65,44 @@ export default function VendorPriceLibrary() {
   const vendors = useMemo(() => Array.from(new Set(recs.map(r => r.vendor_name))).sort(), [recs]);
   const pricedItemIds = useMemo(() => new Set(recs.map(r => r.catalog_item_id).filter(Boolean)), [recs]);
 
-  const matchedItems = useMemo(() => {
-    const q = itemQuery.trim().toLowerCase();
-    return items
-      .filter(i => pricedItemIds.has(i.id))
-      .filter(i => !q || i.canonical_name.toLowerCase().includes(q) || (i.synonyms ?? []).some(s => s.toLowerCase().includes(q)));
-  }, [items, itemQuery, pricedItemIds]);
+  const matchedItems = useMemo(
+    () => items.filter(i => pricedItemIds.has(i.id)),
+    [items, pricedItemIds]
+  );
+
+  // small alias bridge so e.g. "garbage can" also matches "trash can"
+  const ALIASES: [string, string][] = [["garbage", "trash"], ["tv", "television"], ["couch", "sofa"]];
+  const expand = (q: string) => {
+    const out = new Set([q]);
+    for (const [a, b] of ALIASES) {
+      if (q.includes(a)) out.add(q.split(a).join(b));
+      if (q.includes(b)) out.add(q.split(b).join(a));
+    }
+    return [...out];
+  };
 
   const applyFilters = (r: Rec) =>
     (brandFilter === "all" || r.brand === brandFilter) && (projectFilter === "all" || r.project_label === projectFilter);
 
-  const itemFilterActive = selectedItemId !== "" || brandFilter !== "all" || projectFilter !== "all";
+  const q = itemQuery.trim().toLowerCase();
+  const terms = q ? expand(q) : [];
+  const itemFilterActive = selectedItemId !== "" || q !== "" || brandFilter !== "all" || projectFilter !== "all";
   const itemRows = useMemo(() => {
     if (!itemFilterActive) return [];
-    const nameById = new Map(items.map(i => [i.id, i.canonical_name]));
     return recs
       .filter(r => !selectedItemId || r.catalog_item_id === selectedItemId)
       .filter(applyFilters)
+      .filter(r => {
+        if (!q) return true;
+        const hay = `${r.item_name ?? ""} ${r.description ?? ""} ${r.category ?? ""}`.toLowerCase();
+        return terms.some(t => hay.includes(t));
+      })
       .sort((a, b) => {
-        const an = (a.item_name ?? (a.catalog_item_id ? nameById.get(a.catalog_item_id) : "") ?? "") as string;
-        const bn = (b.item_name ?? (b.catalog_item_id ? nameById.get(b.catalog_item_id) : "") ?? "") as string;
+        const an = (a.item_name ?? "") as string, bn = (b.item_name ?? "") as string;
         if (an !== bn) return an.localeCompare(bn);
         return (a.unit_price ?? a.gross_price ?? Infinity) - (b.unit_price ?? b.gross_price ?? Infinity);
       });
-  }, [recs, items, selectedItemId, brandFilter, projectFilter, itemFilterActive]);
+  }, [recs, selectedItemId, brandFilter, projectFilter, itemQuery, itemFilterActive]);
 
   const vendorRows = useMemo(
     () => recs.filter(r => r.vendor_name === selectedVendor).filter(r => projectFilter === "all" || r.project_label === projectFilter),
@@ -120,13 +135,13 @@ export default function VendorPriceLibrary() {
         <TabsContent value="by-item" className="mt-4 space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Find an item (try "garbage can")</label>
+              <label className="text-xs font-medium text-muted-foreground">Search an item (try "garbage can")</label>
               <div className="relative">
                 <Search className="absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input className="h-9 pl-7" placeholder="Search items or synonyms…" value={itemQuery} onChange={e => setItemQuery(e.target.value)} />
+                <Input className="h-9 pl-7" placeholder="Search by item type…" value={itemQuery} onChange={e => setItemQuery(e.target.value)} />
               </div>
               <Select value={selectedItemId} onValueChange={setSelectedItemId}>
-                <SelectTrigger className="h-9"><SelectValue placeholder="Select an item" /></SelectTrigger>
+                <SelectTrigger className="h-9"><SelectValue placeholder="…or pick a category" /></SelectTrigger>
                 <SelectContent>
                   {matchedItems.map(i => <SelectItem key={i.id} value={i.id}>{i.canonical_name}</SelectItem>)}
                 </SelectContent>
@@ -163,6 +178,7 @@ export default function VendorPriceLibrary() {
                 <thead>
                   <tr className="bg-muted/50 text-left text-muted-foreground">
                     <th className="px-3 py-2">Item</th>
+                    <th className="px-3 py-2">Category</th>
                     <th className="px-3 py-2">Vendor</th>
                     <th className="px-3 py-2">Description</th>
                     <th className="px-3 py-2 text-right">Price</th>
@@ -173,10 +189,11 @@ export default function VendorPriceLibrary() {
                 </thead>
                 <tbody>
                   {itemRows.length === 0 ? (
-                    <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No pricing matches the current filters.</td></tr>
+                    <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No pricing matches the current filters.</td></tr>
                   ) : itemRows.map(r => (
                     <tr key={r.id} className="border-t hover:bg-muted/30">
                       <td className="px-3 py-2 font-medium">{r.item_name ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{r.category}</td>
                       <td className="px-3 py-2">{r.vendor_name}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground max-w-[260px]">{r.description}</td>
                       <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{priceCell(r)}</td>
@@ -189,7 +206,7 @@ export default function VendorPriceLibrary() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">Pick an item, a project, or a brand to populate pricing. Selecting a project alone shows every item in the library for that project.</p>
+            <p className="text-sm text-muted-foreground">Search an item type (e.g. "garbage can"), pick a category, or filter by project or brand. Each result shows the specific item, its category, and the price.</p>
           )}
         </TabsContent>
 
