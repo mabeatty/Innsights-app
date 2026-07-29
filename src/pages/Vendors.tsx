@@ -343,7 +343,7 @@ export default function Vendors() {
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => navigate("/vendors/pricing")} className="gap-2">
-            <Library className="h-4 w-4" /> Price Library
+            <Library className="h-4 w-4" /> Pricing Library
           </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
             <Upload className="h-4 w-4" /> Import Vendors

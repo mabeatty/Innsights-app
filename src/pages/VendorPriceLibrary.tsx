@@ -106,7 +106,7 @@ export default function VendorPriceLibrary() {
       <button onClick={() => navigate("/vendors")} className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-3.5 w-3.5" /> Vendors
       </button>
-      <h1 className="mb-1 text-2xl font-bold text-primary">Vendor Price Library</h1>
+      <h1 className="mb-1 text-2xl font-bold text-primary">Pricing Library</h1>
       <p className="mb-5 text-sm text-muted-foreground">
         Vendor pricing across projects. Line items show per-unit prices; program rows show a vendor's gross total for a scope. Filter by project to isolate a property.
       </p>
