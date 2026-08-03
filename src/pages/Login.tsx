@@ -108,9 +108,6 @@ export default function Login() {
           <CardTitle className="text-2xl font-bold tracking-tight text-primary">
             Innsights
           </CardTitle>
-          <p className="text-sm text-muted-foreground mt-1">
-            Hotel FF&E Takeoff Management
-          </p>
         </CardHeader>
         <CardContent>
           {resetSuccess && (
