@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ArrowLeft, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { freshness, fmtDate } from "@/lib/pricingFreshness";
 
 const db = supabase as any;
 
 interface CatalogItem { id: string; canonical_name: string; category: string | null; synonyms: string[]; }
 interface Rec {
-  id: string; grain: "line" | "gross"; vendor_name: string; catalog_item_id: string | null;
+  id: string; grain: "line" | "gross"; vendor_name: string; global_vendor_id: string | null; catalog_item_id: string | null;
   item_name: string | null; category: string | null; description: string | null; unit_price: number | null; unit: string | null;
-  gross_price: number | null; price_text: string | null; quantity: number | null;
+  gross_price: number | null; price_text: string | null; quantity: number | null; price_date: string | null;
   room_type: string | null; project_label: string | null; brand: string | null; source_doc: string | null; source_url: string | null;
 }
 
@@ -42,16 +43,16 @@ export default function VendorPriceLibrary() {
       const cats = (iRes.data ?? []) as CatalogItem[];
       const nameById = new Map(cats.map((c: CatalogItem) => [c.id, c.canonical_name]));
       const line: Rec[] = (lRes.data ?? []).map((r: any) => ({
-        id: "l_" + r.id, grain: "line", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
+        id: "l_" + r.id, grain: "line", vendor_name: r.vendor_name, global_vendor_id: r.global_vendor_id, catalog_item_id: r.catalog_item_id,
         item_name: r.item_name, category: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.raw_description, unit_price: r.unit_price, unit: r.unit,
-        gross_price: r.ext_price, price_text: null, quantity: r.quantity, room_type: r.room_type,
+        gross_price: r.ext_price, price_text: null, quantity: r.quantity, price_date: r.price_date, room_type: r.room_type,
         project_label: r.project_label, brand: r.brand, source_doc: r.source_doc, source_url: r.source_url,
       }));
       const gross: Rec[] = (gRes.data ?? []).map((r: any) => ({
-        id: "g_" + r.id, grain: "gross", vendor_name: r.vendor_name, catalog_item_id: r.catalog_item_id,
+        id: "g_" + r.id, grain: "gross", vendor_name: r.vendor_name, global_vendor_id: r.global_vendor_id, catalog_item_id: r.catalog_item_id,
         item_name: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null,
         category: r.catalog_item_id ? (nameById.get(r.catalog_item_id) ?? null) : null, description: r.scope,
-        unit_price: null, unit: null, gross_price: r.gross_price, price_text: r.price_text, quantity: null,
+        unit_price: null, unit: null, gross_price: r.gross_price, price_text: r.price_text, quantity: null, price_date: r.price_date,
         room_type: null, project_label: r.project_label, brand: r.brand, source_doc: r.source_doc, source_url: r.source_url,
       }));
       setItems(cats);
@@ -109,6 +110,7 @@ export default function VendorPriceLibrary() {
     [recs, selectedVendor, projectFilter]
   );
   const vendorItems = useMemo(() => Array.from(new Set(vendorRows.map(r => r.item_name).filter(Boolean))) as string[], [vendorRows]);
+  const selectedVendorId = vendorRows.find(r => r.global_vendor_id)?.global_vendor_id ?? null;
 
   const priceCell = (r: Rec) => r.grain === "line"
     ? <span>{money(r.unit_price)}<span className="text-xs font-normal text-muted-foreground">{r.unit ? ` /${r.unit}` : ""}</span></span>
@@ -184,24 +186,35 @@ export default function VendorPriceLibrary() {
                     <th className="px-3 py-2 text-right">Price</th>
                     <th className="px-3 py-2">Room / Location</th>
                     <th className="px-3 py-2">Project</th>
+                    <th className="px-3 py-2">Date</th>
                     <th className="px-3 py-2">Source</th>
                   </tr>
                 </thead>
                 <tbody>
                   {itemRows.length === 0 ? (
-                    <tr><td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">No pricing matches the current filters.</td></tr>
-                  ) : itemRows.map(r => (
+                    <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No pricing matches the current filters.</td></tr>
+                  ) : itemRows.map(r => {
+                    const f = freshness(r.price_date);
+                    return (
                     <tr key={r.id} className="border-t hover:bg-muted/30">
                       <td className="px-3 py-2 font-medium">{r.item_name ?? "—"}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.category}</td>
-                      <td className="px-3 py-2">{r.vendor_name}</td>
-                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[260px]">{r.description}</td>
+                      <td className="px-3 py-2">
+                        {r.global_vendor_id ? (
+                          <Link to={`/vendors/${r.global_vendor_id}`} className="text-blue-600 hover:underline">{r.vendor_name}</Link>
+                        ) : r.vendor_name}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground max-w-[220px]">{r.description}</td>
                       <td className="px-3 py-2 text-right font-semibold whitespace-nowrap">{priceCell(r)}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.room_type}</td>
                       <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
-                      <td className="px-3 py-2 text-xs max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_url ? <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.source_doc}</a> : <span className="text-muted-foreground">{r.source_doc}</span>}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <div className="text-xs">{fmtDate(r.price_date)}</div>
+                        <span className={`inline-block mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${f.cls}`}>{f.label}</span>
+                      </td>
+                      <td className="px-3 py-2 text-xs max-w-[150px] truncate" title={r.source_doc ?? ""}>{r.source_url ? <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.source_doc}</a> : <span className="text-muted-foreground">{r.source_doc}</span>}</td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
             </div>
@@ -233,10 +246,17 @@ export default function VendorPriceLibrary() {
 
           {selectedVendor && (
             <>
-              <div className="flex gap-6 rounded-lg border bg-card p-4">
-                <div><div className="text-2xl font-bold text-primary">{vendorRows.length}</div><div className="text-xs text-muted-foreground">Price records</div></div>
-                <div><div className="text-2xl font-bold text-primary">{new Set(vendorRows.map(r => r.project_label)).size}</div><div className="text-xs text-muted-foreground">Projects</div></div>
-                <div><div className="text-2xl font-bold text-primary">{vendorItems.length}</div><div className="text-xs text-muted-foreground">Items supplied</div></div>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
+                <div className="flex gap-6">
+                  <div><div className="text-2xl font-bold text-primary">{vendorRows.length}</div><div className="text-xs text-muted-foreground">Price records</div></div>
+                  <div><div className="text-2xl font-bold text-primary">{new Set(vendorRows.map(r => r.project_label)).size}</div><div className="text-xs text-muted-foreground">Projects</div></div>
+                  <div><div className="text-2xl font-bold text-primary">{vendorItems.length}</div><div className="text-xs text-muted-foreground">Items supplied</div></div>
+                </div>
+                {selectedVendorId && (
+                  <Link to={`/vendors/${selectedVendorId}`} className="text-sm text-blue-600 hover:underline">
+                    View full profile & contact info →
+                  </Link>
+                )}
               </div>
 
               {vendorItems.length > 0 && (
@@ -251,26 +271,33 @@ export default function VendorPriceLibrary() {
               <div>
                 <div className="mb-1 text-sm font-semibold text-primary">Price history</div>
                 <div className="rounded-lg border overflow-auto">
-                  <table className="w-full text-sm min-w-[820px]">
+                  <table className="w-full text-sm min-w-[900px]">
                     <thead>
                       <tr className="bg-muted/50 text-left text-muted-foreground">
                         <th className="px-3 py-2">Item / Scope</th>
                         <th className="px-3 py-2 text-right">Price</th>
                         <th className="px-3 py-2 text-right">Qty</th>
                         <th className="px-3 py-2">Project</th>
+                        <th className="px-3 py-2">Date</th>
                         <th className="px-3 py-2">Source</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {vendorRows.map(r => (
+                      {vendorRows.map(r => {
+                        const f = freshness(r.price_date);
+                        return (
                         <tr key={r.id} className="border-t hover:bg-muted/30">
                           <td className="px-3 py-2 max-w-[320px]"><div>{r.item_name ?? "—"}</div><div className="text-xs text-muted-foreground">{r.description}</div></td>
                           <td className="px-3 py-2 text-right font-semibold">{priceCell(r)}</td>
                           <td className="px-3 py-2 text-right text-xs text-muted-foreground">{r.quantity ?? "—"}</td>
                           <td className="px-3 py-2 text-xs text-muted-foreground">{r.project_label}</td>
-                          <td className="px-3 py-2 text-xs max-w-[180px] truncate" title={r.source_doc ?? ""}>{r.source_url ? <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.source_doc}</a> : <span className="text-muted-foreground">{r.source_doc}</span>}</td>
+                          <td className="px-3 py-2 whitespace-nowrap">
+                            <div className="text-xs">{fmtDate(r.price_date)}</div>
+                            <span className={`inline-block mt-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-medium ${f.cls}`}>{f.label}</span>
+                          </td>
+                          <td className="px-3 py-2 text-xs max-w-[160px] truncate" title={r.source_doc ?? ""}>{r.source_url ? <a href={r.source_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{r.source_doc}</a> : <span className="text-muted-foreground">{r.source_doc}</span>}</td>
                         </tr>
-                      ))}
+                      );})}
                     </tbody>
                   </table>
                 </div>

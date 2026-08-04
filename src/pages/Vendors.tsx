@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2 } from "lucide-react";
 import * as XLSX from "xlsx";
 import VendorImportDialog from "@/components/vendors/VendorImportDialog";
 
@@ -413,7 +413,7 @@ export default function Vendors() {
               <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No vendors found.</TableCell></TableRow>
             ) : (
               filtered.map((v) => (
-                <TableRow key={v.id} className="group cursor-pointer" onClick={() => setDetailVendor(v)}>
+                <TableRow key={v.id} className="group cursor-pointer" onClick={() => navigate(`/vendors/${v.id}`)}>
                   <TableCell className="font-medium">{v.vendor_name}</TableCell>
                   <TableCell><Badge variant="secondary">{v.category}</Badge></TableCell>
                   <TableCell>{v.contact_name || "—"}</TableCell>
@@ -431,6 +431,9 @@ export default function Vendors() {
                   <TableCell><StarRating value={v.performance_rating} size={14} /></TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Button size="icon" variant="ghost" className="h-8 w-8" title="Link to projects" onClick={() => setDetailVendor(v)}>
+                        <Link2 className="h-4 w-4" />
+                      </Button>
                       <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(v)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
