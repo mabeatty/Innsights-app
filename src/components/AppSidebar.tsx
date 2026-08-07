@@ -27,7 +27,6 @@ const defaultDraggableItems = [
   { title: "Expense Reporting", url: "/expenses", icon: Receipt, requiresInvestmentAccess: false },
   { title: "Invoices", url: "/invoices", icon: FileCheck, requiresInvestmentAccess: false },
   { title: "Payments", url: "/payments", icon: Banknote, requiresInvestmentAccess: false },
-  { title: "New Project", url: "/new-project", icon: FolderPlus, requiresInvestmentAccess: false },
 ];
 
 const iconMap: Record<string, typeof LayoutDashboard> = {
