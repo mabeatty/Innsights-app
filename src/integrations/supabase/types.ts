@@ -2046,6 +2046,7 @@ export type Database = {
           id: string
           name: string
           project_id: string
+          report_id: string | null
           updated_at: string
         }
         Insert: {
@@ -2054,6 +2055,7 @@ export type Database = {
           id?: string
           name?: string
           project_id: string
+          report_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -2062,6 +2064,7 @@ export type Database = {
           id?: string
           name?: string
           project_id?: string
+          report_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2070,6 +2073,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "photo_albums_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_reports"
             referencedColumns: ["id"]
           },
         ]

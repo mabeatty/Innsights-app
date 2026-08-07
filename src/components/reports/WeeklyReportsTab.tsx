@@ -13,9 +13,11 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, ChevronRight, FileText, Send, Download, X, ExternalLink, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, FileText, Send, Download, X, ExternalLink, Link2, ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek } from "date-fns";
+import JSZip from "jszip";
+import { saveAs } from "file-saver";
 
 interface Attachment {
   id: string;
@@ -46,14 +48,49 @@ interface Comment {
   author_name: string;
 }
 
+interface Album {
+  id: string;
+  report_id: string;
+  photo_count: number;
+  cover_url: string | null;
+}
+
+interface Photo {
+  id: string;
+  storage_path: string;
+  file_name: string;
+  url: string;
+}
+
 interface WeeklyReportsTabProps {
   projectId: string;
+  projectName?: string;
   canEdit: boolean;
 }
 
-export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTabProps) {
+async function fetchPhotoBlob(storagePath: string): Promise<Blob | null> {
+  const { data, error } = await supabase.storage.from("project-photos").download(storagePath);
+  if (error || !data) return null;
+  return data;
+}
+
+async function getAlbumPhotos(albumId: string): Promise<{ storage_path: string; file_name: string }[]> {
+  const { data } = await supabase
+    .from("photo_album_photos")
+    .select("storage_path, file_name")
+    .eq("album_id", albumId)
+    .order("sort_order", { ascending: true });
+  return data ?? [];
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_\- ]/g, "").replace(/\s+/g, "_");
+}
+
+export default function WeeklyReportsTab({ projectId, projectName, canEdit }: WeeklyReportsTabProps) {
   const { user } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
+  const [albumsByReport, setAlbumsByReport] = useState<Map<string, Album>>(new Map());
   const [loading, setLoading] = useState(true);
   const [profiles, setProfiles] = useState<Map<string, string>>(new Map());
 
@@ -69,6 +106,9 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
   const [pendingDriveLinks, setPendingDriveLinks] = useState<{ url: string; fileId: string | null; name: string }[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
   const [attachmentsToDelete, setAttachmentsToDelete] = useState<Attachment[]>([]);
+  const [pendingPhotos, setPendingPhotos] = useState<File[]>([]);
+  const [existingPhotoAlbum, setExistingPhotoAlbum] = useState<Album | null>(null);
+  const [deletePhotoAlbum, setDeletePhotoAlbum] = useState(false);
 
   // Delete
   const [deleteReport, setDeleteReport] = useState<Report | null>(null);
@@ -80,6 +120,13 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
+
+  // Photo lightbox
+  const [lightboxReport, setLightboxReport] = useState<Report | null>(null);
+  const [lightboxPhotos, setLightboxPhotos] = useState<Photo[]>([]);
+  const [lightboxIdx, setLightboxIdx] = useState(0);
+  const [downloadingAlbum, setDownloadingAlbum] = useState(false);
+  const [downloadingPhoto, setDownloadingPhoto] = useState(false);
 
   // Monthly rollup: which "MMMM yyyy" groups are expanded. Starts with just the
   // most recent month open so the list isn't overwhelming.
@@ -134,6 +181,38 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     }));
 
     setReports(enriched);
+
+    // Fetch linked photo albums (one per report, at most) with a cover photo and count
+    const { data: albumRows } = await supabase
+      .from("photo_albums")
+      .select("id, report_id")
+      .in("report_id", reportIds);
+
+    if (albumRows && albumRows.length > 0) {
+      const albumIds = albumRows.map((a) => a.id);
+      const [coverResult, countResult] = await Promise.all([
+        supabase.from("photo_album_photos").select("album_id, storage_path, sort_order").in("album_id", albumIds).order("sort_order", { ascending: true }),
+        supabase.from("photo_album_photos").select("album_id").in("album_id", albumIds),
+      ]);
+      const coverByAlbum = new Map<string, string>();
+      coverResult.data?.forEach((p) => {
+        if (!coverByAlbum.has(p.album_id)) coverByAlbum.set(p.album_id, p.storage_path);
+      });
+      const countByAlbum = new Map<string, number>();
+      countResult.data?.forEach((p) => {
+        countByAlbum.set(p.album_id, (countByAlbum.get(p.album_id) ?? 0) + 1);
+      });
+      const map2 = new Map<string, Album>();
+      albumRows.forEach((a) => {
+        const coverPath = coverByAlbum.get(a.id);
+        const cover_url = coverPath ? supabase.storage.from("project-photos").getPublicUrl(coverPath).data.publicUrl : null;
+        map2.set(a.report_id, { id: a.id, report_id: a.report_id, photo_count: countByAlbum.get(a.id) ?? 0, cover_url });
+      });
+      setAlbumsByReport(map2);
+    } else {
+      setAlbumsByReport(new Map());
+    }
+
     setLoading(false);
   }, [projectId, profiles]);
 
@@ -182,6 +261,9 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     setPendingDriveLinks([]);
     setExistingAttachments([]);
     setAttachmentsToDelete([]);
+    setPendingPhotos([]);
+    setExistingPhotoAlbum(null);
+    setDeletePhotoAlbum(false);
     setDialogOpen(true);
   };
 
@@ -195,6 +277,9 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     setPendingDriveLinks([]);
     setExistingAttachments([...r.attachments]);
     setAttachmentsToDelete([]);
+    setPendingPhotos([]);
+    setExistingPhotoAlbum(albumsByReport.get(r.id) ?? null);
+    setDeletePhotoAlbum(false);
     setDialogOpen(true);
   };
 
@@ -204,6 +289,18 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     if (pdfs.length !== files.length) toast.error("Only PDF files are allowed.");
     setPendingFiles((prev) => [...prev, ...pdfs]);
     e.target.value = "";
+  };
+
+  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const images = files.filter((f) => f.type.startsWith("image/"));
+    if (images.length !== files.length) toast.error("Only image files are allowed.");
+    setPendingPhotos((prev) => [...prev, ...images]);
+    e.target.value = "";
+  };
+
+  const removePendingPhoto = (idx: number) => {
+    setPendingPhotos((prev) => prev.filter((_, i) => i !== idx));
   };
 
   // Matches the file ID out of common Google Drive URL shapes:
@@ -278,6 +375,43 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     }
   };
 
+  // Creates the linked album on first photo upload, or reuses the existing one,
+  // then uploads any newly-selected photos into it.
+  const uploadPhotos = async (reportId: string): Promise<void> => {
+    if (deletePhotoAlbum && existingPhotoAlbum) {
+      const photos = await getAlbumPhotos(existingPhotoAlbum.id);
+      if (photos.length > 0) await supabase.storage.from("project-photos").remove(photos.map((p) => p.storage_path));
+      await supabase.from("photo_album_photos").delete().eq("album_id", existingPhotoAlbum.id);
+      await supabase.from("photo_albums").delete().eq("id", existingPhotoAlbum.id);
+      return;
+    }
+    if (pendingPhotos.length === 0) return;
+
+    let albumId = existingPhotoAlbum?.id;
+    if (!albumId) {
+      const { data: newAlbum, error } = await supabase.from("photo_albums").insert({
+        project_id: projectId, report_id: reportId,
+        name: `Week of ${format(new Date(startDate + "T00:00:00"), "MMM d, yyyy")}`,
+        created_by: user!.id,
+      }).select("id").single();
+      if (error || !newAlbum) { toast.error("Failed to create photo album."); return; }
+      albumId = newAlbum.id;
+    }
+
+    const { count } = await supabase.from("photo_album_photos").select("id", { count: "exact", head: true }).eq("album_id", albumId);
+    let sortOrder = count ?? 0;
+    for (const file of pendingPhotos) {
+      const path = `${projectId}/${albumId}/${Date.now()}-${file.name}`;
+      const { error: uploadError } = await supabase.storage.from("project-photos").upload(path, file);
+      if (uploadError) { toast.error(`Failed to upload ${file.name}`); continue; }
+      await supabase.from("photo_album_photos").insert({
+        album_id: albumId, project_id: projectId,
+        storage_path: path, file_name: file.name,
+        sort_order: sortOrder++, uploaded_by: user!.id,
+      });
+    }
+  };
+
   const handleSave = async () => {
     if (!startDate || !endDate) {
       toast.error("Please fill in start and end dates.");
@@ -301,6 +435,7 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
 
       await deleteAttachments();
       await uploadFiles(reportId);
+      await uploadPhotos(reportId);
 
       toast.success(editingReport ? "Report updated." : "Report created.");
       setDialogOpen(false);
@@ -320,6 +455,14 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
         if (att.storage_path) await supabase.storage.from("project-reports").remove([att.storage_path]);
       }
       await supabase.from("weekly_report_attachments").delete().eq("report_id", deleteReport.id);
+      // Delete the linked photo album, if any
+      const album = albumsByReport.get(deleteReport.id);
+      if (album) {
+        const photos = await getAlbumPhotos(album.id);
+        if (photos.length > 0) await supabase.storage.from("project-photos").remove(photos.map((p) => p.storage_path));
+        await supabase.from("photo_album_photos").delete().eq("album_id", album.id);
+        await supabase.from("photo_albums").delete().eq("id", album.id);
+      }
       await supabase.from("weekly_report_comments").delete().eq("report_id", deleteReport.id);
       await supabase.from("weekly_reports").delete().eq("id", deleteReport.id);
       toast.success("Report deleted.");
@@ -350,6 +493,58 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     a.remove();
     URL.revokeObjectURL(url);
   };
+
+  const openLightbox = async (r: Report) => {
+    const album = albumsByReport.get(r.id);
+    if (!album) return;
+    const { data: photos } = await supabase
+      .from("photo_album_photos").select("id, storage_path, file_name")
+      .eq("album_id", album.id).order("sort_order", { ascending: true });
+    if (!photos || photos.length === 0) { toast.info("No photos in this album."); return; }
+    const enriched: Photo[] = photos.map((p) => {
+      const { data: urlData } = supabase.storage.from("project-photos").getPublicUrl(p.storage_path);
+      return { ...p, url: urlData.publicUrl };
+    });
+    setLightboxPhotos(enriched);
+    setLightboxIdx(0);
+    setLightboxReport(r);
+  };
+
+  const handleDownloadAlbum = async () => {
+    if (!lightboxReport) return;
+    const album = albumsByReport.get(lightboxReport.id);
+    if (!album) return;
+    setDownloadingAlbum(true);
+    try {
+      const photos = await getAlbumPhotos(album.id);
+      const zip = new JSZip();
+      await Promise.all(photos.map(async (p) => {
+        const blob = await fetchPhotoBlob(p.storage_path);
+        if (blob) zip.file(p.file_name, blob);
+      }));
+      const content = await zip.generateAsync({ type: "blob" });
+      const label = `Week of ${formatRange(lightboxReport.date_range_start, lightboxReport.date_range_end)}`;
+      saveAs(content, `${sanitizeFileName(label)}.zip`);
+    } catch {
+      toast.error("Failed to download album.");
+    }
+    setDownloadingAlbum(false);
+  };
+
+  const handleDownloadPhoto = async () => {
+    const photo = lightboxPhotos[lightboxIdx];
+    if (!photo) return;
+    setDownloadingPhoto(true);
+    try {
+      const blob = await fetchPhotoBlob(photo.storage_path);
+      if (blob) saveAs(blob, photo.file_name);
+      else toast.error("Failed to download photo.");
+    } catch {
+      toast.error("Failed to download photo.");
+    }
+    setDownloadingPhoto(false);
+  };
+
 
   const toggleExpand = async (reportId: string) => {
     if (expandedId === reportId) { setExpandedId(null); return; }
@@ -444,6 +639,21 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
                               View Report
                             </Button>
                           ))}
+
+                          {(() => {
+                            const album = albumsByReport.get(r.id);
+                            return album && album.photo_count > 0 ? (
+                              <Button
+                                size="sm"
+                                variant="link"
+                                className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
+                                onClick={() => openLightbox(r)}
+                              >
+                                <ImageIcon className="h-3 w-3" />
+                                Photos ({album.photo_count})
+                              </Button>
+                            ) : null;
+                          })()}
 
                           {r.comment_count > 0 && (
                             <Badge variant="secondary" className="gap-1 shrink-0 h-5 text-xs">
@@ -580,6 +790,35 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
                 </div>
               ))}
             </div>
+
+            <div className="space-y-2">
+              <Label>Photos</Label>
+              <Input type="file" accept="image/*" multiple onChange={handlePhotoSelect} />
+
+              {existingPhotoAlbum && !deletePhotoAlbum && (
+                <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <ImageIcon className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-sm flex-1 truncate">{existingPhotoAlbum.photo_count} photo{existingPhotoAlbum.photo_count !== 1 ? "s" : ""} already uploaded</span>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => setDeletePhotoAlbum(true)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              )}
+              {deletePhotoAlbum && (
+                <p className="text-xs text-destructive">Existing photos will be deleted when you save.</p>
+              )}
+
+              {pendingPhotos.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <ImageIcon className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-sm flex-1 truncate">{f.name}</span>
+                  <span className="text-xs text-muted-foreground">{formatFileSize(f.size)}</span>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removePendingPhoto(i)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
@@ -612,6 +851,56 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Photo Lightbox */}
+      {lightboxReport && lightboxPhotos.length > 0 && (
+        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center" onClick={() => setLightboxReport(null)}>
+          <button className="absolute top-4 right-4 text-white/70 hover:text-white" onClick={() => setLightboxReport(null)}>
+            <X className="h-6 w-6" />
+          </button>
+          <p className="absolute top-4 left-4 text-white/70 text-sm">
+            Week of {formatRange(lightboxReport.date_range_start, lightboxReport.date_range_end)} — {lightboxIdx + 1} / {lightboxPhotos.length}
+          </p>
+          <button
+            className="absolute top-4 right-24 text-white/70 hover:text-white disabled:opacity-50"
+            onClick={(e) => { e.stopPropagation(); handleDownloadAlbum(); }}
+            disabled={downloadingAlbum}
+            title="Download all photos"
+          >
+            {downloadingAlbum ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+          </button>
+          <button
+            className="absolute top-4 right-14 text-white/70 hover:text-white disabled:opacity-50"
+            onClick={(e) => { e.stopPropagation(); handleDownloadPhoto(); }}
+            disabled={downloadingPhoto}
+            title="Download this photo"
+          >
+            {downloadingPhoto ? <Loader2 className="h-5 w-5 animate-spin" /> : <Download className="h-5 w-5" />}
+          </button>
+          {lightboxPhotos.length > 1 && (
+            <>
+              <button
+                className="absolute left-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
+                onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i - 1 + lightboxPhotos.length) % lightboxPhotos.length); }}
+              >
+                <ChevronLeft className="h-8 w-8" />
+              </button>
+              <button
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/70 hover:text-white"
+                onClick={(e) => { e.stopPropagation(); setLightboxIdx((i) => (i + 1) % lightboxPhotos.length); }}
+              >
+                <ChevronRight className="h-8 w-8" />
+              </button>
+            </>
+          )}
+          <img
+            src={lightboxPhotos[lightboxIdx].url}
+            alt={lightboxPhotos[lightboxIdx].file_name}
+            className="max-h-[85vh] max-w-[90vw] object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
