@@ -23,6 +23,32 @@ interface ProjectRow {
   _completedToDate?: number | null;
 }
 
+// Paginate to bypass Supabase's default 1000-row cap. Without this, tables that grow
+// past 1000 total rows (e.g. budget_transactions across all projects) get silently
+// truncated, understating dashboard summary figures for the projects whose rows fall
+// past the cutoff.
+async function fetchAllRows<T = any>(
+  table: string,
+  columns: string
+): Promise<T[]> {
+  const pageSize = 1000;
+  let from = 0;
+  const all: T[] = [];
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data, error } = await supabase
+      .from(table as any)
+      .select(columns)
+      .range(from, from + pageSize - 1);
+    if (error) throw error;
+    if (!data || data.length === 0) break;
+    all.push(...(data as T[]));
+    if (data.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
+
 const fmtCost = (v: number) =>
   "$" + Math.round(v).toLocaleString("en-US");
 
@@ -56,7 +82,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
-      const [{ data: projData }, { data: infoData }, { data: phaseData }, { data: budgetData }, { data: txnData }] = await Promise.all([
+      const [{ data: projData }, { data: infoData }, { data: phaseData }, budgetData, txnData] = await Promise.all([
         supabase
           .from("projects")
           .select("id, name, updated_at, project_type, brands(name)")
@@ -68,12 +94,14 @@ export default function Dashboard() {
           .from("schedule_phases")
           .select("project_id, start_date")
           .eq("sub_phase_number", "4.1"),
-        supabase
-          .from("project_budget")
-          .select("project_id, scheduled_value"),
-        supabase
-          .from("budget_transactions")
-          .select("project_id, amount, status"),
+        fetchAllRows<{ project_id: string; scheduled_value: number }>(
+          "project_budget",
+          "project_id, scheduled_value"
+        ),
+        fetchAllRows<{ project_id: string; amount: number; status: string }>(
+          "budget_transactions",
+          "project_id, amount, status"
+        ),
       ]);
 
       const statusMap = new Map<string, string>();
