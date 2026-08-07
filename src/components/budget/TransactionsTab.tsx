@@ -868,6 +868,15 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                     openVendorAdd();
                   } else {
                     setFormPayee(v);
+                    // Auto-link the contract when this vendor has exactly one contract on
+                    // the project, so billed-to-date updates without a manual pick. If a
+                    // vendor has multiple contracts, leave it to manual selection rather
+                    // than guess which one.
+                    const vendor = vendors.find(vv => vv.name === v);
+                    const vendorContracts = vendor
+                      ? contracts.filter(c => c.vendor_id === vendor.id)
+                      : [];
+                    setFormContractId(vendorContracts.length === 1 ? vendorContracts[0].id : "");
                   }
                 }}>
                   <SelectTrigger className="h-8"><SelectValue placeholder="Select vendor" /></SelectTrigger>
