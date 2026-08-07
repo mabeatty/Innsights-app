@@ -269,6 +269,41 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
 
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
     setLineItems(prev => prev.map(li => li.id === id ? { ...li, [field]: value } : li));
+    if (field === "divisionNumber") {
+      // Only fill in a suggestion if nothing has been chosen yet — never override
+      // a contract the user already picked (manually or via an earlier suggestion).
+      setFormContractId(current => {
+        if (current) return current;
+        const nextLineItems = lineItems.map(li => li.id === id ? { ...li, divisionNumber: value } : li);
+        const suggestion = suggestContractId(formPayee, nextLineItems);
+        return suggestion ?? current;
+      });
+    }
+  };
+
+  // Suggests a contract for the current payee/line-items combination, or null if
+  // there's no confident match. Priority:
+  //   1. The vendor's own contract, if they have exactly one on this project.
+  //   2. The project's sole "Prime" (GC) contract, if any line item is a hard-cost
+  //      division — most hard-cost trade work (framing, electrical, masonry, etc.)
+  //      bills against the GC's contract even though the invoice payee is the
+  //      subcontractor, not the GC itself.
+  // Returns null (rather than "") when there's genuine ambiguity (multiple
+  // matching contracts), so we don't guess.
+  const suggestContractId = (payeeName: string, currentLineItems: LineItem[]): string | null => {
+    const vendor = vendors.find(vv => vv.name === payeeName);
+    const vendorContracts = vendor ? contracts.filter(c => c.vendor_id === vendor.id) : [];
+    if (vendorContracts.length === 1) return vendorContracts[0].id;
+    if (vendorContracts.length > 1) return null;
+
+    const hasHardCostLine = currentLineItems.some(li => {
+      const div = ALL_DIVISIONS.find(d => d.number === li.divisionNumber);
+      return div?.cost_type === "hard";
+    });
+    if (!hasHardCostLine) return null;
+
+    const primeContracts = contracts.filter(c => c.contract_type === "Prime");
+    return primeContracts.length === 1 ? primeContracts[0].id : null;
   };
 
   const removeLineItem = (id: string) => {
@@ -868,15 +903,9 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                     openVendorAdd();
                   } else {
                     setFormPayee(v);
-                    // Auto-link the contract when this vendor has exactly one contract on
-                    // the project, so billed-to-date updates without a manual pick. If a
-                    // vendor has multiple contracts, leave it to manual selection rather
-                    // than guess which one.
-                    const vendor = vendors.find(vv => vv.name === v);
-                    const vendorContracts = vendor
-                      ? contracts.filter(c => c.vendor_id === vendor.id)
-                      : [];
-                    setFormContractId(vendorContracts.length === 1 ? vendorContracts[0].id : "");
+                    // Only fill in a suggestion if nothing has been chosen yet — never
+                    // override a contract the user already picked.
+                    setFormContractId(current => current || (suggestContractId(v, lineItems) ?? ""));
                   }
                 }}>
                   <SelectTrigger className="h-8"><SelectValue placeholder="Select vendor" /></SelectTrigger>
