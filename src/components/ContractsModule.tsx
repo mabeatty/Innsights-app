@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dialog";
 import DatePickerInput from "@/components/ui/date-picker-input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, Link as LinkIcon, ExternalLink, Upload, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Link as LinkIcon, ExternalLink, Upload, X, ChevronDown, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -56,6 +56,15 @@ export default function ContractsModule({ projectId, projectName }: Props) {
 
   const [deleteTarget, setDeleteTarget] = useState<Contract | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState("");
+
+  const [openTypes, setOpenTypes] = useState<Set<ContractType>>(new Set(CONTRACT_TYPES));
+  const toggleType = (t: ContractType) => {
+    setOpenTypes((prev) => {
+      const next = new Set(prev);
+      next.has(t) ? next.delete(t) : next.add(t);
+      return next;
+    });
+  };
 
   // Form state
   const [formNumber, setFormNumber] = useState("");
@@ -128,6 +137,16 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     () => Object.values(coByContract).reduce((s, n) => s + n, 0),
     [coByContract]
   );
+
+  const contractsByType = useMemo(() => {
+    const map = new Map<ContractType, Contract[]>();
+    for (const t of CONTRACT_TYPES) map.set(t, []);
+    for (const c of contracts) {
+      if (!map.has(c.contract_type)) map.set(c.contract_type, []);
+      map.get(c.contract_type)!.push(c);
+    }
+    return map;
+  }, [contracts]);
 
   // Prefix derived from project name: first letter of each word (with any
   // digits kept), but all-caps acronym words preserved whole.
@@ -341,72 +360,101 @@ export default function ContractsModule({ projectId, projectName }: Props) {
         </Button>
       </div>
 
-      {/* Table */}
-      <div className="rounded-lg border overflow-auto">
-        <table className="w-full text-sm min-w-[900px]">
-          <thead>
-            <tr className="bg-muted/50 text-muted-foreground text-left">
-              <th className="px-3 py-2 w-28">Contract #</th>
-              <th className="px-3 py-2">Scope</th>
-              <th className="px-3 py-2 w-32">Type</th>
-              <th className="px-3 py-2 w-40">Vendor</th>
-              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Contract Amount</th>
-              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Change Orders</th>
-              <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Billed Amount</th>
-              <th className="px-3 py-2 text-right w-24">Retainage</th>
-              <th className="px-3 py-2 w-24">Status</th>
-              <th className="px-3 py-2 w-20" />
-            </tr>
-          </thead>
-          <tbody>
-            {contracts.length === 0 ? (
-              <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No contracts yet.</td></tr>
-            ) : contracts.map(c => (
-              <tr key={c.id} className="border-t hover:bg-muted/30 transition-colors">
-                <td className="px-3 py-2 font-mono text-muted-foreground">{c.contract_number || "—"}</td>
-                <td className={cn("px-3 py-2", c.contract_type === "Subcontract" && "pl-6 text-muted-foreground")}>
-                  {c.contract_type === "Subcontract" && "↳ "}{c.scope_summary}
-                </td>
-                <td className="px-3 py-2 text-xs">{c.contract_type}</td>
-                <td className="px-3 py-2 text-xs">{vendorName(c.vendor_id)}</td>
-                <td className="px-3 py-2 text-right">{fmt(Number(c.original_amount))}</td>
-                <td className={cn("px-3 py-2 text-right", (coByContract[c.id] ?? 0) !== 0 ? "" : "text-muted-foreground")}>
-                  {coByContract[c.id] ? fmt(coByContract[c.id]) : "—"}
-                </td>
-                <td className="px-3 py-2 text-right">{fmt(billedByContract[c.id] ?? 0)}</td>
-                <td className="px-3 py-2 text-right">{Number(c.default_retainage_percent)}%</td>
-                <td className="px-3 py-2"><span className={statusPillClasses(c.status)}>{c.status}</span></td>
-                <td className="px-3 py-2">
-                  <div className="flex gap-1">
-                    {c.document_url && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
-                        <ExternalLink className="h-3.5 w-3.5 text-primary" />
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setDeleteTarget(c); setDeleteConfirmText(""); }}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-          {contracts.length > 0 && (
-            <tfoot>
-              <tr className="border-t bg-muted/50 font-semibold">
-                <td className="px-3 py-2" colSpan={4}>Total contract value</td>
-                <td className="px-3 py-2 text-right">{fmt(totalContractValue)}</td>
-                <td className="px-3 py-2 text-right">{totalCO ? fmt(totalCO) : "—"}</td>
-                <td className="px-3 py-2 text-right">{fmt(totalBilled)}</td>
-                <td className="px-3 py-2" colSpan={3} />
-              </tr>
-            </tfoot>
-          )}
-        </table>
+      {/* Contracts grouped by type */}
+      <div className="space-y-2">
+        {CONTRACT_TYPES.map((type) => {
+          const items = contractsByType.get(type) ?? [];
+          const isOpen = openTypes.has(type);
+          const typeValue = items.reduce((s, c) => s + Number(c.original_amount), 0);
+          const typeBilled = items.reduce((s, c) => s + (billedByContract[c.id] ?? 0), 0);
+          const typeCO = items.reduce((s, c) => s + (coByContract[c.id] ?? 0), 0);
+          return (
+            <div key={type} className="border rounded-md bg-card">
+              <button
+                onClick={() => toggleType(type)}
+                className="w-full flex items-center justify-between px-4 py-2.5 text-left hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  {isOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+                  <span className="font-medium text-sm">{type}</span>
+                  <span className="text-xs text-muted-foreground border rounded-full px-2 py-0.5">{items.length}</span>
+                </div>
+                {items.length > 0 && (
+                  <span className="text-xs text-muted-foreground">{fmt(typeValue)} contracted · {fmt(typeBilled)} billed</span>
+                )}
+              </button>
+              {isOpen && (
+                <div className="border-t overflow-auto">
+                  {items.length === 0 ? (
+                    <p className="px-4 py-3 text-sm text-muted-foreground">No {type.toLowerCase()} contracts yet.</p>
+                  ) : (
+                    <table className="w-full text-sm min-w-[820px]">
+                      <thead>
+                        <tr className="bg-muted/30 text-muted-foreground text-left">
+                          <th className="px-3 py-2 w-28">Contract #</th>
+                          <th className="px-3 py-2">Scope</th>
+                          <th className="px-3 py-2 w-40">Vendor</th>
+                          <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Contract Amount</th>
+                          <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Change Orders</th>
+                          <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Billed Amount</th>
+                          <th className="px-3 py-2 text-right w-24">Retainage</th>
+                          <th className="px-3 py-2 w-24">Status</th>
+                          <th className="px-3 py-2 w-20" />
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((c) => (
+                          <tr key={c.id} className="border-t hover:bg-muted/30 transition-colors">
+                            <td className="px-3 py-2 font-mono text-muted-foreground">{c.contract_number || "—"}</td>
+                            <td className={cn("px-3 py-2", c.contract_type === "Subcontract" && "pl-6 text-muted-foreground")}>
+                              {c.contract_type === "Subcontract" && "↳ "}{c.scope_summary}
+                            </td>
+                            <td className="px-3 py-2 text-xs">{vendorName(c.vendor_id)}</td>
+                            <td className="px-3 py-2 text-right">{fmt(Number(c.original_amount))}</td>
+                            <td className={cn("px-3 py-2 text-right", (coByContract[c.id] ?? 0) !== 0 ? "" : "text-muted-foreground")}>
+                              {coByContract[c.id] ? fmt(coByContract[c.id]) : "—"}
+                            </td>
+                            <td className="px-3 py-2 text-right">{fmt(billedByContract[c.id] ?? 0)}</td>
+                            <td className="px-3 py-2 text-right">{Number(c.default_retainage_percent)}%</td>
+                            <td className="px-3 py-2"><span className={statusPillClasses(c.status)}>{c.status}</span></td>
+                            <td className="px-3 py-2">
+                              <div className="flex gap-1">
+                                {c.document_url && (
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
+                                    <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                                  </Button>
+                                )}
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setDeleteTarget(c); setDeleteConfirmText(""); }}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
+
+      {/* Overall totals across all types */}
+      {contracts.length > 0 && (
+        <div className="rounded-md border bg-muted/30 px-4 py-2.5 flex items-center justify-between text-sm font-semibold">
+          <span>Total contract value</span>
+          <div className="flex gap-6">
+            <span>{fmt(totalContractValue)} contracted</span>
+            {totalCO !== 0 && <span>{fmt(totalCO)} change orders</span>}
+            <span>{fmt(totalBilled)} billed</span>
+          </div>
+        </div>
+      )}
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

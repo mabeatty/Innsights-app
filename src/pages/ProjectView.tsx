@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreVertical, Info, FolderOpen, CalendarDays, Gavel, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature } from "lucide-react";
+import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfoSummary } from "@/components/ProjectInfoSummary";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -222,7 +222,7 @@ export default function ProjectView() {
             <CalendarDays className="h-3.5 w-3.5" /> Schedule
           </TabsTrigger>
           <TabsTrigger value="procurement" className="gap-1.5">
-            <Gavel className="h-3.5 w-3.5" /> Procurement
+            <ClipboardList className="h-3.5 w-3.5" /> Takeoffs
           </TabsTrigger>
           <TabsTrigger value="reports" className="gap-1.5">
             <NotebookPen className="h-3.5 w-3.5" /> Reports
