@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, FileText, Send, Download, X, ExternalLink, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, ChevronRight, FileText, Send, Download, X, ExternalLink, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 
@@ -81,6 +81,10 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
   const [newComment, setNewComment] = useState("");
   const [submittingComment, setSubmittingComment] = useState(false);
 
+  // Monthly rollup: which "MMMM yyyy" groups are expanded. Starts with just the
+  // most recent month open so the list isn't overwhelming.
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+
   const fetchProfiles = useCallback(async () => {
     const { data } = await supabase.from("profiles").select("user_id, first_name, last_name");
     const map = new Map<string, string>();
@@ -136,6 +140,36 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
   useEffect(() => {
     fetchProfiles().then((map) => fetchReports(map));
   }, [fetchProfiles, fetchReports]);
+
+  // Group reports by the month of date_range_start. `reports` is already sorted
+  // most-recent-first, so groups come out most-recent-month-first too.
+  const monthGroups = useMemo(() => {
+    const groups = new Map<string, { label: string; reports: Report[] }>();
+    for (const r of reports) {
+      const d = new Date(r.date_range_start + "T00:00:00");
+      const key = format(d, "yyyy-MM");
+      const label = format(d, "MMMM yyyy");
+      if (!groups.has(key)) groups.set(key, { label, reports: [] });
+      groups.get(key)!.reports.push(r);
+    }
+    return Array.from(groups.entries()).map(([key, v]) => ({ key, ...v }));
+  }, [reports]);
+
+  // Default to the most recent month expanded once reports first load.
+  useEffect(() => {
+    if (monthGroups.length > 0 && expandedMonths.size === 0) {
+      setExpandedMonths(new Set([monthGroups[0].key]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthGroups.length]);
+
+  const toggleMonth = (key: string) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const openAddReport = () => {
     setEditingReport(null);
@@ -375,91 +409,103 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
         </div>
       ) : (
         <div className="space-y-2">
-          {reports.map((r) => (
-            <div key={r.id} className="border rounded-lg bg-card">
-              <div
-                className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                onClick={() => toggleExpand(r.id)}
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium">{formatRange(r.date_range_start, r.date_range_end)}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {r.author_name} · {r.content.slice(0, 100)}{r.content.length > 100 ? "…" : ""}
-                    {r.attachments.length > 0 && <span className="ml-2">📎 {r.attachments.length}</span>}
-                  </p>
+          {monthGroups.map((group) => {
+            const monthOpen = expandedMonths.has(group.key);
+            return (
+              <div key={group.key} className="border rounded-lg bg-card overflow-hidden">
+                <div
+                  className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleMonth(group.key)}
+                >
+                  {monthOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <p className="text-sm font-semibold flex-1">{group.label}</p>
+                  <Badge variant="secondary" className="shrink-0">{group.reports.length}</Badge>
                 </div>
-                <Badge variant="secondary" className="gap-1 shrink-0">
-                  <MessageSquare className="h-3 w-3" /> {r.comment_count}
-                </Badge>
-                {canEdit && (
-                  <div className="flex gap-1 shrink-0">
-                    <Button size="icon" variant="ghost" className="h-7 w-7" onClick={(e) => { e.stopPropagation(); openEditReport(r); }}>
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={(e) => { e.stopPropagation(); setDeleteReport(r); }}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </div>
-                )}
-                {expandedId === r.id ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
-              </div>
 
-              {expandedId === r.id && (
-                <div className="border-t px-4 py-4 space-y-4">
-                  <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">{r.content}</div>
+                {monthOpen && (
+                  <div className="border-t divide-y">
+                    {group.reports.map((r) => (
+                      <div key={r.id}>
+                        <div className="flex items-center gap-2 pl-9 pr-3 py-1.5 hover:bg-muted/30 transition-colors">
+                          <p className="text-sm flex-1 min-w-0 truncate">{formatRange(r.date_range_start, r.date_range_end)}</p>
 
-                  {/* Attachments */}
-                  {r.attachments.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Attachments</p>
-                      {r.attachments.map((att) => (
-                        <div key={att.id} className="flex items-center gap-3 p-2 rounded-md bg-muted/50">
-                          <FileText className="h-4 w-4 text-destructive shrink-0" />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate">{att.file_name}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {att.drive_url ? "Google Drive" : formatFileSize(att.file_size)}
-                            </p>
-                          </div>
-                          <Button size="sm" variant="ghost" className="gap-1.5 shrink-0" onClick={() => downloadAttachment(att)}>
-                            {att.drive_url ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                            {att.drive_url ? "Open in Drive" : "Download"}
+                          {r.attachments.length === 0 && (
+                            <span className="text-xs text-muted-foreground shrink-0">No file</span>
+                          )}
+                          {r.attachments.map((att) => (
+                            <Button
+                              key={att.id}
+                              size="sm"
+                              variant="link"
+                              className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
+                              onClick={() => downloadAttachment(att)}
+                            >
+                              {att.drive_url ? <ExternalLink className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+                              View Report
+                            </Button>
+                          ))}
+
+                          {r.comment_count > 0 && (
+                            <Badge variant="secondary" className="gap-1 shrink-0 h-5 text-xs">
+                              <MessageSquare className="h-2.5 w-2.5" /> {r.comment_count}
+                            </Badge>
+                          )}
+                          {canEdit && (
+                            <div className="flex gap-0.5 shrink-0">
+                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditReport(r)}>
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => setDeleteReport(r)}>
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          )}
+                          <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => toggleExpand(r.id)}>
+                            {expandedId === r.id ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                           </Button>
                         </div>
-                      ))}
-                    </div>
-                  )}
 
-                  {/* Comments */}
-                  <div className="space-y-3 pt-2 border-t">
-                    <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Comments</p>
-                    {comments.length === 0 && <p className="text-xs text-muted-foreground">No comments yet.</p>}
-                    {comments.map((c) => (
-                      <div key={c.id} className="text-sm space-y-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="font-medium text-xs">{c.author_name}</span>
-                          <span className="text-xs text-muted-foreground">{format(new Date(c.created_at), "MMM d, yyyy h:mm a")}</span>
-                        </div>
-                        <p className="text-sm text-foreground">{c.content}</p>
+                        {expandedId === r.id && (
+                          <div className="border-t px-4 py-4 space-y-4 bg-muted/20">
+                            {r.content && (
+                              <div className="prose prose-sm max-w-none text-foreground whitespace-pre-wrap">{r.content}</div>
+                            )}
+
+                            {/* Comments */}
+                            <div className="space-y-3">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Comments</p>
+                              {comments.length === 0 && <p className="text-xs text-muted-foreground">No comments yet.</p>}
+                              {comments.map((c) => (
+                                <div key={c.id} className="text-sm space-y-0.5">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-medium text-xs">{c.author_name}</span>
+                                    <span className="text-xs text-muted-foreground">{format(new Date(c.created_at), "MMM d, yyyy h:mm a")}</span>
+                                  </div>
+                                  <p className="text-sm text-foreground">{c.content}</p>
+                                </div>
+                              ))}
+                              <div className="flex gap-2 pt-1">
+                                <Input
+                                  value={newComment}
+                                  onChange={(e) => setNewComment(e.target.value)}
+                                  placeholder="Add a comment…"
+                                  className="text-sm"
+                                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
+                                />
+                                <Button size="icon" variant="secondary" className="shrink-0" onClick={handleAddComment} disabled={submittingComment || !newComment.trim()}>
+                                  <Send className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     ))}
-                    <div className="flex gap-2 pt-1">
-                      <Input
-                        value={newComment}
-                        onChange={(e) => setNewComment(e.target.value)}
-                        placeholder="Add a comment…"
-                        className="text-sm"
-                        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                      />
-                      <Button size="icon" variant="secondary" className="shrink-0" onClick={handleAddComment} disabled={submittingComment || !newComment.trim()}>
-                        <Send className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
