@@ -13,13 +13,15 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, FileText, Send, Download, X } from "lucide-react";
+import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, FileText, Send, Download, X, ExternalLink, Link2 } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 
 interface Attachment {
   id: string;
-  storage_path: string;
+  storage_path: string | null;
+  drive_url: string | null;
+  drive_file_id: string | null;
   file_name: string;
   file_size: number;
 }
@@ -63,6 +65,8 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [driveUrlInput, setDriveUrlInput] = useState("");
+  const [pendingDriveLinks, setPendingDriveLinks] = useState<{ url: string; fileId: string | null; name: string }[]>([]);
   const [existingAttachments, setExistingAttachments] = useState<Attachment[]>([]);
   const [attachmentsToDelete, setAttachmentsToDelete] = useState<Attachment[]>([]);
 
@@ -100,7 +104,7 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     // Fetch comments counts and attachments in parallel
     const [commentsResult, attachmentsResult] = await Promise.all([
       supabase.from("weekly_report_comments").select("report_id").in("report_id", reportIds),
-      supabase.from("weekly_report_attachments").select("id, report_id, storage_path, file_name, file_size").in("report_id", reportIds),
+      supabase.from("weekly_report_attachments").select("id, report_id, storage_path, drive_url, drive_file_id, file_name, file_size").in("report_id", reportIds),
     ]);
 
     const commentCounts = new Map<string, number>();
@@ -112,7 +116,10 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     attachmentsResult.data?.forEach((a) => {
       const rid = (a as any).report_id;
       if (!attachmentsByReport.has(rid)) attachmentsByReport.set(rid, []);
-      attachmentsByReport.get(rid)!.push({ id: a.id, storage_path: a.storage_path, file_name: a.file_name, file_size: a.file_size });
+      attachmentsByReport.get(rid)!.push({
+        id: a.id, storage_path: a.storage_path, drive_url: (a as any).drive_url,
+        drive_file_id: (a as any).drive_file_id, file_name: a.file_name, file_size: a.file_size,
+      });
     });
 
     const enriched: Report[] = reportRows.map((r) => ({
@@ -137,6 +144,8 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     setEndDate(format(endOfWeek(now, { weekStartsOn: 1 }), "yyyy-MM-dd"));
     setContent("");
     setPendingFiles([]);
+    setDriveUrlInput("");
+    setPendingDriveLinks([]);
     setExistingAttachments([]);
     setAttachmentsToDelete([]);
     setDialogOpen(true);
@@ -148,6 +157,8 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     setEndDate(r.date_range_end);
     setContent(r.content);
     setPendingFiles([]);
+    setDriveUrlInput("");
+    setPendingDriveLinks([]);
     setExistingAttachments([...r.attachments]);
     setAttachmentsToDelete([]);
     setDialogOpen(true);
@@ -159,6 +170,34 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     if (pdfs.length !== files.length) toast.error("Only PDF files are allowed.");
     setPendingFiles((prev) => [...prev, ...pdfs]);
     e.target.value = "";
+  };
+
+  // Matches the file ID out of common Google Drive URL shapes:
+  // /file/d/{id}/view, /drive/folders/{id}, or ?id={id}
+  const extractDriveFileId = (url: string): string | null => {
+    const patterns = [/\/file\/d\/([a-zA-Z0-9_-]+)/, /[?&]id=([a-zA-Z0-9_-]+)/, /\/d\/([a-zA-Z0-9_-]+)/];
+    for (const p of patterns) {
+      const m = url.match(p);
+      if (m) return m[1];
+    }
+    return null;
+  };
+
+  const addDriveLink = () => {
+    const url = driveUrlInput.trim();
+    if (!url) return;
+    if (!url.includes("drive.google.com") && !url.includes("docs.google.com")) {
+      toast.error("That doesn't look like a Google Drive link.");
+      return;
+    }
+    const fileId = extractDriveFileId(url);
+    const name = fileId ? `Drive file (${fileId.slice(0, 8)}…)` : "Drive file";
+    setPendingDriveLinks((prev) => [...prev, { url, fileId, name }]);
+    setDriveUrlInput("");
+  };
+
+  const removePendingDriveLink = (idx: number) => {
+    setPendingDriveLinks((prev) => prev.filter((_, i) => i !== idx));
   };
 
   const removeExistingAttachment = (att: Attachment) => {
@@ -184,11 +223,23 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
         uploaded_by: user!.id,
       });
     }
+    for (const link of pendingDriveLinks) {
+      await supabase.from("weekly_report_attachments").insert({
+        report_id: reportId,
+        project_id: projectId,
+        storage_path: null,
+        drive_url: link.url,
+        drive_file_id: link.fileId,
+        file_name: link.name,
+        file_size: 0,
+        uploaded_by: user!.id,
+      });
+    }
   };
 
   const deleteAttachments = async () => {
     for (const att of attachmentsToDelete) {
-      await supabase.storage.from("project-reports").remove([att.storage_path]);
+      if (att.storage_path) await supabase.storage.from("project-reports").remove([att.storage_path]);
       await supabase.from("weekly_report_attachments").delete().eq("id", att.id);
     }
   };
@@ -232,7 +283,7 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
     try {
       // Delete storage files
       for (const att of deleteReport.attachments) {
-        await supabase.storage.from("project-reports").remove([att.storage_path]);
+        if (att.storage_path) await supabase.storage.from("project-reports").remove([att.storage_path]);
       }
       await supabase.from("weekly_report_attachments").delete().eq("report_id", deleteReport.id);
       await supabase.from("weekly_report_comments").delete().eq("report_id", deleteReport.id);
@@ -249,6 +300,11 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
   };
 
   const downloadAttachment = async (att: Attachment) => {
+    if (att.drive_url) {
+      window.open(att.drive_url, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!att.storage_path) { toast.error("No file source for this attachment."); return; }
     const { data, error } = await supabase.storage.from("project-reports").download(att.storage_path);
     if (error || !data) { toast.error("Download failed."); return; }
     const url = URL.createObjectURL(data);
@@ -361,10 +417,13 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
                           <FileText className="h-4 w-4 text-destructive shrink-0" />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-medium truncate">{att.file_name}</p>
-                            <p className="text-xs text-muted-foreground">{formatFileSize(att.file_size)}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {att.drive_url ? "Google Drive" : formatFileSize(att.file_size)}
+                            </p>
                           </div>
                           <Button size="sm" variant="ghost" className="gap-1.5 shrink-0" onClick={() => downloadAttachment(att)}>
-                            <Download className="h-3.5 w-3.5" /> Download
+                            {att.drive_url ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
+                            {att.drive_url ? "Open in Drive" : "Download"}
                           </Button>
                         </div>
                       ))}
@@ -427,10 +486,23 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
               <Label>PDF Attachments</Label>
               <Input type="file" accept="application/pdf" multiple onChange={handleFileSelect} />
 
+              <div className="flex gap-2">
+                <Input
+                  value={driveUrlInput}
+                  onChange={(e) => setDriveUrlInput(e.target.value)}
+                  placeholder="Or paste a Google Drive link…"
+                  className="text-sm"
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDriveLink(); } }}
+                />
+                <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={addDriveLink}>
+                  <Link2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
               {/* Existing attachments (edit mode) */}
               {existingAttachments.map((att) => (
                 <div key={att.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
-                  <FileText className="h-4 w-4 text-destructive shrink-0" />
+                  {att.drive_url ? <ExternalLink className="h-4 w-4 text-primary shrink-0" /> : <FileText className="h-4 w-4 text-destructive shrink-0" />}
                   <span className="text-sm flex-1 truncate">{att.file_name}</span>
                   <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removeExistingAttachment(att)}>
                     <X className="h-3 w-3" />
@@ -445,6 +517,18 @@ export default function WeeklyReportsTab({ projectId, canEdit }: WeeklyReportsTa
                   <span className="text-sm flex-1 truncate">{f.name}</span>
                   <span className="text-xs text-muted-foreground">{formatFileSize(f.size)}</span>
                   <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removePendingFile(i)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ))}
+
+              {/* Pending new Drive links */}
+              {pendingDriveLinks.map((link, i) => (
+                <div key={i} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
+                  <ExternalLink className="h-4 w-4 text-primary shrink-0" />
+                  <span className="text-sm flex-1 truncate">{link.name}</span>
+                  <span className="text-xs text-muted-foreground">Google Drive</span>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removePendingDriveLink(i)}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>

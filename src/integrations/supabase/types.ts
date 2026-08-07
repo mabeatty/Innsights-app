@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.1"
+    PostgrestVersion: "14.5"
   }
   public: {
     Tables: {
@@ -135,6 +135,66 @@ export type Database = {
           },
         ]
       }
+      bank_accounts: {
+        Row: {
+          account_type: string
+          created_at: string
+          id: string
+          institution_name: string | null
+          is_active: boolean
+          mask: string | null
+          name: string
+          next_check_number: number
+          notes: string | null
+          org_id: string
+          plaid_account_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_type?: string
+          created_at?: string
+          id?: string
+          institution_name?: string | null
+          is_active?: boolean
+          mask?: string | null
+          name: string
+          next_check_number?: number
+          notes?: string | null
+          org_id: string
+          plaid_account_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_type?: string
+          created_at?: string
+          id?: string
+          institution_name?: string | null
+          is_active?: boolean
+          mask?: string | null
+          name?: string
+          next_check_number?: number
+          notes?: string | null
+          org_id?: string
+          plaid_account_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_accounts_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_accounts_plaid_account_id_fkey"
+            columns: ["plaid_account_id"]
+            isOneToOne: false
+            referencedRelation: "plaid_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bathroom_type_line_items: {
         Row: {
           bathroom_type_id: string
@@ -193,6 +253,109 @@ export type Database = {
             columns: ["brand_id"]
             isOneToOne: false
             referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bid_line_items: {
+        Row: {
+          brand: string | null
+          catalog_item_id: string | null
+          category: string | null
+          created_at: string
+          ext_price: number | null
+          global_vendor_id: string | null
+          id: string
+          item_name: string | null
+          marriott_control: string | null
+          marriott_item_id: string | null
+          org_id: string
+          price_basis: string | null
+          price_date: string | null
+          project_label: string | null
+          quantity: number | null
+          raw_description: string | null
+          room_type: string | null
+          source_doc: string | null
+          source_url: string | null
+          status: string | null
+          unit: string | null
+          unit_price: number | null
+          updated_at: string
+          vendor_name: string
+        }
+        Insert: {
+          brand?: string | null
+          catalog_item_id?: string | null
+          category?: string | null
+          created_at?: string
+          ext_price?: number | null
+          global_vendor_id?: string | null
+          id?: string
+          item_name?: string | null
+          marriott_control?: string | null
+          marriott_item_id?: string | null
+          org_id: string
+          price_basis?: string | null
+          price_date?: string | null
+          project_label?: string | null
+          quantity?: number | null
+          raw_description?: string | null
+          room_type?: string | null
+          source_doc?: string | null
+          source_url?: string | null
+          status?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+          vendor_name: string
+        }
+        Update: {
+          brand?: string | null
+          catalog_item_id?: string | null
+          category?: string | null
+          created_at?: string
+          ext_price?: number | null
+          global_vendor_id?: string | null
+          id?: string
+          item_name?: string | null
+          marriott_control?: string | null
+          marriott_item_id?: string | null
+          org_id?: string
+          price_basis?: string | null
+          price_date?: string | null
+          project_label?: string | null
+          quantity?: number | null
+          raw_description?: string | null
+          room_type?: string | null
+          source_doc?: string | null
+          source_url?: string | null
+          status?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bid_line_items_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bid_line_items_global_vendor_id_fkey"
+            columns: ["global_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "global_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bid_line_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -339,6 +502,13 @@ export type Database = {
             columns: ["draw_id"]
             isOneToOne: false
             referencedRelation: "draw_history"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "budget_transactions_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
           {
@@ -562,6 +732,44 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      catalog_items: {
+        Row: {
+          canonical_name: string
+          category: string | null
+          created_at: string
+          id: string
+          org_id: string
+          synonyms: string[]
+          updated_at: string
+        }
+        Insert: {
+          canonical_name: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          org_id: string
+          synonyms?: string[]
+          updated_at?: string
+        }
+        Update: {
+          canonical_name?: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          org_id?: string
+          synonyms?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "catalog_items_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
             referencedColumns: ["id"]
           },
         ]
@@ -1192,6 +1400,47 @@ export type Database = {
           },
         ]
       }
+      invoice_approvals: {
+        Row: {
+          approver_id: string | null
+          approver_role: string
+          created_at: string
+          decided_at: string | null
+          id: string
+          invoice_id: string
+          notes: string | null
+          status: string
+        }
+        Insert: {
+          approver_id?: string | null
+          approver_role: string
+          created_at?: string
+          decided_at?: string | null
+          id?: string
+          invoice_id: string
+          notes?: string | null
+          status?: string
+        }
+        Update: {
+          approver_id?: string | null
+          approver_role?: string
+          created_at?: string
+          decided_at?: string | null
+          id?: string
+          invoice_id?: string
+          notes?: string | null
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_approvals_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_audit_trail: {
         Row: {
           action: string
@@ -1268,40 +1517,40 @@ export type Database = {
           },
         ]
       }
-      invoice_approvals: {
+      invoice_documents: {
         Row: {
-          approver_id: string | null
-          approver_role: string
-          created_at: string
-          decided_at: string | null
+          file_name: string
+          file_size: number | null
+          file_type: string | null
           id: string
           invoice_id: string
-          notes: string | null
-          status: string
+          storage_path: string
+          uploaded_at: string
+          uploaded_by: string | null
         }
         Insert: {
-          approver_id?: string | null
-          approver_role: string
-          created_at?: string
-          decided_at?: string | null
+          file_name: string
+          file_size?: number | null
+          file_type?: string | null
           id?: string
           invoice_id: string
-          notes?: string | null
-          status?: string
+          storage_path: string
+          uploaded_at?: string
+          uploaded_by?: string | null
         }
         Update: {
-          approver_id?: string | null
-          approver_role?: string
-          created_at?: string
-          decided_at?: string | null
+          file_name?: string
+          file_size?: number | null
+          file_type?: string | null
           id?: string
           invoice_id?: string
-          notes?: string | null
-          status?: string
+          storage_path?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "invoice_approvals_invoice_id_fkey"
+            foreignKeyName: "invoice_documents_invoice_id_fkey"
             columns: ["invoice_id"]
             isOneToOne: false
             referencedRelation: "invoices"
@@ -1309,37 +1558,40 @@ export type Database = {
           },
         ]
       }
-      project_approvers: {
+      invoice_line_items: {
         Row: {
-          approver_id: string | null
+          amount: number | null
+          category: string | null
           created_at: string
           id: string
-          project_id: string
-          role: string
-          updated_at: string
+          invoice_id: string
+          net_amount: number | null
+          retainage_amount: number | null
         }
         Insert: {
-          approver_id?: string | null
+          amount?: number | null
+          category?: string | null
           created_at?: string
           id?: string
-          project_id: string
-          role: string
-          updated_at?: string
+          invoice_id: string
+          net_amount?: number | null
+          retainage_amount?: number | null
         }
         Update: {
-          approver_id?: string | null
+          amount?: number | null
+          category?: string | null
           created_at?: string
           id?: string
-          project_id?: string
-          role?: string
-          updated_at?: string
+          invoice_id?: string
+          net_amount?: number | null
+          retainage_amount?: number | null
         }
         Relationships: [
           {
-            foreignKeyName: "project_approvers_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: "invoice_line_items_invoice_id_fkey"
+            columns: ["invoice_id"]
             isOneToOne: false
-            referencedRelation: "projects"
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]
@@ -1347,17 +1599,20 @@ export type Database = {
       invoices: {
         Row: {
           ai_extracted_fields: Json | null
+          aia_detail_rows: Json | null
           amount: number | null
           approved_at: string | null
           approved_by: string | null
           budget_line_item: string | null
           cost_type: string | null
           created_at: string
+          drive_url: string | null
           id: string
           invoice_date: string | null
           invoice_number: string | null
           more_info_request: string | null
           needs_review: boolean
+          net_amount: number | null
           notes: string | null
           organization_id: string
           partial_approved_amount: number | null
@@ -1365,6 +1620,7 @@ export type Database = {
           pdf_url: string | null
           project_id: string | null
           rejection_reason: string | null
+          retainage_amount: number | null
           routed_at: string | null
           routed_to: string | null
           routed_to_email: string | null
@@ -1379,17 +1635,20 @@ export type Database = {
         }
         Insert: {
           ai_extracted_fields?: Json | null
+          aia_detail_rows?: Json | null
           amount?: number | null
           approved_at?: string | null
           approved_by?: string | null
           budget_line_item?: string | null
           cost_type?: string | null
           created_at?: string
+          drive_url?: string | null
           id?: string
           invoice_date?: string | null
           invoice_number?: string | null
           more_info_request?: string | null
           needs_review?: boolean
+          net_amount?: number | null
           notes?: string | null
           organization_id: string
           partial_approved_amount?: number | null
@@ -1397,6 +1656,7 @@ export type Database = {
           pdf_url?: string | null
           project_id?: string | null
           rejection_reason?: string | null
+          retainage_amount?: number | null
           routed_at?: string | null
           routed_to?: string | null
           routed_to_email?: string | null
@@ -1411,17 +1671,20 @@ export type Database = {
         }
         Update: {
           ai_extracted_fields?: Json | null
+          aia_detail_rows?: Json | null
           amount?: number | null
           approved_at?: string | null
           approved_by?: string | null
           budget_line_item?: string | null
           cost_type?: string | null
           created_at?: string
+          drive_url?: string | null
           id?: string
           invoice_date?: string | null
           invoice_number?: string | null
           more_info_request?: string | null
           needs_review?: boolean
+          net_amount?: number | null
           notes?: string | null
           organization_id?: string
           partial_approved_amount?: number | null
@@ -1429,6 +1692,7 @@ export type Database = {
           pdf_url?: string | null
           project_id?: string | null
           rejection_reason?: string | null
+          retainage_amount?: number | null
           routed_at?: string | null
           routed_to?: string | null
           routed_to_email?: string | null
@@ -1601,6 +1865,131 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      payment_allocations: {
+        Row: {
+          amount: number
+          created_at: string
+          id: string
+          invoice_id: string
+          org_id: string
+          payment_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          id?: string
+          invoice_id: string
+          org_id: string
+          payment_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          id?: string
+          invoice_id?: string
+          org_id?: string
+          payment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_allocations_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_allocations_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payments: {
+        Row: {
+          amount: number
+          bank_account_id: string | null
+          check_number: number | null
+          created_at: string
+          global_vendor_id: string | null
+          id: string
+          memo: string | null
+          notes: string | null
+          org_id: string
+          payee_name: string
+          payment_date: string | null
+          payment_method: string
+          reference: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          bank_account_id?: string | null
+          check_number?: number | null
+          created_at?: string
+          global_vendor_id?: string | null
+          id?: string
+          memo?: string | null
+          notes?: string | null
+          org_id: string
+          payee_name: string
+          payment_date?: string | null
+          payment_method?: string
+          reference?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          bank_account_id?: string | null
+          check_number?: number | null
+          created_at?: string
+          global_vendor_id?: string | null
+          id?: string
+          memo?: string | null
+          notes?: string | null
+          org_id?: string
+          payee_name?: string
+          payment_date?: string | null
+          payment_method?: string
+          reference?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_global_vendor_id_fkey"
+            columns: ["global_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "global_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       photo_album_photos: {
         Row: {
@@ -1963,6 +2352,41 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      project_approvers: {
+        Row: {
+          approver_id: string | null
+          created_at: string
+          id: string
+          project_id: string
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          approver_id?: string | null
+          created_at?: string
+          id?: string
+          project_id: string
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          approver_id?: string | null
+          created_at?: string
+          id?: string
+          project_id?: string
+          role?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_approvers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       project_budget: {
         Row: {
@@ -2839,6 +3263,110 @@ export type Database = {
           },
         ]
       }
+      vendor_pricing: {
+        Row: {
+          brand: string | null
+          catalog_item_id: string | null
+          created_at: string
+          global_vendor_id: string | null
+          gross_price: number | null
+          id: string
+          notes: string | null
+          org_id: string
+          price_date: string | null
+          price_text: string | null
+          project_id: string | null
+          project_label: string | null
+          quantity: number | null
+          raw_description: string | null
+          scope: string | null
+          source_doc: string | null
+          source_url: string | null
+          status: string | null
+          unit: string | null
+          unit_price: number | null
+          updated_at: string
+          vendor_name: string
+        }
+        Insert: {
+          brand?: string | null
+          catalog_item_id?: string | null
+          created_at?: string
+          global_vendor_id?: string | null
+          gross_price?: number | null
+          id?: string
+          notes?: string | null
+          org_id: string
+          price_date?: string | null
+          price_text?: string | null
+          project_id?: string | null
+          project_label?: string | null
+          quantity?: number | null
+          raw_description?: string | null
+          scope?: string | null
+          source_doc?: string | null
+          source_url?: string | null
+          status?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+          vendor_name: string
+        }
+        Update: {
+          brand?: string | null
+          catalog_item_id?: string | null
+          created_at?: string
+          global_vendor_id?: string | null
+          gross_price?: number | null
+          id?: string
+          notes?: string | null
+          org_id?: string
+          price_date?: string | null
+          price_text?: string | null
+          project_id?: string | null
+          project_label?: string | null
+          quantity?: number | null
+          raw_description?: string | null
+          scope?: string | null
+          source_doc?: string | null
+          source_url?: string | null
+          status?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          updated_at?: string
+          vendor_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_pricing_catalog_item_id_fkey"
+            columns: ["catalog_item_id"]
+            isOneToOne: false
+            referencedRelation: "catalog_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_pricing_global_vendor_id_fkey"
+            columns: ["global_vendor_id"]
+            isOneToOne: false
+            referencedRelation: "global_vendors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_pricing_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "vendor_pricing_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_quotes: {
         Row: {
           award_date: string | null
@@ -2963,32 +3491,38 @@ export type Database = {
       weekly_report_attachments: {
         Row: {
           created_at: string
+          drive_file_id: string | null
+          drive_url: string | null
           file_name: string
           file_size: number
           id: string
           project_id: string
           report_id: string
-          storage_path: string
+          storage_path: string | null
           uploaded_by: string
         }
         Insert: {
           created_at?: string
+          drive_file_id?: string | null
+          drive_url?: string | null
           file_name?: string
           file_size?: number
           id?: string
           project_id: string
           report_id: string
-          storage_path: string
+          storage_path?: string | null
           uploaded_by: string
         }
         Update: {
           created_at?: string
+          drive_file_id?: string | null
+          drive_url?: string | null
           file_name?: string
           file_size?: number
           id?: string
           project_id?: string
           report_id?: string
-          storage_path?: string
+          storage_path?: string | null
           uploaded_by?: string
         }
         Relationships: [
@@ -3093,7 +3627,6 @@ export type Database = {
       get_user_organization_id: { Args: { _user_id: string }; Returns: string }
       has_investment_access: { Args: { _user_id: string }; Returns: boolean }
       is_consultant: { Args: { _user_id: string }; Returns: boolean }
-      is_org_admin: { Args: { _user_id: string }; Returns: boolean }
     }
     Enums: {
       item_category:
@@ -3227,7 +3760,7 @@ export type CompositeTypes<
 }
   ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
   : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+    ? DefaultSchema["CompositeTypes"][CompositeTypeName]
     : never
 
 export const Constants = {
