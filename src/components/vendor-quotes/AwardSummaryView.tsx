@@ -3,9 +3,10 @@ import { SEGMENTS, type BidItem, type VendorQuote, fmt } from "./types";
 interface Props {
   bidItems: BidItem[];
   quotesForItem: (id: string) => VendorQuote[];
+  leveledForQuote: (quote: VendorQuote) => number;
 }
 
-export default function AwardSummaryView({ bidItems, quotesForItem }: Props) {
+export default function AwardSummaryView({ bidItems, quotesForItem, leveledForQuote }: Props) {
   let grandTotal = 0;
 
   const segmentData = SEGMENTS.map((seg) => {
@@ -15,7 +16,7 @@ export default function AwardSummaryView({ bidItems, quotesForItem }: Props) {
       .map((bi) => {
         const awarded = quotesForItem(bi.id).find((v) => v.vendor_status === "Awarded");
         if (!awarded) return null;
-        const amt = awarded.final_quote_amount ?? 0;
+        const amt = leveledForQuote(awarded);
         subtotal += amt;
         return { bi, awarded, amt };
       })
@@ -42,7 +43,7 @@ export default function AwardSummaryView({ bidItems, quotesForItem }: Props) {
             <th className="text-left px-4 py-2 font-medium text-muted-foreground">Segment</th>
             <th className="text-left px-4 py-2 font-medium text-muted-foreground">Item / Trade</th>
             <th className="text-left px-4 py-2 font-medium text-muted-foreground">Awarded Vendor</th>
-            <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount</th>
+            <th className="text-right px-4 py-2 font-medium text-muted-foreground">Amount (Leveled)</th>
             <th className="text-left px-4 py-2 font-medium text-muted-foreground">Award Date</th>
             <th className="text-left px-4 py-2 font-medium text-muted-foreground">Notes</th>
           </tr>

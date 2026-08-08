@@ -46,6 +46,23 @@ export interface VendorQuote {
   updated_at: string;
 }
 
+export interface Adjustment {
+  id: string;
+  quote_id: string;
+  description: string;
+  amount: number;
+  created_at: string;
+}
+
+// The leveled total is the true apples-to-apples comparison basis: the
+// vendor's raw final quote plus/minus scope adjustments that normalize for
+// what they included or excluded relative to the requested scope.
+export function leveledTotal(quote: VendorQuote, adjustments: Adjustment[]): number {
+  const base = quote.final_quote_amount ?? 0;
+  const adjSum = adjustments.reduce((s, a) => s + a.amount, 0);
+  return base + adjSum;
+}
+
 export function fmt(n: number | null | undefined): string {
   if (n == null) return "—";
   return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });

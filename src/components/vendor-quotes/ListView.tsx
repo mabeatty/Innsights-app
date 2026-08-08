@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { SEGMENTS, type BidItem, type VendorQuote, fmt } from "./types";
+import { SEGMENTS, type BidItem, type VendorQuote, type Adjustment, fmt } from "./types";
 import BidItemDialog from "./BidItemDialog";
 import VendorQuoteDialog from "./VendorQuoteDialog";
 
@@ -14,10 +14,12 @@ interface Props {
   projectId: string;
   bidItems: BidItem[];
   quotesForItem: (id: string) => VendorQuote[];
+  adjustmentsForQuote: (quoteId: string) => Adjustment[];
+  leveledForQuote: (quote: VendorQuote) => number;
   refetch: () => void;
 }
 
-export default function ListView({ projectId, bidItems, quotesForItem, refetch }: Props) {
+export default function ListView({ projectId, bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote, refetch }: Props) {
   const [openSegments, setOpenSegments] = useState<Set<string>>(new Set(SEGMENTS));
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [bidDialog, setBidDialog] = useState<{ open: boolean; edit?: BidItem | null; segment?: string }>({ open: false });
@@ -68,8 +70,8 @@ export default function ListView({ projectId, bidItems, quotesForItem, refetch }
                       <tr>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "30%" }}>Item / Trade</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "12%" }}>Vendors</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Lowest</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Highest</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Lowest (Leveled)</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Highest (Leveled)</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "16%" }}>Awarded</th>
                         <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "10%" }}>Status</th>
                         <th className="px-2 py-2" style={{ width: "4%" }}></th>
@@ -78,9 +80,9 @@ export default function ListView({ projectId, bidItems, quotesForItem, refetch }
                     <tbody>
                       {items.map((bi) => {
                         const vqs = quotesForItem(bi.id);
-                        const amounts = vqs.map((v) => v.final_quote_amount).filter((a): a is number => a != null);
-                        const lowest = amounts.length ? Math.min(...amounts) : null;
-                        const highest = amounts.length ? Math.max(...amounts) : null;
+                        const leveledAmounts = vqs.map((v) => leveledForQuote(v));
+                        const lowest = leveledAmounts.length ? Math.min(...leveledAmounts) : null;
+                        const highest = leveledAmounts.length ? Math.max(...leveledAmounts) : null;
                         const awarded = vqs.find((v) => v.vendor_status === "Awarded");
                         const isExpanded = expandedItem === bi.id;
                         return (
@@ -127,19 +129,26 @@ export default function ListView({ projectId, bidItems, quotesForItem, refetch }
                                               <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">R3</th>
                                               <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">R4</th>
                                               <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Final</th>
+                                              <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Adj.</th>
+                                              <th className="text-right py-1.5 px-2 font-medium text-muted-foreground">Leveled Total</th>
                                               <th className="text-left py-1.5 px-2 font-medium text-muted-foreground">Status</th>
                                               <th className="py-1.5 px-1"></th>
                                             </tr>
                                           </thead>
                                           <tbody>
-                                            {vqs.map((vq) => (
+                                            {vqs.map((vq) => {
+                                              const adj = adjustmentsForQuote(vq.id);
+                                              const leveled = leveledForQuote(vq);
+                                              return (
                                               <tr key={vq.id} className="border-b last:border-0">
                                                 <td className="py-1.5 pr-3 font-medium">{vq.vendor_name}</td>
                                                 <td className="py-1.5 px-2 text-right">{fmt(vq.round_1_amount)}</td>
                                                 <td className="py-1.5 px-2 text-right">{fmt(vq.round_2_amount)}</td>
                                                 <td className="py-1.5 px-2 text-right">{fmt(vq.round_3_amount)}</td>
                                                 <td className="py-1.5 px-2 text-right">{fmt(vq.round_4_amount)}</td>
-                                                <td className="py-1.5 px-2 text-right font-semibold">{fmt(vq.final_quote_amount)}</td>
+                                                <td className="py-1.5 px-2 text-right">{fmt(vq.final_quote_amount)}</td>
+                                                <td className="py-1.5 px-2 text-right text-muted-foreground">{adj.length > 0 ? `${adj.length}` : "—"}</td>
+                                                <td className="py-1.5 px-2 text-right font-semibold">{fmt(leveled)}</td>
                                                 <td className="py-1.5 px-2"><Badge variant={statusColor(vq.vendor_status)} className="text-[10px]">{vq.vendor_status}</Badge></td>
                                                 <td className="py-1.5 px-1">
                                                   <DropdownMenu>
@@ -153,7 +162,8 @@ export default function ListView({ projectId, bidItems, quotesForItem, refetch }
                                                   </DropdownMenu>
                                                 </td>
                                               </tr>
-                                            ))}
+                                              );
+                                            })}
                                           </tbody>
                                         </table>
                                       </div>
@@ -192,6 +202,7 @@ export default function ListView({ projectId, bidItems, quotesForItem, refetch }
           onOpenChange={(v) => setQuoteDialog((p) => ({ ...p, open: v }))}
           bidItemId={quoteDialog.bidItemId}
           editQuote={quoteDialog.edit}
+          existingAdjustments={quoteDialog.edit ? adjustmentsForQuote(quoteDialog.edit.id) : []}
           onSaved={refetch}
         />
       )}

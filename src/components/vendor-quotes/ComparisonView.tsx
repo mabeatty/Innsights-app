@@ -2,21 +2,23 @@ import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { AlertTriangle } from "lucide-react";
-import { type BidItem, type VendorQuote, fmt } from "./types";
+import { type BidItem, type VendorQuote, type Adjustment, fmt } from "./types";
 
 interface Props {
   bidItems: BidItem[];
   quotesForItem: (id: string) => VendorQuote[];
+  adjustmentsForQuote: (quoteId: string) => Adjustment[];
+  leveledForQuote: (quote: VendorQuote) => number;
 }
 
-export default function ComparisonView({ bidItems, quotesForItem }: Props) {
+export default function ComparisonView({ bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote }: Props) {
   const [selectedId, setSelectedId] = useState<string>(bidItems[0]?.id ?? "");
 
   const vqs = quotesForItem(selectedId);
-  const amounts = vqs.map((v) => v.final_quote_amount).filter((a): a is number => a != null);
-  const lowest = amounts.length ? Math.min(...amounts) : null;
-  const highest = amounts.length ? Math.max(...amounts) : null;
-  const average = amounts.length ? amounts.reduce((s, a) => s + a, 0) / amounts.length : null;
+  const leveled = vqs.map((v) => leveledForQuote(v));
+  const lowest = leveled.length ? Math.min(...leveled) : null;
+  const highest = leveled.length ? Math.max(...leveled) : null;
+  const average = leveled.length ? leveled.reduce((s, a) => s + a, 0) / leveled.length : null;
 
   const variance = (val: number | null, base: number | null) => {
     if (val == null || base == null || base === 0) return { dollar: "—", pct: "—" };
@@ -24,6 +26,9 @@ export default function ComparisonView({ bidItems, quotesForItem }: Props) {
     const p = (d / base) * 100;
     return { dollar: fmt(d), pct: `${p >= 0 ? "+" : ""}${p.toFixed(1)}%` };
   };
+
+  const adjTitle = (adj: Adjustment[]) =>
+    adj.length === 0 ? "No adjustments" : adj.map((a) => `${a.description || "Adjustment"}: ${fmt(a.amount)}`).join("\n");
 
   if (bidItems.length === 0) return <p className="text-sm text-muted-foreground py-4">No bid items to compare.</p>;
 
@@ -47,8 +52,9 @@ export default function ComparisonView({ bidItems, quotesForItem }: Props) {
               <tr>
                 <th className="text-left px-4 py-2 font-medium text-muted-foreground sticky left-0 bg-muted/50">Metric</th>
                 {vqs.map((vq) => {
-                  const isLowest = lowest != null && vq.final_quote_amount === lowest;
-                  const isHighest = highest != null && vq.final_quote_amount === highest && lowest !== highest;
+                  const lvl = leveledForQuote(vq);
+                  const isLowest = lowest != null && lvl === lowest;
+                  const isHighest = highest != null && lvl === highest && lowest !== highest;
                   return (
                     <th key={vq.id} className={`text-right px-4 py-2 font-medium min-w-[140px] ${isLowest ? "text-green-600" : isHighest ? "text-red-600" : "text-foreground"}`}>
                       {vq.vendor_name}
@@ -67,23 +73,44 @@ export default function ComparisonView({ bidItems, quotesForItem }: Props) {
                   })}
                 </tr>
               ))}
-              <tr className="border-t bg-muted/20 font-semibold">
-                <td className="px-4 py-2 sticky left-0 bg-muted/20">Final Quote</td>
+              <tr className="border-t">
+                <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Raw Final Quote</td>
+                {vqs.map((vq) => (
+                  <td key={vq.id} className="text-right px-4 py-2">{fmt(vq.final_quote_amount)}</td>
+                ))}
+              </tr>
+              <tr className="border-t">
+                <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Scope Adjustments</td>
                 {vqs.map((vq) => {
-                  const isLowest = lowest != null && vq.final_quote_amount === lowest;
-                  const isHighest = highest != null && vq.final_quote_amount === highest && lowest !== highest;
+                  const adj = adjustmentsForQuote(vq.id);
+                  const sum = adj.reduce((s, a) => s + a.amount, 0);
+                  return (
+                    <td key={vq.id} className="text-right px-4 py-2" title={adjTitle(adj)}>
+                      {adj.length === 0 ? "—" : `${sum >= 0 ? "+" : ""}${fmt(sum)}`}
+                      {adj.length > 0 && <span className="text-xs text-muted-foreground"> ({adj.length})</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+              <tr className="border-t bg-muted/20 font-semibold">
+                <td className="px-4 py-2 sticky left-0 bg-muted/20">Leveled Total</td>
+                {vqs.map((vq) => {
+                  const lvl = leveledForQuote(vq);
+                  const isLowest = lowest != null && lvl === lowest;
+                  const isHighest = highest != null && lvl === highest && lowest !== highest;
                   return (
                     <td key={vq.id} className={`text-right px-4 py-2 ${isLowest ? "text-green-600" : isHighest ? "text-red-600" : ""}`}>
-                      {fmt(vq.final_quote_amount)}
+                      {fmt(lvl)}
                     </td>
                   );
                 })}
               </tr>
               <tr className="border-t">
-                <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Var. from Lowest</td>
+                <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Var. from Lowest (Leveled)</td>
                 {vqs.map((vq) => {
-                  const v = variance(vq.final_quote_amount, lowest);
-                  const isOutlier = lowest != null && vq.final_quote_amount != null && vq.final_quote_amount > lowest * 1.2;
+                  const lvl = leveledForQuote(vq);
+                  const v = variance(lvl, lowest);
+                  const isOutlier = lowest != null && lvl > lowest * 1.2;
                   return (
                     <td key={vq.id} className="text-right px-4 py-2">
                       <span className="flex items-center justify-end gap-1">
@@ -95,9 +122,9 @@ export default function ComparisonView({ bidItems, quotesForItem }: Props) {
                 })}
               </tr>
               <tr className="border-t">
-                <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Var. from Average</td>
+                <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Var. from Average (Leveled)</td>
                 {vqs.map((vq) => {
-                  const v = variance(vq.final_quote_amount, average);
+                  const v = variance(leveledForQuote(vq), average);
                   return <td key={vq.id} className="text-right px-4 py-2">{v.dollar} ({v.pct})</td>;
                 })}
               </tr>

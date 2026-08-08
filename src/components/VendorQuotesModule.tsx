@@ -13,7 +13,7 @@ interface Props {
 
 export default function VendorQuotesModule({ projectId }: Props) {
   const [view, setView] = useState<View>("list");
-  const { bidItems, loading, refetch, quotesForItem } = useVendorQuotesData(projectId);
+  const { bidItems, loading, refetch, quotesForItem, adjustmentsForQuote, leveledForQuote } = useVendorQuotesData(projectId);
 
   if (loading) return <p className="text-sm text-muted-foreground py-4">Loading vendor quotes…</p>;
 
@@ -22,14 +22,14 @@ export default function VendorQuotesModule({ projectId }: Props) {
       <div className="flex items-center gap-2">
         {(["list", "comparison", "award"] as const).map((v) => (
           <Button key={v} size="sm" variant={view === v ? "default" : "outline"} onClick={() => setView(v)}>
-            {v === "list" ? "List View" : v === "comparison" ? "Comparison View" : "Award Summary"}
+            {v === "list" ? "List View" : v === "comparison" ? "Leveling Comparison" : "Award Summary"}
           </Button>
         ))}
       </div>
 
-      {view === "list" && <ListView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} refetch={refetch} />}
-      {view === "comparison" && <ComparisonView bidItems={bidItems} quotesForItem={quotesForItem} />}
-      {view === "award" && <AwardSummaryView bidItems={bidItems} quotesForItem={quotesForItem} />}
+      {view === "list" && <ListView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} refetch={refetch} />}
+      {view === "comparison" && <ComparisonView bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} />}
+      {view === "award" && <AwardSummaryView bidItems={bidItems} quotesForItem={quotesForItem} leveledForQuote={leveledForQuote} />}
     </div>
   );
 }

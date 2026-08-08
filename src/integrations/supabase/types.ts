@@ -3377,6 +3377,38 @@ export type Database = {
           },
         ]
       }
+      vendor_quote_adjustments: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string
+          id: string
+          quote_id: string
+        }
+        Insert: {
+          amount?: number
+          created_at?: string
+          description?: string
+          id?: string
+          quote_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string
+          id?: string
+          quote_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendor_quote_adjustments_quote_id_fkey"
+            columns: ["quote_id"]
+            isOneToOne: false
+            referencedRelation: "vendor_quotes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       vendor_quotes: {
         Row: {
           award_date: string | null
