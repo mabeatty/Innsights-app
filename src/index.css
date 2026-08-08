@@ -106,3 +106,21 @@
     @apply font-semibold text-muted-foreground uppercase text-xs tracking-wider;
   }
 }
+
+/* Printing a single report (e.g. the bid leveling report) without the rest of
+   the app chrome. Give the element you want printed the id below. */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #bid-leveling-report,
+  #bid-leveling-report * {
+    visibility: visible;
+  }
+  #bid-leveling-report {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}

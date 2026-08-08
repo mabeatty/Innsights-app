@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { type BidItem, type VendorQuote, type Adjustment, fmt } from "./types";
+import BidLevelingReportDialog from "./BidLevelingReportDialog";
 
 interface Props {
   bidItems: BidItem[];
@@ -13,8 +15,10 @@ interface Props {
 
 export default function ComparisonView({ bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote }: Props) {
   const [selectedId, setSelectedId] = useState<string>(bidItems[0]?.id ?? "");
+  const [reportOpen, setReportOpen] = useState(false);
 
   const vqs = quotesForItem(selectedId);
+  const selectedBidItem = bidItems.find((bi) => bi.id === selectedId) ?? null;
   const leveled = vqs.map((v) => leveledForQuote(v));
   const lowest = leveled.length ? Math.min(...leveled) : null;
   const highest = leveled.length ? Math.max(...leveled) : null;
@@ -34,13 +38,20 @@ export default function ComparisonView({ bidItems, quotesForItem, adjustmentsFor
 
   return (
     <div className="space-y-4">
-      <div className="max-w-xs">
-        <Select value={selectedId} onValueChange={setSelectedId}>
-          <SelectTrigger><SelectValue placeholder="Select a bid item" /></SelectTrigger>
-          <SelectContent>
-            {bidItems.map((bi) => <SelectItem key={bi.id} value={bi.id}>{bi.segment} — {bi.item_name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+      <div className="flex items-center justify-between gap-3">
+        <div className="max-w-xs flex-1">
+          <Select value={selectedId} onValueChange={setSelectedId}>
+            <SelectTrigger><SelectValue placeholder="Select a bid item" /></SelectTrigger>
+            <SelectContent>
+              {bidItems.map((bi) => <SelectItem key={bi.id} value={bi.id}>{bi.segment} — {bi.item_name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        {vqs.length > 0 && (
+          <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setReportOpen(true)}>
+            <Sparkles className="h-3.5 w-3.5" /> Generate Report
+          </Button>
+        )}
       </div>
 
       {vqs.length === 0 ? (
@@ -147,6 +158,17 @@ export default function ComparisonView({ bidItems, quotesForItem, adjustmentsFor
             </tbody>
           </table>
         </div>
+      )}
+
+      {selectedBidItem && (
+        <BidLevelingReportDialog
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          bidItem={selectedBidItem}
+          quotes={vqs}
+          adjustmentsForQuote={adjustmentsForQuote}
+          leveledForQuote={leveledForQuote}
+        />
       )}
     </div>
   );
