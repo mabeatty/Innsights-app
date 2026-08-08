@@ -222,7 +222,7 @@ export default function ProjectView() {
             <CalendarDays className="h-3.5 w-3.5" /> Schedule
           </TabsTrigger>
           <TabsTrigger value="procurement" className="gap-1.5">
-            <ClipboardList className="h-3.5 w-3.5" /> Takeoffs
+            <ClipboardList className="h-3.5 w-3.5" /> Procurement
           </TabsTrigger>
           <TabsTrigger value="reports" className="gap-1.5">
             <NotebookPen className="h-3.5 w-3.5" /> Reports
