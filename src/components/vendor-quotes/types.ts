@@ -46,11 +46,15 @@ export interface VendorQuote {
   updated_at: string;
 }
 
+export const ADJUSTMENT_CATEGORIES = ["Freight", "Tax/Tariff", "Installation", "Other Scope"] as const;
+export type AdjustmentCategory = typeof ADJUSTMENT_CATEGORIES[number];
+
 export interface Adjustment {
   id: string;
   quote_id: string;
   description: string;
   amount: number;
+  category: AdjustmentCategory | string;
   created_at: string;
 }
 
@@ -61,6 +65,12 @@ export function leveledTotal(quote: VendorQuote, adjustments: Adjustment[]): num
   const base = quote.final_quote_amount ?? 0;
   const adjSum = adjustments.reduce((s, a) => s + a.amount, 0);
   return base + adjSum;
+}
+
+// Net adjustment amount for one category, e.g. "how much did we add/deduct
+// for Freight" — used for the per-vendor Normalized Price quick view.
+export function categoryNet(adjustments: Adjustment[], category: string): number {
+  return adjustments.filter((a) => a.category === category).reduce((s, a) => s + a.amount, 0);
 }
 
 export function fmt(n: number | null | undefined): string {

@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature } from "lucide-react";
+import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfoSummary } from "@/components/ProjectInfoSummary";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -33,6 +33,7 @@ import BudgetModule from "@/components/BudgetModule";
 import ScheduleModule from "@/components/ScheduleModule";
 import CapitalPlanningModule from "@/components/CapitalPlanningModule";
 import ProcurementModule from "@/components/ProcurementModule";
+import AssistantTab from "@/components/AssistantTab";
 import ReportsModule from "@/components/ReportsModule";
 import TasksModule from "@/components/TasksModule";
 
@@ -233,6 +234,9 @@ export default function ProjectView() {
           <TabsTrigger value="documents" className="gap-1.5">
             <FolderOpen className="h-3.5 w-3.5" /> Resources
           </TabsTrigger>
+          <TabsTrigger value="assistant" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" /> Assistant
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="executive-summary">
@@ -251,6 +255,10 @@ export default function ProjectView() {
 
         <TabsContent value="documents">
           <ProjectDocuments projectId={id!} projectName={project.name} />
+        </TabsContent>
+
+        <TabsContent value="assistant">
+          <AssistantTab projectId={id!} />
         </TabsContent>
 
         <TabsContent value="schedule">

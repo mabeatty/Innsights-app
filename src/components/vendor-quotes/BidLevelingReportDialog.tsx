@@ -44,7 +44,7 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
           leveled_total: leveledForQuote(q),
           vendor_status: q.vendor_status,
           notes: q.notes,
-          adjustments: adjustmentsForQuote(q.id).map((a) => ({ description: a.description, amount: a.amount })),
+          adjustments: adjustmentsForQuote(q.id).map((a) => ({ description: a.description, amount: a.amount, category: a.category })),
         })),
       };
       const { data, error: fnError } = await supabase.functions.invoke("generate-bid-leveling-report", { body: payload });

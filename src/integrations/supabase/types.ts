@@ -2363,6 +2363,41 @@ export type Database = {
         }
         Relationships: []
       }
+      project_assistant_messages: {
+        Row: {
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          project_id: string
+          role: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          project_id: string
+          role: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          project_id?: string
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_assistant_messages_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       project_approvers: {
         Row: {
           approver_id: string | null
@@ -3380,6 +3415,7 @@ export type Database = {
       vendor_quote_adjustments: {
         Row: {
           amount: number
+          category: string
           created_at: string
           description: string
           id: string
@@ -3387,6 +3423,7 @@ export type Database = {
         }
         Insert: {
           amount?: number
+          category?: string
           created_at?: string
           description?: string
           id?: string
@@ -3394,6 +3431,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          category?: string
           created_at?: string
           description?: string
           id?: string

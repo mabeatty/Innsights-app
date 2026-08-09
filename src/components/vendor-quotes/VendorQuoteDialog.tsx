@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { fmt } from "./types";
+import { fmt, ADJUSTMENT_CATEGORIES } from "./types";
 import type { VendorQuote, VendorStatus, Adjustment } from "./types";
 
 interface Props {
@@ -22,7 +22,7 @@ interface Props {
 
 function numOrNull(v: string): number | null { const n = parseFloat(v); return isNaN(n) ? null : n; }
 
-type LocalAdjustment = { id?: string; description: string; amount: string };
+type LocalAdjustment = { id?: string; description: string; amount: string; category: string };
 
 export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQuote, existingAdjustments, onSaved }: Props) {
   const q = editQuote;
@@ -44,7 +44,7 @@ export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQ
   const [awardDate, setAwardDate] = useState(q?.award_date ?? "");
   const [notes, setNotes] = useState(q?.notes ?? "");
   const [adjustments, setAdjustments] = useState<LocalAdjustment[]>(
-    existingAdjustments?.map((a) => ({ id: a.id, description: a.description, amount: a.amount.toString() })) ?? []
+    existingAdjustments?.map((a) => ({ id: a.id, description: a.description, amount: a.amount.toString(), category: a.category })) ?? []
   );
   const [saving, setSaving] = useState(false);
 
@@ -86,7 +86,7 @@ export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQ
       await supabase.from("vendor_quote_adjustments").delete().eq("quote_id", quoteId);
       const rows = adjustments
         .filter((a) => a.description.trim() || numOrNull(a.amount) != null)
-        .map((a) => ({ quote_id: quoteId, description: a.description.trim(), amount: numOrNull(a.amount) ?? 0 }));
+        .map((a) => ({ quote_id: quoteId, description: a.description.trim(), amount: numOrNull(a.amount) ?? 0, category: a.category }));
       if (rows.length > 0) {
         const { error: adjError } = await supabase.from("vendor_quote_adjustments").insert(rows);
         if (adjError) toast.error(`Quote saved, but adjustments failed: ${adjError.message}`);
@@ -99,8 +99,8 @@ export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQ
     setSaving(false);
   };
 
-  const addAdjustment = () => setAdjustments((prev) => [...prev, { description: "", amount: "" }]);
-  const updateAdjustment = (idx: number, field: "description" | "amount", value: string) => {
+  const addAdjustment = () => setAdjustments((prev) => [...prev, { description: "", amount: "", category: "Other Scope" }]);
+  const updateAdjustment = (idx: number, field: "description" | "amount" | "category", value: string) => {
     setAdjustments((prev) => prev.map((a, i) => i === idx ? { ...a, [field]: value } : a));
   };
   const removeAdjustment = (idx: number) => setAdjustments((prev) => prev.filter((_, i) => i !== idx));
@@ -118,7 +118,7 @@ export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQ
       setR3Amt(q.round_3_amount?.toString() ?? ""); setR4Ref(q.round_4_ref ?? ""); setR4Url(q.round_4_url ?? "");
       setR4Amt(q.round_4_amount?.toString() ?? ""); setFinalAmt(q.final_quote_amount?.toString() ?? "");
       setStatus((q.vendor_status as VendorStatus) ?? "Pending"); setAwardDate(q.award_date ?? ""); setNotes(q.notes ?? "");
-      setAdjustments(existingAdjustments?.map((a) => ({ id: a.id, description: a.description, amount: a.amount.toString() })) ?? []);
+      setAdjustments(existingAdjustments?.map((a) => ({ id: a.id, description: a.description, amount: a.amount.toString(), category: a.category })) ?? []);
     } else if (v) {
       setVendorName(""); setR1Ref(""); setR1Url(""); setR1Amt(""); setR2Ref(""); setR2Url(""); setR2Amt("");
       setR3Ref(""); setR3Url(""); setR3Amt(""); setR4Ref(""); setR4Url(""); setR4Amt("");
@@ -164,9 +164,15 @@ export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQ
               <div className="space-y-2">
                 {adjustments.map((a, i) => (
                   <div key={i} className="flex items-center gap-2">
+                    <Select value={a.category} onValueChange={(v) => updateAdjustment(i, "category", v)}>
+                      <SelectTrigger className="w-32 h-8 text-xs shrink-0"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ADJUSTMENT_CATEGORIES.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                     <Input
                       className="flex-1 h-8 text-xs"
-                      placeholder="e.g. Add: permit fees excluded"
+                      placeholder="e.g. Freight excluded by vendor"
                       value={a.description}
                       onChange={(e) => updateAdjustment(i, "description", e.target.value)}
                     />
