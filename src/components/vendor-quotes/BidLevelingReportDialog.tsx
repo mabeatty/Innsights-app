@@ -30,11 +30,14 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = async () => {
+  const fetchReport = async (forceRegenerate: boolean) => {
     setLoading(true);
     setError(null);
     try {
       const payload = {
+        bidItemId: bidItem.id,
+        forceRegenerate,
+        userId: user?.id ?? null,
         segment: bidItem.segment,
         itemName: bidItem.item_name,
         quotes: quotes.map((q) => ({
@@ -54,42 +57,22 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
       if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
       setReport(data.report);
-      const now = new Date().toISOString();
-      setGeneratedAt(now);
-      // Persist so reopening this bid item's report doesn't call the AI again.
-      const { error: saveError } = await supabase
-        .from("bid_leveling_reports")
-        .upsert({ bid_item_id: bidItem.id, report: data.report, generated_at: now, generated_by: user?.id ?? null }, { onConflict: "bid_item_id" });
-      if (saveError) console.error("Failed to persist bid leveling report:", saveError);
+      setGeneratedAt(data.generatedAt ?? null);
+      if (data.fromCache === false && data.persisted === false) {
+        // Generated fine, but the server-side save failed — flag it clearly
+        // rather than let it look like everything's fine.
+        toast.warning("Report generated, but couldn't be saved — it may need to be regenerated next time you open it.");
+      }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to generate report.";
+      const msg = e instanceof Error ? e.message : "Failed to load report.";
       setError(msg);
       toast.error(msg);
     }
     setLoading(false);
   };
 
-  const loadOrGenerate = async () => {
-    setError(null);
-    setLoading(true);
-    const { data: cached, error: fetchError } = await supabase
-      .from("bid_leveling_reports")
-      .select("report, generated_at")
-      .eq("bid_item_id", bidItem.id)
-      .maybeSingle();
-    if (fetchError) console.error("Failed to check for a cached report:", fetchError);
-    if (cached) {
-      setReport(cached.report as unknown as Report);
-      setGeneratedAt(cached.generated_at);
-      setLoading(false);
-      return;
-    }
-    // No cached report yet — generate one for the first time.
-    await generate();
-  };
-
   useEffect(() => {
-    if (open) { setReport(null); setGeneratedAt(null); loadOrGenerate(); }
+    if (open) { setReport(null); setGeneratedAt(null); fetchReport(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bidItem.id]);
 
@@ -106,14 +89,14 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
         {loading && (
           <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <p className="text-sm">{report ? "Regenerating report…" : "Checking for a saved report…"}</p>
+            <p className="text-sm">{report ? "Regenerating report…" : "Loading report…"}</p>
           </div>
         )}
 
         {error && !loading && (
           <div className="py-8 text-center space-y-3">
             <p className="text-sm text-destructive">{error}</p>
-            <Button size="sm" variant="outline" onClick={generate} className="gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => fetchReport(false)} className="gap-1.5">
               <RefreshCw className="h-3.5 w-3.5" /> Try Again
             </Button>
           </div>
@@ -129,7 +112,7 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
                 </p>
               </div>
               <div className="flex gap-2 print:hidden">
-                <Button size="sm" variant="outline" onClick={generate} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => fetchReport(true)} className="gap-1.5">
                   <RefreshCw className="h-3.5 w-3.5" /> Regenerate
                 </Button>
                 <Button size="sm" onClick={() => window.print()} className="gap-1.5">

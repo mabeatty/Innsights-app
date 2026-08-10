@@ -2,7 +2,18 @@
 // key differences between vendor bids, an explanation of the leveling
 // adjustments applied, and considerations for the PM team.
 //
-// Requires the Supabase secret ANTHROPIC_API_KEY. Optionally ANTHROPIC_MODEL.
+// This function owns the entire cache-or-generate flow server-side using the
+// service-role client, on purpose: if a report already exists for this bid
+// item and forceRegenerate isn't set, it's returned immediately with no call
+// to Claude at all. A freshly generated report is saved before returning, so
+// persistence can't silently fail from a client-side RLS edge case — there
+// is exactly one place this happens, with a service role that always has
+// write access.
+//
+// Requires the Supabase secrets ANTHROPIC_API_KEY, SUPABASE_URL,
+// SUPABASE_SERVICE_ROLE_KEY. Optionally ANTHROPIC_MODEL.
+
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -72,19 +83,40 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey) return json({ error: "ANTHROPIC_API_KEY is not configured." }, 500);
-    const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6";
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { segment, itemName, quotes } = (await req.json()) as {
+    const { bidItemId, segment, itemName, quotes, forceRegenerate, userId } = (await req.json()) as {
+      bidItemId: string;
       segment: string;
       itemName: string;
       quotes: QuoteInput[];
+      forceRegenerate?: boolean;
+      userId?: string | null;
     };
 
-    if (!quotes || quotes.length === 0) {
-      return json({ error: "No vendor quotes to compare." }, 400);
+    if (!bidItemId) return json({ error: "Missing bidItemId." }, 400);
+    if (!quotes || quotes.length === 0) return json({ error: "No vendor quotes to compare." }, 400);
+
+    // Check for an existing saved report first — this is the whole point of
+    // persistence, so this check happens unconditionally before anything
+    // that would call the AI.
+    if (!forceRegenerate) {
+      const { data: cached, error: cacheError } = await supabase
+        .from("bid_leveling_reports")
+        .select("report, generated_at")
+        .eq("bid_item_id", bidItemId)
+        .maybeSingle();
+      if (cacheError) console.error("[generate-bid-leveling-report] cache lookup error", cacheError);
+      if (cached) {
+        return json({ report: cached.report, generatedAt: cached.generated_at, fromCache: true });
+      }
     }
+
+    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+    if (!apiKey) return json({ error: "ANTHROPIC_API_KEY is not configured." }, 500);
+    const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6";
 
     const fmt = (n: number | null) => (n == null ? "—" : `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
 
@@ -147,7 +179,23 @@ Deno.serve(async (req) => {
       return json({ error: "No report returned by Claude." }, 500);
     }
 
-    return json({ report: toolUse.input });
+    const report = toolUse.input;
+    const generatedAt = new Date().toISOString();
+
+    const { error: saveError } = await supabase
+      .from("bid_leveling_reports")
+      .upsert(
+        { bid_item_id: bidItemId, report, generated_at: generatedAt, generated_by: userId ?? null },
+        { onConflict: "bid_item_id" }
+      );
+    if (saveError) {
+      // Still return the report to the user even if the save failed — but log
+      // loudly, since a save failure here is exactly the "regenerates every
+      // time" bug this function exists to prevent.
+      console.error("[generate-bid-leveling-report] FAILED TO PERSIST REPORT", saveError);
+    }
+
+    return json({ report, generatedAt, fromCache: false, persisted: !saveError });
   } catch (e) {
     console.error("[generate-bid-leveling-report] error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
