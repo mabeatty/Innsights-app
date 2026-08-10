@@ -93,9 +93,9 @@ export default function AssistantWidget({ projectId }: Props) {
   };
 
   return (
-    <>
+    <div id="assistant-widget-root">
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-[380px] h-[520px] flex flex-col rounded-lg border bg-card shadow-2xl overflow-hidden">
+        <div className="fixed bottom-24 right-6 z-[100] w-[380px] h-[520px] flex flex-col rounded-lg border bg-card shadow-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/40">
             <div className="flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-primary" />
@@ -160,11 +160,11 @@ export default function AssistantWidget({ projectId }: Props) {
 
       <Button
         size="icon"
-        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg"
+        className="fixed bottom-6 right-6 z-[100] h-12 w-12 rounded-full shadow-lg"
         onClick={() => setOpen((o) => !o)}
       >
         {open ? <X className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}
       </Button>
-    </>
+    </div>
   );
 }

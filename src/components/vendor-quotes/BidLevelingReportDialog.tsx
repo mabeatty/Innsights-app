@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Printer, Loader2, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { type BidItem, type VendorQuote, type Adjustment, fmt } from "./types";
 
@@ -23,7 +24,9 @@ interface Props {
 }
 
 export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, quotes, adjustmentsForQuote, leveledForQuote }: Props) {
+  const { user } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
+  const [generatedAt, setGeneratedAt] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -51,6 +54,13 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
       if (fnError) throw fnError;
       if (data?.error) throw new Error(data.error);
       setReport(data.report);
+      const now = new Date().toISOString();
+      setGeneratedAt(now);
+      // Persist so reopening this bid item's report doesn't call the AI again.
+      const { error: saveError } = await supabase
+        .from("bid_leveling_reports")
+        .upsert({ bid_item_id: bidItem.id, report: data.report, generated_at: now, generated_by: user?.id ?? null }, { onConflict: "bid_item_id" });
+      if (saveError) console.error("Failed to persist bid leveling report:", saveError);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Failed to generate report.";
       setError(msg);
@@ -59,10 +69,29 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
     setLoading(false);
   };
 
+  const loadOrGenerate = async () => {
+    setError(null);
+    setLoading(true);
+    const { data: cached, error: fetchError } = await supabase
+      .from("bid_leveling_reports")
+      .select("report, generated_at")
+      .eq("bid_item_id", bidItem.id)
+      .maybeSingle();
+    if (fetchError) console.error("Failed to check for a cached report:", fetchError);
+    if (cached) {
+      setReport(cached.report as unknown as Report);
+      setGeneratedAt(cached.generated_at);
+      setLoading(false);
+      return;
+    }
+    // No cached report yet — generate one for the first time.
+    await generate();
+  };
+
   useEffect(() => {
-    if (open) { setReport(null); setError(null); generate(); }
+    if (open) { setReport(null); setGeneratedAt(null); loadOrGenerate(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }, [open, bidItem.id]);
 
   const leveled = quotes.map((q) => leveledForQuote(q));
   const lowest = leveled.length ? Math.min(...leveled) : null;
@@ -77,7 +106,7 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
         {loading && (
           <div className="flex flex-col items-center justify-center py-12 gap-2 text-muted-foreground">
             <Loader2 className="h-6 w-6 animate-spin" />
-            <p className="text-sm">Generating report…</p>
+            <p className="text-sm">{report ? "Regenerating report…" : "Checking for a saved report…"}</p>
           </div>
         )}
 
@@ -95,7 +124,9 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
             <div className="flex items-start justify-between print:mb-2">
               <div>
                 <h2 className="text-lg font-semibold">{bidItem.segment} — {bidItem.item_name}</h2>
-                <p className="text-xs text-muted-foreground">Bid Leveling Report · Generated {new Date().toLocaleDateString()}</p>
+                <p className="text-xs text-muted-foreground">
+                  Bid Leveling Report · Generated {generatedAt ? new Date(generatedAt).toLocaleString() : "—"}
+                </p>
               </div>
               <div className="flex gap-2 print:hidden">
                 <Button size="sm" variant="outline" onClick={generate} className="gap-1.5">

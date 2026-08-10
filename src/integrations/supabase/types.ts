@@ -195,6 +195,38 @@ export type Database = {
           },
         ]
       }
+      bid_leveling_reports: {
+        Row: {
+          bid_item_id: string
+          generated_at: string
+          generated_by: string | null
+          id: string
+          report: Json
+        }
+        Insert: {
+          bid_item_id: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          report: Json
+        }
+        Update: {
+          bid_item_id?: string
+          generated_at?: string
+          generated_by?: string | null
+          id?: string
+          report?: Json
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bid_leveling_reports_bid_item_id_fkey"
+            columns: ["bid_item_id"]
+            isOneToOne: true
+            referencedRelation: "vendor_bid_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bathroom_type_line_items: {
         Row: {
           bathroom_type_id: string
