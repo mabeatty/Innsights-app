@@ -116,7 +116,9 @@ export default function AssistantWidget({ projectId }: Props) {
                 <Sparkles className="h-7 w-7 opacity-40" />
                 <p className="text-sm font-medium">Ask about this project</p>
                 <p className="text-xs">
-                  I can see the budget, FF&E takeoff, and recent weekly reports. Try "walk me through the guest room FF&E summary."
+                  I can see the budget, FF&E takeoff, bidding (vendor quotes, adjustments, leveling reports),
+                  contracts, and recent weekly reports. Try "walk me through the guest room FF&E summary" or
+                  "help me refine the Shower Glass bid leveling report."
                 </p>
               </div>
             ) : (

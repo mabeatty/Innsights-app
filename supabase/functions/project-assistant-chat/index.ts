@@ -82,14 +82,96 @@ async function buildProjectContext(supabase: any, projectId: string): Promise<st
     );
   }
 
+  // Bidding: bid items, each vendor's quote, scope adjustments, leveled totals,
+  // and any AI-generated bid leveling report already saved for that item.
+  const { data: bidItems } = await supabase
+    .from("vendor_bid_items")
+    .select("id, segment, item_name, status")
+    .eq("project_id", projectId)
+    .order("segment");
+
+  if (bidItems && bidItems.length > 0) {
+    const bidItemIds = bidItems.map((bi: any) => bi.id);
+    const [{ data: quotes }, { data: savedReports }] = await Promise.all([
+      supabase.from("vendor_quotes").select("id, bid_item_id, vendor_name, round_1_amount, round_2_amount, round_3_amount, round_4_amount, final_quote_amount, vendor_status, notes").in("bid_item_id", bidItemIds),
+      supabase.from("bid_leveling_reports").select("bid_item_id, report, generated_at").in("bid_item_id", bidItemIds),
+    ]);
+    const quoteIds = (quotes ?? []).map((q: any) => q.id);
+    const { data: adjustments } = quoteIds.length > 0
+      ? await supabase.from("vendor_quote_adjustments").select("quote_id, description, amount, category").in("quote_id", quoteIds)
+      : { data: [] };
+
+    const adjByQuote = new Map<string, any[]>();
+    (adjustments ?? []).forEach((a: any) => {
+      if (!adjByQuote.has(a.quote_id)) adjByQuote.set(a.quote_id, []);
+      adjByQuote.get(a.quote_id)!.push(a);
+    });
+    const reportByItem = new Map<string, any>();
+    (savedReports ?? []).forEach((r: any) => reportByItem.set(r.bid_item_id, r));
+    const quotesByItem = new Map<string, any[]>();
+    (quotes ?? []).forEach((q: any) => {
+      if (!quotesByItem.has(q.bid_item_id)) quotesByItem.set(q.bid_item_id, []);
+      quotesByItem.get(q.bid_item_id)!.push(q);
+    });
+
+    const bidLines: string[] = [`\nBIDDING (${bidItems.length} bid items):`];
+    for (const bi of bidItems) {
+      const itemQuotes = quotesByItem.get(bi.id) ?? [];
+      bidLines.push(`\n[${bi.segment}] ${bi.item_name} — status: ${bi.status}`);
+      if (itemQuotes.length === 0) {
+        bidLines.push("  No vendor quotes submitted yet.");
+      }
+      for (const q of itemQuotes) {
+        const adj = adjByQuote.get(q.id) ?? [];
+        const adjSum = adj.reduce((s: number, a: any) => s + Number(a.amount), 0);
+        const leveled = Number(q.final_quote_amount ?? 0) + adjSum;
+        const adjText = adj.length > 0
+          ? adj.map((a: any) => `[${a.category}] ${a.description || "adj"}: ${a.amount >= 0 ? "+" : ""}${fmt(a.amount)}`).join("; ")
+          : "none";
+        bidLines.push(
+          `  - ${q.vendor_name}: raw ${fmt(q.final_quote_amount)}, adjustments: ${adjText}, leveled total ${fmt(leveled)}, status ${q.vendor_status}` +
+          (q.notes ? ` — notes: ${q.notes}` : "")
+        );
+      }
+      const savedReport = reportByItem.get(bi.id);
+      if (savedReport) {
+        const r = savedReport.report;
+        bidLines.push(
+          `  Existing AI bid leveling report (generated ${savedReport.generated_at}):\n` +
+          `    Executive summary: ${r.executive_summary}\n` +
+          `    Key differences: ${(r.key_differences ?? []).join(" | ")}\n` +
+          `    Leveling summary: ${r.leveling_summary}\n` +
+          `    Considerations: ${r.considerations}`
+        );
+      }
+    }
+    parts.push(bidLines.join("\n"));
+  }
+
+  // Contracts: what's actually been executed/awarded, by type.
+  const { data: contracts } = await supabase
+    .from("contracts")
+    .select("contract_number, contract_type, scope_summary, original_amount, status, vendors(name)")
+    .eq("project_id", projectId);
+
+  if (contracts && contracts.length > 0) {
+    parts.push(
+      `\nCONTRACTS (${contracts.length}):\n` +
+      contracts.map((c: any) => `- [${c.contract_type}] ${c.contract_number || "no #"} — ${c.vendors?.name ?? "unknown vendor"}: ${c.scope_summary}, ${fmt(c.original_amount)}, status ${c.status}`).join("\n")
+    );
+  }
+
   return parts.join("\n");
 }
 
 const SYSTEM_PROMPT_PREFIX =
   "You are the project assistant inside Innsights, a hotel construction/renovation project management tool. " +
   "You're having a conversation with someone on the project management team about this specific project. " +
-  "You have read access to the data below — use it to give specific, grounded answers (real dollar amounts, " +
-  "item names, division numbers) rather than generic advice. " +
+  "You have read access to the data below — budget, FF&E takeoff, weekly reports, bid items with vendor " +
+  "quotes and scope adjustments, any bid leveling reports already generated, and executed contracts — use it " +
+  "to give specific, grounded answers (real dollar amounts, vendor names, item names, division numbers) " +
+  "rather than generic advice. If something isn't in the context below, say so plainly rather than guessing " +
+  "or assuming it doesn't exist elsewhere in the app. " +
   "IMPORTANT: you cannot directly edit any data yourself — you can discuss, analyze, and suggest specific " +
   "changes (e.g. 'update the quantity for X to Y' or 'the unit price for Z looks stale, consider updating it'), " +
   "but the person will need to make the actual edit in the relevant part of the app. Never claim to have made " +
