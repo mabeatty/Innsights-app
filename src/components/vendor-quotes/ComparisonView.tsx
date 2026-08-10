@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle, Sparkles, FileText } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { type BidItem, type VendorQuote, type Adjustment, fmt, ADJUSTMENT_CATEGORIES, categoryNet } from "./types";
 import BidLevelingReportDialog from "./BidLevelingReportDialog";
 
@@ -16,6 +17,19 @@ interface Props {
 export default function ComparisonView({ bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote }: Props) {
   const [selectedId, setSelectedId] = useState<string>(bidItems[0]?.id ?? "");
   const [reportOpen, setReportOpen] = useState(false);
+  const [savedReports, setSavedReports] = useState<Map<string, string>>(new Map());
+
+  useEffect(() => {
+    const ids = bidItems.map((bi) => bi.id);
+    if (ids.length === 0) return;
+    supabase
+      .from("bid_leveling_reports")
+      .select("bid_item_id, generated_at")
+      .in("bid_item_id", ids)
+      .then(({ data }) => {
+        setSavedReports(new Map((data ?? []).map((r: any) => [r.bid_item_id, r.generated_at])));
+      });
+  }, [bidItems]);
 
   const vqs = quotesForItem(selectedId);
   const selectedBidItem = bidItems.find((bi) => bi.id === selectedId) ?? null;
@@ -48,9 +62,17 @@ export default function ComparisonView({ bidItems, quotesForItem, adjustmentsFor
           </Select>
         </div>
         {vqs.length > 0 && (
-          <Button size="sm" variant="outline" className="gap-1.5 shrink-0" onClick={() => setReportOpen(true)}>
-            <Sparkles className="h-3.5 w-3.5" /> Generate Report
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            {savedReports.has(selectedId) && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                Saved {new Date(savedReports.get(selectedId)!).toLocaleDateString()}
+              </span>
+            )}
+            <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setReportOpen(true)}>
+              {savedReports.has(selectedId) ? <FileText className="h-3.5 w-3.5" /> : <Sparkles className="h-3.5 w-3.5" />}
+              {savedReports.has(selectedId) ? "View Report" : "Generate Report"}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -198,7 +220,18 @@ export default function ComparisonView({ bidItems, quotesForItem, adjustmentsFor
       {selectedBidItem && (
         <BidLevelingReportDialog
           open={reportOpen}
-          onOpenChange={setReportOpen}
+          onOpenChange={(v) => {
+            setReportOpen(v);
+            if (!v) {
+              supabase
+                .from("bid_leveling_reports")
+                .select("bid_item_id, generated_at")
+                .in("bid_item_id", bidItems.map((bi) => bi.id))
+                .then(({ data }) => {
+                  setSavedReports(new Map((data ?? []).map((r: any) => [r.bid_item_id, r.generated_at])));
+                });
+            }
+          }}
           bidItem={selectedBidItem}
           quotes={vqs}
           adjustmentsForQuote={adjustmentsForQuote}
