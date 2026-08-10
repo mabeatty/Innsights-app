@@ -8,13 +8,14 @@ import { type BidItem, type VendorQuote, type Adjustment, fmt, ADJUSTMENT_CATEGO
 import BidLevelingReportDialog from "./BidLevelingReportDialog";
 
 interface Props {
+  projectId: string;
   bidItems: BidItem[];
   quotesForItem: (id: string) => VendorQuote[];
   adjustmentsForQuote: (quoteId: string) => Adjustment[];
   leveledForQuote: (quote: VendorQuote) => number;
 }
 
-export default function ComparisonView({ bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote }: Props) {
+export default function ComparisonView({ projectId, bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote }: Props) {
   const [selectedId, setSelectedId] = useState<string>(bidItems[0]?.id ?? "");
   const [reportOpen, setReportOpen] = useState(false);
   const [savedReports, setSavedReports] = useState<Map<string, string>>(new Map());
@@ -233,6 +234,7 @@ export default function ComparisonView({ bidItems, quotesForItem, adjustmentsFor
             }
           }}
           bidItem={selectedBidItem}
+          projectId={projectId}
           quotes={vqs}
           adjustmentsForQuote={adjustmentsForQuote}
           leveledForQuote={leveledForQuote}

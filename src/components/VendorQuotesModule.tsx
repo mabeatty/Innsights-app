@@ -28,7 +28,7 @@ export default function VendorQuotesModule({ projectId }: Props) {
       </div>
 
       {view === "list" && <ListView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} refetch={refetch} />}
-      {view === "comparison" && <ComparisonView bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} />}
+      {view === "comparison" && <ComparisonView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} />}
       {view === "award" && <AwardSummaryView bidItems={bidItems} quotesForItem={quotesForItem} leveledForQuote={leveledForQuote} />}
     </div>
   );

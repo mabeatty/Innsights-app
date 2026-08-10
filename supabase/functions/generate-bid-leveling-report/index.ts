@@ -3,17 +3,23 @@
 // adjustments applied, and considerations for the PM team.
 //
 // This function owns the entire cache-or-generate flow server-side using the
-// service-role client, on purpose: if a report already exists for this bid
-// item and forceRegenerate isn't set, it's returned immediately with no call
-// to Claude at all. A freshly generated report is saved before returning, so
-// persistence can't silently fail from a client-side RLS edge case — there
-// is exactly one place this happens, with a service role that always has
-// write access.
+// service-role client: if a report already exists for this bid item and
+// forceRegenerate isn't set, it's returned immediately with no call to Claude
+// at all. A freshly generated report is saved before returning.
+//
+// Now also pulls the shared buildProjectContext (see
+// ../_shared/project-context.ts — the same function project-assistant-chat
+// uses) so the report has the full project picture as background, not just
+// the one bid item's quotes. The prompt is written to keep the report
+// focused on the specific item regardless — broader context is there to
+// inform judgment (e.g. noticing a pattern across bid items), not to pad
+// the report with unrelated detail.
 //
 // Requires the Supabase secrets ANTHROPIC_API_KEY, SUPABASE_URL,
 // SUPABASE_SERVICE_ROLE_KEY. Optionally ANTHROPIC_MODEL.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { buildProjectContext, fmt } from "../_shared/project-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,6 +49,10 @@ const SYSTEM_PROMPT =
   "Adjustments are tagged by category (Freight, Tax/Tariff, Installation, Other Scope) in brackets — " +
   "call out by name whenever a price gap is driven by freight, tax, or tariff differences rather than " +
   "true scope, since that distinction matters for how the team should weigh the comparison. " +
+  "You'll also be given the broader project context (budget, other bid items, contracts, recent reports) " +
+  "for background — use it only if directly relevant (e.g. a pattern across multiple bid items, or a " +
+  "budget line this item should tie back to); the report itself must stay focused on THIS bid item, not " +
+  "turn into a project-wide summary. " +
   "Do not invent scope details not present in the notes or adjustment descriptions provided. " +
   "Frame any recommendation as a consideration for the team's judgment, not a directive — you " +
   "don't have full context on qualitative factors like vendor reliability or schedule fit. " +
@@ -87,8 +97,9 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
 
-    const { bidItemId, segment, itemName, quotes, forceRegenerate, userId } = (await req.json()) as {
+    const { bidItemId, projectId, segment, itemName, quotes, forceRegenerate, userId } = (await req.json()) as {
       bidItemId: string;
+      projectId?: string;
       segment: string;
       itemName: string;
       quotes: QuoteInput[];
@@ -118,8 +129,6 @@ Deno.serve(async (req) => {
     if (!apiKey) return json({ error: "ANTHROPIC_API_KEY is not configured." }, 500);
     const model = Deno.env.get("ANTHROPIC_MODEL") || "claude-sonnet-4-6";
 
-    const fmt = (n: number | null) => (n == null ? "—" : `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`);
-
     const quoteText = quotes
       .map((q) => {
         const rounds = [q.round_1_amount, q.round_2_amount, q.round_3_amount, q.round_4_amount]
@@ -144,6 +153,13 @@ Deno.serve(async (req) => {
       })
       .join("\n\n");
 
+    // Broader project context, for background only — see SYSTEM_PROMPT.
+    const projectContext = projectId ? await buildProjectContext(supabase, projectId) : "";
+
+    const userContent =
+      (projectContext ? `PROJECT CONTEXT (background only — the report must stay focused on the bid item below):\n${projectContext}\n\n` : "") +
+      `BID ITEM TO REPORT ON: ${segment} — ${itemName}\n\nVendor quotes:\n\n${quoteText}\n\nGenerate a bid leveling report focused on this bid item.`;
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -155,12 +171,7 @@ Deno.serve(async (req) => {
         model,
         max_tokens: 1200,
         system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: `Bid item: ${segment} — ${itemName}\n\nVendor quotes:\n\n${quoteText}\n\nGenerate a bid leveling report.`,
-          },
-        ],
+        messages: [{ role: "user", content: userContent }],
         tools: [REPORT_TOOL],
         tool_choice: { type: "tool", name: "return_report" },
       }),
@@ -189,9 +200,6 @@ Deno.serve(async (req) => {
         { onConflict: "bid_item_id" }
       );
     if (saveError) {
-      // Still return the report to the user even if the save failed — but log
-      // loudly, since a save failure here is exactly the "regenerates every
-      // time" bug this function exists to prevent.
       console.error("[generate-bid-leveling-report] FAILED TO PERSIST REPORT", saveError);
     }
 

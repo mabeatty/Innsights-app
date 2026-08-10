@@ -18,12 +18,13 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bidItem: BidItem;
+  projectId: string;
   quotes: VendorQuote[];
   adjustmentsForQuote: (quoteId: string) => Adjustment[];
   leveledForQuote: (quote: VendorQuote) => number;
 }
 
-export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, quotes, adjustmentsForQuote, leveledForQuote }: Props) {
+export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, projectId, quotes, adjustmentsForQuote, leveledForQuote }: Props) {
   const { user } = useAuth();
   const [report, setReport] = useState<Report | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
@@ -36,6 +37,7 @@ export default function BidLevelingReportDialog({ open, onOpenChange, bidItem, q
     try {
       const payload = {
         bidItemId: bidItem.id,
+        projectId,
         forceRegenerate,
         userId: user?.id ?? null,
         segment: bidItem.segment,
