@@ -17,10 +17,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
+} from "@/components/ui/alert-dialog";
+import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Pencil, Plus, AlertTriangle } from "lucide-react";
+import { Pencil, Plus, AlertTriangle, Trash2 } from "lucide-react";
 
 interface Member {
   id: string;
@@ -44,16 +48,23 @@ interface ProjectOption {
 const EXPENSE_ROLES = ["Partner", "Manager", "Employee", "Consultant/Third Party"];
 const ACCESS_LEVELS = ["view", "edit", "admin"];
 
+// Same designated super-admin list as bootstrap-admin. Only these accounts
+// can delete a team member's account entirely.
+const SUPER_ADMIN_EMAILS = ["marc.alex.beatty@gmail.com", "alex@witnessinv.com"];
+
 const isConsultantRole = (role: string | null | undefined) =>
   role === "Consultant/Third Party";
 
 export default function AdminTeam({ embedded }: { embedded?: boolean }) {
-  const { organizationId } = useAuth();
+  const { organizationId, user } = useAuth();
+  const isSuperAdmin = SUPER_ADMIN_EMAILS.includes((user?.email ?? "").toLowerCase());
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [inviting, setInviting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // All projects for the picker
   const [allProjects, setAllProjects] = useState<ProjectOption[]>([]);
@@ -244,6 +255,27 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
       toast.error("Failed to send invitation.");
     }
     setInviting(false);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget?.user_id) return;
+    setDeleting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("delete-team-member", {
+        body: { userId: deleteTarget.user_id },
+      });
+      if (error || data?.error) {
+        toast.error(data?.error || "Failed to delete account.");
+      } else {
+        toast.success(`${deleteTarget.email ?? "Account"} deleted.`);
+        setDeleteTarget(null);
+        setModalOpen(false);
+        fetchMembers();
+      }
+    } catch {
+      toast.error("Failed to delete account.");
+    }
+    setDeleting(false);
   };
 
   // Auto-check investment access when Partner is selected
@@ -512,7 +544,16 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
                 </Label>
               </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2 sm:gap-0">
+              {editingMember && isSuperAdmin && (
+                <Button
+                  variant="destructive"
+                  className="sm:mr-auto gap-1.5"
+                  onClick={() => setDeleteTarget(editingMember)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete Account
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
               <Button onClick={handleSubmit} disabled={inviting}>
                 {inviting ? "Sending…" : editingMember ? "Save Changes" : "Send Invitation"}
@@ -520,6 +561,23 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete {deleteTarget?.email ?? "this account"}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This permanently deletes their login and removes them from the organization. This can't be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete} disabled={deleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                {deleting ? "Deleting…" : "Delete Account"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </TooltipProvider>
   );
