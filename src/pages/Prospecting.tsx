@@ -262,7 +262,7 @@ export default function Prospecting() {
 
       await supabase.from("project_info").insert({
         project_id: project.id,
-        project_status: "Pre-Construction",
+        project_status: "Design",
         property_name: pushTarget.name,
         city: pushTarget.city,
         state: pushTarget.state,
@@ -270,7 +270,7 @@ export default function Prospecting() {
 
       await supabase.from("prospects").update({ converted_project_id: project.id }).eq("id", pushTarget.id);
 
-      toast.success("Pushed to Pre-Construction.");
+      toast.success("Pushed to Design.");
       setPushTarget(null);
       navigate(`/project/${project.id}`);
     } catch (e) {
@@ -352,7 +352,7 @@ export default function Prospecting() {
                     </Button>
                   ) : (
                     <Button size="sm" variant="secondary" className="gap-1.5 text-xs" onClick={() => openPush(p)}>
-                      <ArrowUpRight className="h-3.5 w-3.5" /> Push to Pre-Dev
+                      <ArrowUpRight className="h-3.5 w-3.5" /> Push to Design
                     </Button>
                   )}
                 </TableCell>
@@ -462,9 +462,9 @@ export default function Prospecting() {
       <Dialog open={!!pushTarget} onOpenChange={(open) => !open && setPushTarget(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Push "{pushTarget?.name}" to Pre-Construction</DialogTitle>
+            <DialogTitle>Push "{pushTarget?.name}" to Design</DialogTitle>
             <DialogDescription>
-              This creates a real project in Pre-Construction status. You can change the stage anytime from Project Info.
+              This creates a real Development project in Design status. You can change the stage anytime from Project Info.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
@@ -489,7 +489,7 @@ export default function Prospecting() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPushTarget(null)}>Cancel</Button>
-            <Button onClick={handlePush} disabled={pushing}>{pushing ? "Creating…" : "Push to Pre-Construction"}</Button>
+            <Button onClick={handlePush} disabled={pushing}>{pushing ? "Creating…" : "Push to Design"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
