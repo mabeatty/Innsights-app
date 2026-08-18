@@ -16,7 +16,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, FileText, ExternalLink, Download, X, Link2, ArrowUpRight, Building2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, ExternalLink, Download, X, Link2, ArrowRight, Building2 } from "lucide-react";
 
 interface Attachment {
   id: string;
@@ -351,13 +351,16 @@ export default function Prospecting() {
                       <Building2 className="h-3.5 w-3.5" /> View Project
                     </Button>
                   ) : (
-                    <Button size="sm" variant="secondary" className="gap-1.5 text-xs" onClick={() => openPush(p)}>
-                      <ArrowUpRight className="h-3.5 w-3.5" /> Push to Design
-                    </Button>
+                    <span className="text-muted-foreground text-sm">—</span>
                   )}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
+                    {!p.converted_project_id && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Push to design phase" onClick={() => openPush(p)}>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(p)}><Pencil className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteTarget(p)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
