@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -7,14 +8,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, FileText, ExternalLink, Download, X, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, FileText, ExternalLink, Download, X, Link2, ArrowUpRight, Building2 } from "lucide-react";
 
 interface Attachment {
   id: string;
@@ -32,6 +34,7 @@ interface Prospect {
   state: string | null;
   potential_brands: string[];
   notes: string | null;
+  converted_project_id: string | null;
   attachments: Attachment[];
 }
 
@@ -42,6 +45,7 @@ interface BrandOption {
 
 export default function Prospecting() {
   const { user, organizationId } = useAuth();
+  const navigate = useNavigate();
   const [prospects, setProspects] = useState<Prospect[]>([]);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,11 +68,16 @@ export default function Prospecting() {
   const [deleteTarget, setDeleteTarget] = useState<Prospect | null>(null);
   const [deleting, setDeleting] = useState(false);
 
+  const [pushTarget, setPushTarget] = useState<Prospect | null>(null);
+  const [pushHotelName, setPushHotelName] = useState("");
+  const [pushBrandId, setPushBrandId] = useState("");
+  const [pushing, setPushing] = useState(false);
+
   const fetchAll = async () => {
     setLoading(true);
     const [{ data: brandRows }, { data: prospectRows }] = await Promise.all([
       supabase.from("brands").select("id, name").order("name"),
-      supabase.from("prospects").select("id, name, city, state, potential_brands, notes").order("created_at", { ascending: false }),
+      supabase.from("prospects").select("id, name, city, state, potential_brands, notes, converted_project_id").order("created_at", { ascending: false }),
     ]);
     setBrands((brandRows as BrandOption[]) ?? []);
 
@@ -224,6 +233,52 @@ export default function Prospecting() {
     setDeleting(false);
   };
 
+  const openPush = (p: Prospect) => {
+    setPushTarget(p);
+    setPushHotelName(p.name);
+    // Pre-select the brand if there's exactly one candidate; otherwise leave
+    // it for the person to choose, since a project needs exactly one.
+    const matchingBrand = p.potential_brands.length === 1
+      ? brands.find((b) => b.name === p.potential_brands[0])
+      : null;
+    setPushBrandId(matchingBrand?.id ?? "");
+  };
+
+  const handlePush = async () => {
+    if (!pushTarget || !user) return;
+    if (!pushHotelName.trim()) { toast.error("Hotel name is required."); return; }
+    if (!pushBrandId) { toast.error("Select a brand."); return; }
+    setPushing(true);
+    try {
+      const { data: project, error } = await supabase
+        .from("projects")
+        .insert({
+          name: pushHotelName.trim(), hotel_name: pushHotelName.trim(), brand_id: pushBrandId,
+          user_id: user.id, organization_id: organizationId, project_type: "Development",
+        })
+        .select()
+        .single();
+      if (error || !project) throw error;
+
+      await supabase.from("project_info").insert({
+        project_id: project.id,
+        project_status: "Pre-Construction",
+        property_name: pushTarget.name,
+        city: pushTarget.city,
+        state: pushTarget.state,
+      });
+
+      await supabase.from("prospects").update({ converted_project_id: project.id }).eq("id", pushTarget.id);
+
+      toast.success("Pushed to Pre-Construction.");
+      setPushTarget(null);
+      navigate(`/project/${project.id}`);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Failed to create project.");
+    }
+    setPushing(false);
+  };
+
   const downloadAttachment = async (att: Attachment) => {
     if (att.drive_url) { window.open(att.drive_url, "_blank", "noopener,noreferrer"); return; }
     if (!att.storage_path) return;
@@ -258,14 +313,15 @@ export default function Prospecting() {
               <TableHead>Potential Brands</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead>Attachments</TableHead>
+              <TableHead>Stage</TableHead>
               <TableHead className="w-20" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
             ) : prospects.length === 0 ? (
-              <TableRow><TableCell colSpan={7} className="text-center text-muted-foreground py-8">No prospects yet.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="text-center text-muted-foreground py-8">No prospects yet.</TableCell></TableRow>
             ) : prospects.map((p) => (
               <TableRow key={p.id}>
                 <TableCell className="font-medium">{p.name}</TableCell>
@@ -288,6 +344,17 @@ export default function Prospecting() {
                         </Button>
                       ))}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {p.converted_project_id ? (
+                    <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => navigate(`/project/${p.converted_project_id}`)}>
+                      <Building2 className="h-3.5 w-3.5" /> View Project
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant="secondary" className="gap-1.5 text-xs" onClick={() => openPush(p)}>
+                      <ArrowUpRight className="h-3.5 w-3.5" /> Push to Pre-Dev
+                    </Button>
+                  )}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-1">
@@ -391,6 +458,41 @@ export default function Prospecting() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!pushTarget} onOpenChange={(open) => !open && setPushTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Push "{pushTarget?.name}" to Pre-Construction</DialogTitle>
+            <DialogDescription>
+              This creates a real project in Pre-Construction status. You can change the stage anytime from Project Info.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Hotel Name</Label>
+              <Input value={pushHotelName} onChange={(e) => setPushHotelName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Brand</Label>
+              <Select value={pushBrandId} onValueChange={setPushBrandId}>
+                <SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger>
+                <SelectContent>
+                  {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              {pushTarget && pushTarget.potential_brands.length > 1 && (
+                <p className="text-xs text-muted-foreground">
+                  This prospect lists multiple potential brands ({pushTarget.potential_brands.join(", ")}) — pick the one to move forward with.
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPushTarget(null)}>Cancel</Button>
+            <Button onClick={handlePush} disabled={pushing}>{pushing ? "Creating…" : "Push to Pre-Construction"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

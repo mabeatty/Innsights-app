@@ -418,10 +418,13 @@ export type Database = {
         Relationships: [{ foreignKeyName: "prospect_attachments_prospect_id_fkey"; columns: ["prospect_id"]; isOneToOne: false; referencedRelation: "prospects"; referencedColumns: ["id"] }]
       }
       prospects: {
-        Row: { city: string | null; created_at: string; created_by: string | null; id: string; name: string; notes: string | null; organization_id: string; potential_brands: string[]; state: string | null; updated_at: string }
-        Insert: { city?: string | null; created_at?: string; created_by?: string | null; id?: string; name: string; notes?: string | null; organization_id: string; potential_brands?: string[]; state?: string | null; updated_at?: string }
-        Update: { city?: string | null; created_at?: string; created_by?: string | null; id?: string; name?: string; notes?: string | null; organization_id?: string; potential_brands?: string[]; state?: string | null; updated_at?: string }
-        Relationships: [{ foreignKeyName: "prospects_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
+        Row: { city: string | null; converted_project_id: string | null; created_at: string; created_by: string | null; id: string; name: string; notes: string | null; organization_id: string; potential_brands: string[]; state: string | null; updated_at: string }
+        Insert: { city?: string | null; converted_project_id?: string | null; created_at?: string; created_by?: string | null; id?: string; name: string; notes?: string | null; organization_id: string; potential_brands?: string[]; state?: string | null; updated_at?: string }
+        Update: { city?: string | null; converted_project_id?: string | null; created_at?: string; created_by?: string | null; id?: string; name?: string; notes?: string | null; organization_id?: string; potential_brands?: string[]; state?: string | null; updated_at?: string }
+        Relationships: [
+          { foreignKeyName: "prospects_organization_id_fkey"; columns: ["organization_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] },
+          { foreignKeyName: "prospects_converted_project_id_fkey"; columns: ["converted_project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] },
+        ]
       }
       public_area_line_items: {
         Row: { created_at: string | null; id: string; item_id: string | null; public_area_type_id: string | null; quantity: number }
