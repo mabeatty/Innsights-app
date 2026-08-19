@@ -83,6 +83,8 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [vendor, setVendor] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>(undefined);
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [dueDateTouched, setDueDateTouched] = useState(false);
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
   const [transactionType, setTransactionType] = useState<string>("Vendor Invoice");
   const [documentLink, setDocumentLink] = useState("");
@@ -102,6 +104,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   useEffect(() => { if (open) {
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
+    setDueDate(undefined); setDueDateTouched(false);
     setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
     setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
@@ -120,6 +123,39 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     setLineItems((prev) => prev.map((li) => (li.id === id ? { ...li, [field]: value } : li)));
   const removeLine = (id: string) =>
     setLineItems((prev) => (prev.length > 1 ? prev.filter((li) => li.id !== id) : prev));
+
+  // Suggest a due date from the matching contract's payment terms (vendor name +
+  // project match). Only fills the field if the user hasn't manually set/cleared
+  // it themselves, so this never silently overrides an explicit entry.
+  useEffect(() => {
+    if (!open || dueDateTouched || !invoiceDate || !vendor.trim() || !projectId) return;
+    let cancelled = false;
+    (async () => {
+      const { data: vendors } = await supabase
+        .from("vendors")
+        .select("id, name")
+        .eq("project_id", projectId)
+        .ilike("name", `%${vendor.trim()}%`);
+      const vendorIds = (vendors ?? []).map((v: any) => v.id);
+      if (vendorIds.length === 0) return;
+      const { data: matchingContracts } = await supabase
+        .from("contracts")
+        .select("payment_terms_days")
+        .eq("project_id", projectId)
+        .in("vendor_id", vendorIds)
+        .not("payment_terms_days", "is", null)
+        .order("updated_at", { ascending: false })
+        .limit(1);
+      if (cancelled) return;
+      const terms = matchingContracts?.[0]?.payment_terms_days;
+      if (terms) {
+        const d = new Date(invoiceDate);
+        d.setDate(d.getDate() + Number(terms));
+        setDueDate(d);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [open, vendor, projectId, invoiceDate, dueDateTouched]);
 
   // Fetch a project's budget categories and return both the category labels (to
   // send to the edge function) and a resolver that maps an AI category/description
@@ -369,6 +405,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         vendor_name: vendor,
         invoice_number: invoiceNumber || null,
         invoice_date: invoiceDate ? format(invoiceDate, "yyyy-MM-dd") : null,
+        due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
         amount: totalAmount,
         retainage_amount: totalRetainage,
         net_amount: totalNet,
@@ -518,6 +555,15 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
             <div className="space-y-1.5">
               <Label className="flex items-center">Invoice Date {extracted.invoice_date && <AIBadge />}</Label>
               <DatePickerInput value={invoiceDate} onChange={setInvoiceDate} heightClass="h-10" textClass="text-sm" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="flex items-center">Due Date</Label>
+              <DatePickerInput
+                value={dueDate}
+                onChange={(d) => { setDueDate(d ?? undefined); setDueDateTouched(true); }}
+                heightClass="h-10"
+                textClass="text-sm"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Project *</Label>

@@ -33,10 +33,23 @@ const daysAgo = (dateStr: string) => {
   return Math.max(0, Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
 };
 
+// Positive = days overdue (due date has passed), negative = days until due.
+const daysPastDue = (dueDateStr: string) => {
+  const d = new Date(dueDateStr);
+  const now = new Date();
+  return Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+};
+
+const fmtShortDate = (dateStr: string | null) => {
+  if (!dateStr) return "—";
+  return new Date(dateStr + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+};
+
 export default function BudgetSummaryTab({ budgetRows, transactions, materialsStored, projectId }: Props) {
   const { isPartner } = useAuth();
   const [plaidAccountId, setPlaidAccountId] = useState<string | null>(null);
   const [roomCount, setRoomCount] = useState<number | null>(null);
+  const [invoiceMap, setInvoiceMap] = useState<Record<string, { invoice_date: string | null; due_date: string | null }>>({});
 
   useEffect(() => {
     if (!isPartner) return;
@@ -122,21 +135,47 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
     () => transactions.filter((t) => t.status === "Approved"),
     [transactions]
   );
+
+  useEffect(() => {
+    const ids = Array.from(new Set(unpaidTxns.map((t) => t.invoice_id).filter((id): id is string => !!id)));
+    if (ids.length === 0) { setInvoiceMap({}); return; }
+    supabase
+      .from("invoices")
+      .select("id, invoice_date, due_date")
+      .in("id", ids)
+      .then(({ data }) => {
+        const m: Record<string, { invoice_date: string | null; due_date: string | null }> = {};
+        (data ?? []).forEach((r: any) => { m[r.id] = { invoice_date: r.invoice_date, due_date: r.due_date }; });
+        setInvoiceMap(m);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unpaidTxns.map((t) => t.invoice_id).join(",")]);
+
   const totalAP = useMemo(() => unpaidTxns.reduce((s, t) => s + Number(t.amount), 0), [unpaidTxns]);
   const unpaidInvoices = useMemo(() => {
-    const grouped = new Map<string, { payee: string; date: string; amount: number }>();
+    const grouped = new Map<string, { payee: string; date: string; invoiceDate: string | null; dueDate: string | null; amount: number }>();
     for (const t of unpaidTxns) {
       const key = t.draw_id ? `draw:${t.draw_id}:${t.payee}` : `txn:${t.id}`;
+      const linked = t.invoice_id ? invoiceMap[t.invoice_id] : undefined;
       const existing = grouped.get(key);
       if (existing) {
         existing.amount += Number(t.amount);
         if (new Date(t.date) < new Date(existing.date)) existing.date = t.date;
+        // Prefer an actual invoice_date/due_date over the transaction date if we don't have one yet.
+        if (!existing.invoiceDate && linked?.invoice_date) existing.invoiceDate = linked.invoice_date;
+        if (!existing.dueDate && linked?.due_date) existing.dueDate = linked.due_date;
       } else {
-        grouped.set(key, { payee: t.payee, date: t.date, amount: Number(t.amount) });
+        grouped.set(key, {
+          payee: t.payee,
+          date: t.date,
+          invoiceDate: linked?.invoice_date ?? null,
+          dueDate: linked?.due_date ?? null,
+          amount: Number(t.amount),
+        });
       }
     }
     return Array.from(grouped.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [unpaidTxns]);
+  }, [unpaidTxns, invoiceMap]);
   const oldestUnpaid = useMemo(() => unpaidInvoices.slice(0, 5), [unpaidInvoices]);
 
   const summaryCards = [
@@ -238,17 +277,31 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                       <tr className="text-xs text-muted-foreground text-left">
                         <th className="pb-1 font-normal">Vendor</th>
                         <th className="pb-1 font-normal text-right">Amount</th>
-                        <th className="pb-1 font-normal text-right">Days</th>
+                        <th className="pb-1 font-normal text-right">Invoice Date</th>
+                        <th className="pb-1 font-normal text-right">Due Date</th>
+                        <th className="pb-1 font-normal text-right">Status</th>
                       </tr>
                     </thead>
                     <tbody>
                       {oldestUnpaid.map((inv, i) => {
-                        const age = daysAgo(inv.date);
+                        // Prefer the due date to judge timeliness; fall back to the
+                        // 30-day-since-transaction heuristic when no due date is on file.
+                        const overdueByDueDate = inv.dueDate ? daysPastDue(inv.dueDate) : null;
+                        const isOverdue = overdueByDueDate !== null ? overdueByDueDate > 0 : daysAgo(inv.date) > 30;
+                        const statusLabel = inv.dueDate
+                          ? overdueByDueDate! > 0
+                            ? `${overdueByDueDate} days overdue`
+                            : `Due in ${Math.abs(overdueByDueDate!)} days`
+                          : `${daysAgo(inv.date)} days old`;
                         return (
                           <tr key={`${inv.payee}-${inv.date}-${i}`} className="border-t">
                             <td className="py-1.5">{inv.payee}</td>
                             <td className="py-1.5 text-right">{fmtDecimal(inv.amount)}</td>
-                            <td className={`py-1.5 text-right ${age > 30 ? "text-destructive font-medium" : "text-muted-foreground"}`}>{age}</td>
+                            <td className="py-1.5 text-right text-muted-foreground">{fmtShortDate(inv.invoiceDate ?? inv.date)}</td>
+                            <td className="py-1.5 text-right text-muted-foreground">{fmtShortDate(inv.dueDate)}</td>
+                            <td className={`py-1.5 text-right whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
+                              {statusLabel}
+                            </td>
                           </tr>
                         );
                       })}

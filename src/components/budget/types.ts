@@ -24,6 +24,7 @@ export interface Contract {
   scope_summary: string;
   original_amount: number;
   default_retainage_percent: number;
+  payment_terms_days: number | null;
   executed_date: string | null;
   status: ContractStatus;
   notes: string | null;
@@ -60,6 +61,7 @@ export interface BudgetTransaction {
   notes: string | null;
   document_url: string | null;
   draw_id: string | null;
+  invoice_id: string | null;
   created_at: string;
   updated_at: string;
 }

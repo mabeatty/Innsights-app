@@ -74,6 +74,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const [formScope, setFormScope] = useState("");
   const [formAmount, setFormAmount] = useState<number>(0);
   const [formRetainage, setFormRetainage] = useState<number>(0);
+  const [formPaymentTerms, setFormPaymentTerms] = useState<number | "">("");
   const [formExecuted, setFormExecuted] = useState<Date | null>(null);
   const [formStatus, setFormStatus] = useState<ContractStatus>("Active");
   const [formNotes, setFormNotes] = useState("");
@@ -217,6 +218,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     setFormScope("");
     setFormAmount(0);
     setFormRetainage(0);
+    setFormPaymentTerms("");
     setFormExecuted(null);
     setFormStatus("Active");
     setFormNotes("");
@@ -236,6 +238,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
     setFormScope(c.scope_summary);
     setFormAmount(Number(c.original_amount));
     setFormRetainage(Number(c.default_retainage_percent));
+    setFormPaymentTerms(c.payment_terms_days ?? "");
     setFormExecuted(c.executed_date ? new Date(c.executed_date) : null);
     setFormStatus(c.status);
     setFormNotes(c.notes ?? "");
@@ -289,6 +292,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
         scope_summary: formScope,
         original_amount: formAmount,
         default_retainage_percent: formRetainage,
+        payment_terms_days: formPaymentTerms === "" ? null : Number(formPaymentTerms),
         executed_date: formExecuted ? format(formExecuted, "yyyy-MM-dd") : null,
         status: formStatus,
         notes: formNotes || null,
@@ -398,6 +402,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                           <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Change Orders</th>
                           <th className="px-3 py-2 text-right w-32 whitespace-nowrap">Billed Amount</th>
                           <th className="px-3 py-2 text-right w-24">Retainage</th>
+                          <th className="px-3 py-2 text-right w-20">Terms</th>
                           <th className="px-3 py-2 w-24">Status</th>
                           <th className="px-3 py-2 w-20" />
                         </tr>
@@ -416,6 +421,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                             </td>
                             <td className="px-3 py-2 text-right">{fmt(billedByContract[c.id] ?? 0)}</td>
                             <td className="px-3 py-2 text-right">{Number(c.default_retainage_percent)}%</td>
+                            <td className="px-3 py-2 text-right text-muted-foreground">{c.payment_terms_days ? `Net ${c.payment_terms_days}` : "—"}</td>
                             <td className="px-3 py-2"><span className={statusPillClasses(c.status)}>{c.status}</span></td>
                             <td className="px-3 py-2">
                               <div className="flex gap-1">
@@ -513,7 +519,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-4 gap-3">
               <div className="space-y-1">
                 {/* NOTE: flat Contract Amount only. Fixed-fee + T&M schedule of
                     values is a planned refinement — see docs/accounting-roadmap.md */}
@@ -523,6 +529,10 @@ export default function ContractsModule({ projectId, projectName }: Props) {
               <div className="space-y-1">
                 <Label className="text-xs">Retainage %</Label>
                 <Input type="number" step="0.01" min="0" className="h-8" value={formRetainage || ""} onChange={e => setFormRetainage(Number(e.target.value) || 0)} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Payment Terms (days)</Label>
+                <Input type="number" step="1" min="0" className="h-8" placeholder="e.g. 30" value={formPaymentTerms} onChange={e => setFormPaymentTerms(e.target.value === "" ? "" : Number(e.target.value))} />
               </div>
               <div className="space-y-1">
                 <Label className="text-xs">Status</Label>
