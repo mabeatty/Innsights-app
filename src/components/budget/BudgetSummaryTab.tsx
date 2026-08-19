@@ -113,13 +113,31 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
   const costPerKey = roomCount && roomCount > 0 ? projectCost / roomCount : null;
 
   // Accounts payable: approved but not yet paid — the invoice is committed
-  // but cash hasn't gone out the door yet.
+  // but cash hasn't gone out the door yet. A GC pay app is billed as ONE
+  // invoice even though it's stored as multiple division-level line items
+  // (all sharing the same draw_id + payee), so group those together rather
+  // than listing each division as its own row. Transactions with no draw_id
+  // are standalone vendor invoices and stay one row each.
   const unpaidTxns = useMemo(
-    () => transactions.filter((t) => t.status === "Approved").sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    () => transactions.filter((t) => t.status === "Approved"),
     [transactions]
   );
   const totalAP = useMemo(() => unpaidTxns.reduce((s, t) => s + Number(t.amount), 0), [unpaidTxns]);
-  const oldestUnpaid = useMemo(() => unpaidTxns.slice(0, 5), [unpaidTxns]);
+  const unpaidInvoices = useMemo(() => {
+    const grouped = new Map<string, { payee: string; date: string; amount: number }>();
+    for (const t of unpaidTxns) {
+      const key = t.draw_id ? `draw:${t.draw_id}:${t.payee}` : `txn:${t.id}`;
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.amount += Number(t.amount);
+        if (new Date(t.date) < new Date(existing.date)) existing.date = t.date;
+      } else {
+        grouped.set(key, { payee: t.payee, date: t.date, amount: Number(t.amount) });
+      }
+    }
+    return Array.from(grouped.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  }, [unpaidTxns]);
+  const oldestUnpaid = useMemo(() => unpaidInvoices.slice(0, 5), [unpaidInvoices]);
 
   const summaryCards = [
     { label: "Project Cost", value: fmtDecimal(projectCost) },
@@ -224,21 +242,21 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                       </tr>
                     </thead>
                     <tbody>
-                      {oldestUnpaid.map((t) => {
-                        const age = daysAgo(t.date);
+                      {oldestUnpaid.map((inv, i) => {
+                        const age = daysAgo(inv.date);
                         return (
-                          <tr key={t.id} className="border-t">
-                            <td className="py-1.5">{t.payee}</td>
-                            <td className="py-1.5 text-right">{fmtDecimal(Number(t.amount))}</td>
+                          <tr key={`${inv.payee}-${inv.date}-${i}`} className="border-t">
+                            <td className="py-1.5">{inv.payee}</td>
+                            <td className="py-1.5 text-right">{fmtDecimal(inv.amount)}</td>
                             <td className={`py-1.5 text-right ${age > 30 ? "text-destructive font-medium" : "text-muted-foreground"}`}>{age}</td>
                           </tr>
                         );
                       })}
                     </tbody>
                   </table>
-                  {unpaidTxns.length > oldestUnpaid.length && (
+                  {unpaidInvoices.length > oldestUnpaid.length && (
                     <p className="text-xs text-muted-foreground mt-2">
-                      +{unpaidTxns.length - oldestUnpaid.length} more unpaid invoice{unpaidTxns.length - oldestUnpaid.length === 1 ? "" : "s"}
+                      +{unpaidInvoices.length - oldestUnpaid.length} more unpaid invoice{unpaidInvoices.length - oldestUnpaid.length === 1 ? "" : "s"}
                     </p>
                   )}
                 </div>
