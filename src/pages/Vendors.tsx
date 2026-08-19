@@ -14,9 +14,10 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2 } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2, Sparkles } from "lucide-react";
 import * as XLSX from "xlsx";
 import VendorImportDialog from "@/components/vendors/VendorImportDialog";
+import VendorProposalImportDialog from "@/components/vendors/VendorProposalImportDialog";
 
 const CATEGORIES = [
   "General Contractor",
@@ -135,6 +136,7 @@ export default function Vendors() {
   const [detailVendor, setDetailVendor] = useState<Vendor | null>(null);
 
   const [importOpen, setImportOpen] = useState(false);
+  const [proposalImportOpen, setProposalImportOpen] = useState(false);
 
   const loadAll = async () => {
     if (!organizationId) return;
@@ -345,8 +347,11 @@ export default function Vendors() {
           <Button variant="outline" onClick={() => navigate("/vendors/pricing")} className="gap-2">
             <Library className="h-4 w-4" /> Pricing Library
           </Button>
+          <Button variant="outline" onClick={() => setProposalImportOpen(true)} className="gap-2">
+            <Sparkles className="h-4 w-4" /> Upload Proposal
+          </Button>
           <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
-            <Upload className="h-4 w-4" /> Import Vendors
+            <Upload className="h-4 w-4" /> Import Vendors (CSV)
           </Button>
           <Button variant="outline" onClick={handleExport} className="gap-2">
             <Download className="h-4 w-4" /> Export
@@ -609,6 +614,14 @@ export default function Vendors() {
       <VendorImportDialog
         open={importOpen}
         onOpenChange={setImportOpen}
+        organizationId={organizationId}
+        existingVendorNames={vendors.map((v) => v.vendor_name)}
+        onImported={loadAll}
+      />
+
+      <VendorProposalImportDialog
+        open={proposalImportOpen}
+        onOpenChange={setProposalImportOpen}
         organizationId={organizationId}
         existingVendorNames={vendors.map((v) => v.vendor_name)}
         onImported={loadAll}
