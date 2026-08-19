@@ -52,6 +52,16 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
 
   useEffect(() => {
     (async () => {
+      const { data: infoRow } = await supabase
+        .from("project_info")
+        .select("total_room_count")
+        .eq("project_id", projectId)
+        .maybeSingle();
+      const infoCount = (infoRow as any)?.total_room_count ?? null;
+      if (infoCount) {
+        setRoomCount(infoCount);
+        return;
+      }
       const { data: matrixRows } = await supabase
         .from("room_matrix_entries")
         .select("quantity")
@@ -60,12 +70,7 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
         setRoomCount(matrixRows.reduce((s, r: any) => s + (r.quantity ?? 0), 0));
         return;
       }
-      const { data: infoRow } = await supabase
-        .from("project_info")
-        .select("total_room_count")
-        .eq("project_id", projectId)
-        .maybeSingle();
-      setRoomCount((infoRow as any)?.total_room_count ?? null);
+      setRoomCount(null);
     })();
   }, [projectId]);
 
