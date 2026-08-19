@@ -2,7 +2,6 @@ import { useMemo, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
-import { Progress } from "@/components/ui/progress";
 import { BudgetRow, BudgetTransaction, fmtDecimal } from "./types";
 
 interface Props {
@@ -21,9 +20,23 @@ interface CostGroup {
   retainage: number;
 }
 
+const fmtCompact = (v: number) =>
+  Math.abs(v) >= 1_000_000
+    ? `$${(v / 1_000_000).toFixed(2)}M`
+    : Math.abs(v) >= 1_000
+    ? `$${(v / 1_000).toFixed(0)}K`
+    : fmtDecimal(v);
+
+const daysAgo = (dateStr: string) => {
+  const d = new Date(dateStr);
+  const now = new Date();
+  return Math.max(0, Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24)));
+};
+
 export default function BudgetSummaryTab({ budgetRows, transactions, materialsStored, projectId }: Props) {
   const { isPartner } = useAuth();
   const [plaidAccountId, setPlaidAccountId] = useState<string | null>(null);
+  const [roomCount, setRoomCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isPartner) return;
@@ -36,6 +49,25 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
         setPlaidAccountId((proj as any)?.plaid_account_id ?? null);
       });
   }, [projectId, isPartner]);
+
+  useEffect(() => {
+    (async () => {
+      const { data: matrixRows } = await supabase
+        .from("room_matrix_entries")
+        .select("quantity")
+        .eq("project_id", projectId);
+      if (matrixRows && matrixRows.length > 0) {
+        setRoomCount(matrixRows.reduce((s, r: any) => s + (r.quantity ?? 0), 0));
+        return;
+      }
+      const { data: infoRow } = await supabase
+        .from("project_info")
+        .select("total_room_count")
+        .eq("project_id", projectId)
+        .maybeSingle();
+      setRoomCount((infoRow as any)?.total_room_count ?? null);
+    })();
+  }, [projectId]);
 
   const approvedTxns = useMemo(
     () => transactions.filter((t) => t.status === "Approved" || t.status === "Paid" || t.status === "Deferred"),
@@ -73,13 +105,21 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
   const balanceToFinish = projectCost - totalCompleted;
   const pctComplete = projectCost > 0 ? (totalCompleted / projectCost) * 100 : 0;
 
+  const costPerKey = roomCount && roomCount > 0 ? projectCost / roomCount : null;
+
+  // Accounts payable: approved but not yet paid — the invoice is committed
+  // but cash hasn't gone out the door yet.
+  const unpaidTxns = useMemo(
+    () => transactions.filter((t) => t.status === "Approved").sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()),
+    [transactions]
+  );
+  const totalAP = useMemo(() => unpaidTxns.reduce((s, t) => s + Number(t.amount), 0), [unpaidTxns]);
+  const oldestUnpaid = useMemo(() => unpaidTxns.slice(0, 5), [unpaidTxns]);
+
   const summaryCards = [
     { label: "Project Cost", value: fmtDecimal(projectCost) },
     { label: "Completed to Date", value: fmtDecimal(totalCompleted) },
-    { label: "Retainage Held", value: fmtDecimal(totalRetainage) },
     { label: "Balance to Finish", value: fmtDecimal(balanceToFinish) },
-    { label: "% Complete", value: `${pctComplete.toFixed(1)}%` },
-    ...(totalDeferred > 0 ? [{ label: "Deferred Fees", value: fmtDecimal(totalDeferred) }] : []),
   ];
 
   // Account balance card for Partners
@@ -113,8 +153,8 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
 
   return (
     <div className="space-y-6 pt-4">
-      {/* Summary Cards */}
-      <div className={`grid grid-cols-2 gap-3 ${isPartner ? "md:grid-cols-6" : "md:grid-cols-5"}`}>
+      {/* Top metric row */}
+      <div className={`grid grid-cols-2 gap-3 ${isPartner ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         {summaryCards.map((c) => (
           <Card key={c.label}>
             <CardContent className="pt-4 pb-3 px-4">
@@ -123,88 +163,132 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
             </CardContent>
           </Card>
         ))}
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="pt-4 pb-3 px-4">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider">Cost Per Key</p>
+            {costPerKey !== null ? (
+              <>
+                <p className="text-lg font-bold mt-1 text-primary">{fmtDecimal(costPerKey)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{roomCount} keys · budget basis</p>
+              </>
+            ) : (
+              <p className="text-xs text-muted-foreground mt-1">— Add room count in Project Info</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Cash & Payables + Cost Breakdown */}
+      <div className="grid gap-4 lg:grid-cols-5">
         {isPartner && (
-          <Card>
-            <CardContent className="pt-4 pb-3 px-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Account Balance</p>
-              {balanceLoading ? (
-                <p className="text-lg font-bold mt-1 text-muted-foreground">…</p>
-              ) : plaidAccountId ? (
-                <p className="text-lg font-bold mt-1">{balance !== null ? fmtDecimal(balance) : "—"}</p>
-              ) : (
-                <p className="text-xs text-muted-foreground mt-1">— Link in Project Info</p>
+          <Card className="lg:col-span-3">
+            <CardContent className="pt-5">
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                Cash & Payables
+              </h3>
+              <div className="flex flex-wrap gap-6 mb-4">
+                <div>
+                  <p className="text-xs text-muted-foreground">Cash Balance</p>
+                  {balanceLoading ? (
+                    <p className="text-lg font-bold mt-0.5 text-muted-foreground">…</p>
+                  ) : plaidAccountId ? (
+                    <p className="text-lg font-bold mt-0.5">{balance !== null ? fmtDecimal(balance) : "—"}</p>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">Link in Project Info</p>
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Approved, Unpaid</p>
+                  <p className="text-lg font-bold mt-0.5 text-amber-600">{fmtDecimal(totalAP)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Net Available</p>
+                  <p className="text-lg font-bold mt-0.5">
+                    {balance !== null ? fmtDecimal(balance - totalAP) : "—"}
+                  </p>
+                </div>
+              </div>
+              {oldestUnpaid.length > 0 && (
+                <div className="border-t pt-3">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-muted-foreground text-left">
+                        <th className="pb-1 font-normal">Vendor</th>
+                        <th className="pb-1 font-normal text-right">Amount</th>
+                        <th className="pb-1 font-normal text-right">Days</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {oldestUnpaid.map((t) => {
+                        const age = daysAgo(t.date);
+                        return (
+                          <tr key={t.id} className="border-t">
+                            <td className="py-1.5">{t.payee}</td>
+                            <td className="py-1.5 text-right">{fmtDecimal(Number(t.amount))}</td>
+                            <td className={`py-1.5 text-right ${age > 30 ? "text-destructive font-medium" : "text-muted-foreground"}`}>{age}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {unpaidTxns.length > oldestUnpaid.length && (
+                    <p className="text-xs text-muted-foreground mt-2">
+                      +{unpaidTxns.length - oldestUnpaid.length} more unpaid invoice{unpaidTxns.length - oldestUnpaid.length === 1 ? "" : "s"}
+                    </p>
+                  )}
+                </div>
+              )}
+              {oldestUnpaid.length === 0 && (
+                <p className="text-xs text-muted-foreground border-t pt-3">No approved, unpaid invoices.</p>
               )}
             </CardContent>
           </Card>
         )}
-      </div>
 
-      {/* Progress Bars */}
-      <Card>
-        <CardContent className="pt-5 space-y-4">
-          <div className="space-y-1.5">
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>Overall Progress</span>
-              <span>{pctComplete.toFixed(1)}%</span>
-            </div>
-            <Progress value={Math.min(pctComplete, 100)} className="h-3" />
-          </div>
-          {groups.map((g) => (
-            <div key={g.label} className="space-y-1.5">
-              <div className="flex justify-between text-xs text-muted-foreground">
-                <span>{g.label}</span>
-                <span>{g.pctComplete.toFixed(1)}%</span>
-              </div>
-              <Progress value={Math.min(g.pctComplete, 100)} className="h-2" />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {/* Hard vs Soft Breakdown Table */}
-      <Card>
-        <CardContent className="pt-5">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-            Cost Breakdown
-          </h3>
-          <div className="rounded-lg border overflow-hidden">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/50 text-muted-foreground text-left text-xs">
-                  <th className="px-3 py-2">Category</th>
-                  <th className="px-3 py-2 text-right">Scheduled Value</th>
-                  <th className="px-3 py-2 text-right">Completed to Date</th>
-                  <th className="px-3 py-2 text-right">% Complete</th>
-                  <th className="px-3 py-2 text-right">Balance to Finish</th>
-                  <th className="px-3 py-2 text-right">Retainage Held</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groups.map((g) => (
-                  <tr key={g.label} className="border-t hover:bg-muted/20 transition-colors">
-                    <td className="px-3 py-2 font-medium">{g.label}</td>
-                    <td className="px-3 py-2 text-right">{fmtDecimal(g.scheduled)}</td>
-                    <td className="px-3 py-2 text-right">{fmtDecimal(g.completed)}</td>
-                    <td className="px-3 py-2 text-right">{g.pctComplete.toFixed(1)}%</td>
-                    <td className="px-3 py-2 text-right">{fmtDecimal(g.balance)}</td>
-                    <td className="px-3 py-2 text-right">{fmtDecimal(g.retainage)}</td>
+        <Card className={isPartner ? "lg:col-span-2" : "lg:col-span-5"}>
+          <CardContent className="pt-5">
+            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+              Cost Breakdown
+            </h3>
+            <div className="rounded-lg border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/50 text-muted-foreground text-left text-xs">
+                    <th className="px-3 py-2">Category</th>
+                    <th className="px-3 py-2 text-right">Scheduled</th>
+                    <th className="px-3 py-2 text-right">Complete</th>
+                    <th className="px-3 py-2 text-right">%</th>
                   </tr>
-                ))}
-              </tbody>
-              <tfoot>
-                <tr className="border-t bg-muted/50 font-semibold text-xs">
-                  <td className="px-3 py-2">Total</td>
-                  <td className="px-3 py-2 text-right">{fmtDecimal(projectCost)}</td>
-                  <td className="px-3 py-2 text-right">{fmtDecimal(totalCompleted)}</td>
-                  <td className="px-3 py-2 text-right">{pctComplete.toFixed(1)}%</td>
-                  <td className="px-3 py-2 text-right">{fmtDecimal(balanceToFinish)}</td>
-                  <td className="px-3 py-2 text-right">{fmtDecimal(totalRetainage)}</td>
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
+                </thead>
+                <tbody>
+                  {groups.map((g) => (
+                    <tr key={g.label} className="border-t hover:bg-muted/20 transition-colors">
+                      <td className="px-3 py-2 font-medium">{g.label}</td>
+                      <td className="px-3 py-2 text-right">{fmtCompact(g.scheduled)}</td>
+                      <td className="px-3 py-2 text-right">{fmtCompact(g.completed)}</td>
+                      <td className="px-3 py-2 text-right">{g.pctComplete.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t bg-muted/50 font-semibold text-xs">
+                    <td className="px-3 py-2">Total</td>
+                    <td className="px-3 py-2 text-right">{fmtCompact(projectCost)}</td>
+                    <td className="px-3 py-2 text-right">{fmtCompact(totalCompleted)}</td>
+                    <td className="px-3 py-2 text-right">{pctComplete.toFixed(1)}%</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            {totalRetainage > 0 && (
+              <p className="text-xs text-muted-foreground mt-2">Retainage held: {fmtDecimal(totalRetainage)}</p>
+            )}
+            {totalDeferred > 0 && (
+              <p className="text-xs text-muted-foreground mt-1">Deferred fees: {fmtDecimal(totalDeferred)}</p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
