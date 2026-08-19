@@ -449,13 +449,13 @@ export default function PastReports({ onReportChanged }: { onReportChanged?: () 
                   </td>
                   <td className="px-3 py-2">
                     <div className="flex gap-0.5">
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openView(r)}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="View" onClick={() => openView(r)}>
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { openView(r); setTimeout(() => setEditMode(true), 100); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => { openView(r); setTimeout(() => setEditMode(true), 100); }}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { setDeleteTargetReport(r); setDeleteConfirmOpen(true); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete" onClick={() => { setDeleteTargetReport(r); setDeleteConfirmOpen(true); }}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
@@ -505,7 +505,7 @@ export default function PastReports({ onReportChanged }: { onReportChanged?: () 
                         <td className="px-3 py-2 text-right">{fmtCur(Number(t.amount))}</td>
                         {editMode && (
                           <td className="px-3 py-2">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveTxnFromPastReport(t.id)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Remove" onClick={() => handleRemoveTxnFromPastReport(t.id)}>
                               <X className="h-3.5 w-3.5" />
                             </Button>
                           </td>

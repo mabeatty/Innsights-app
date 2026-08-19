@@ -245,7 +245,7 @@ export default function ExpenseSettings() {
                     {c.last_synced ? new Date(c.last_synced).toLocaleDateString() : "Never"}
                   </TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDisconnect(c.id)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Disconnect" onClick={() => handleDisconnect(c.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </TableCell>
@@ -327,7 +327,7 @@ export default function ExpenseSettings() {
                     <TableCell>{c.name || "—"}</TableCell>
                     <TableCell>{c.email}</TableCell>
                     <TableCell>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => removeContact(c.id)}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Remove" onClick={() => removeContact(c.id)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </TableCell>

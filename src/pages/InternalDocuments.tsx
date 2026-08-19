@@ -150,8 +150,8 @@ export default function InternalDocuments() {
                 <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
                 <TableCell>
                   <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(doc)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteDoc(doc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                    <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(doc)}><Pencil className="h-4 w-4" /></Button>
+                    <Button variant="ghost" size="icon" title="Delete" onClick={() => setDeleteDoc(doc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                   </div>
                 </TableCell>
               </TableRow>

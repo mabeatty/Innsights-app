@@ -420,7 +420,7 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEditModal(m)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit" onClick={() => openEditModal(m)}>
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       </TableCell>

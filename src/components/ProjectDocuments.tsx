@@ -251,6 +251,7 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
+                              title="Delete"
                               onClick={() => setDeleteTarget(doc)}
                             >
                               <Trash2 className="h-3.5 w-3.5" />

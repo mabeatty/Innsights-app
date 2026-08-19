@@ -328,17 +328,17 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
                 </td>
                 <td className="px-3 py-2">
                   {co.document_url && (
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(co.document_url!, "_blank")}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Open document" onClick={() => window.open(co.document_url!, "_blank")}>
                       <ExternalLink className="h-3.5 w-3.5 text-primary" />
                     </Button>
                   )}
                 </td>
                 <td className="px-3 py-2">
                   <div className="flex gap-1">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(co)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(co)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setDeleteTarget(co); setDeleteConfirmText(""); }}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => { setDeleteTarget(co); setDeleteConfirmText(""); }}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>

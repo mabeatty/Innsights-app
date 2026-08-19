@@ -221,6 +221,7 @@ export default function GanttTimeline({ phases, milestones, onMilestoneClick, on
           variant="outline"
           size="icon"
           className="h-7 w-7"
+          title="Zoom out"
           onClick={() => setMonthColWidth((p) => Math.max(MIN_ZOOM, p - ZOOM_STEP))}
           disabled={monthColWidth <= MIN_ZOOM}
         >
@@ -231,6 +232,7 @@ export default function GanttTimeline({ phases, milestones, onMilestoneClick, on
           variant="outline"
           size="icon"
           className="h-7 w-7"
+          title="Zoom in"
           onClick={() => setMonthColWidth((p) => Math.min(MAX_ZOOM, p + ZOOM_STEP))}
           disabled={monthColWidth >= MAX_ZOOM}
         >
@@ -310,7 +312,7 @@ export default function GanttTimeline({ phases, milestones, onMilestoneClick, on
                             <span className="text-xs truncate">{sp.sub_phase_name}</span>
                             <Popover modal>
                               <PopoverTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0">
+                                <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0" title="Edit">
                                   <Pencil className="h-3 w-3" />
                                 </Button>
                               </PopoverTrigger>
@@ -320,7 +322,7 @@ export default function GanttTimeline({ phases, milestones, onMilestoneClick, on
                             </Popover>
                             <AlertDialog>
                               <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 text-destructive/70 hover:text-destructive">
+                                <Button variant="ghost" size="icon" className="h-5 w-5 shrink-0 text-destructive/70 hover:text-destructive" title="Delete">
                                   <Trash2 className="h-3 w-3" />
                                 </Button>
                               </AlertDialogTrigger>
@@ -341,6 +343,7 @@ export default function GanttTimeline({ phases, milestones, onMilestoneClick, on
                               variant="ghost"
                               size="icon"
                               className="h-5 w-5 ml-auto shrink-0"
+                              title="Add milestone"
                               onClick={() => { setAddingTo(addingTo === sp.id ? null : sp.id); setNewName(""); }}
                             >
                               <Plus className="h-3 w-3" />

@@ -268,10 +268,10 @@ export default function CurrentReport({ refreshKey }: CurrentReportProps = {}) {
       {isDraft && (
         <td className="px-3 py-2">
           <div className="flex gap-1">
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setEditTx(t)}>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => setEditTx(t)}>
               <Pencil className="h-3.5 w-3.5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleRemoveFromReport(t.id)}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete" onClick={() => handleRemoveFromReport(t.id)}>
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
           </div>

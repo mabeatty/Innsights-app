@@ -383,7 +383,7 @@ export default function Payments() {
                     <td className="px-3 py-2 text-xs">{a.mask ? `••${a.mask}` : "—"}</td>
                     <td className="px-3 py-2 text-xs capitalize">{a.account_type}</td>
                     <td className="px-3 py-2 text-right">{a.next_check_number}</td>
-                    <td className="px-3 py-2 text-right"><Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openAcct(a)}><Pencil className="h-3.5 w-3.5" /></Button></td>
+                    <td className="px-3 py-2 text-right"><Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openAcct(a)}><Pencil className="h-3.5 w-3.5" /></Button></td>
                   </tr>
                 ))}
               </tbody>

@@ -101,7 +101,7 @@ export default function AssistantWidget({ projectId }: Props) {
               <Sparkles className="h-4 w-4 text-primary" />
               <p className="text-sm font-medium">Project Assistant</p>
             </div>
-            <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setOpen(false)}>
+            <Button size="icon" variant="ghost" className="h-7 w-7" title="Close" onClick={() => setOpen(false)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
@@ -153,7 +153,7 @@ export default function AssistantWidget({ projectId }: Props) {
               disabled={sending}
               autoFocus
             />
-            <Button size="icon" onClick={send} disabled={sending || !input.trim()} className="shrink-0">
+            <Button size="icon" onClick={send} disabled={sending || !input.trim()} className="shrink-0" title="Send">
               {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </div>
@@ -163,6 +163,7 @@ export default function AssistantWidget({ projectId }: Props) {
       <Button
         size="icon"
         className="fixed bottom-6 right-6 z-[100] h-12 w-12 rounded-full shadow-lg"
+        title="Project Assistant"
         onClick={() => setOpen((o) => !o)}
       >
         {open ? <X className="h-5 w-5" /> : <Sparkles className="h-5 w-5" />}

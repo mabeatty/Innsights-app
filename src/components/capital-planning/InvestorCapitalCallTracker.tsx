@@ -383,10 +383,10 @@ export default function InvestorCapitalCallTracker({ projectId, positions, reloa
                     <Badge variant={statusBadgeVariant(status)} className="text-xs">{status}</Badge>
                   </td>
                   <td className="px-2 py-2 flex gap-1 justify-end">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(pos); setModalOpen(true); }}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => { setEditing(pos); setModalOpen(true); }}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => handleDelete(pos.id)}>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete" onClick={() => handleDelete(pos.id)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </td>

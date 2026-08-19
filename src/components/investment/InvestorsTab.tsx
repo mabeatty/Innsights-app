@@ -200,6 +200,7 @@ export default function InvestorsTab({ projects }: Props) {
               size="icon"
               className="absolute left-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full shadow-md opacity-90 hover:opacity-100"
               style={{ zIndex: 10 }}
+              title="Scroll left"
               onClick={() => scroll(-1)}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -211,6 +212,7 @@ export default function InvestorsTab({ projects }: Props) {
               size="icon"
               className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 rounded-full shadow-md opacity-90 hover:opacity-100"
               style={{ zIndex: 10 }}
+              title="Scroll right"
               onClick={() => scroll(1)}
             >
               <ChevronRight className="h-4 w-4" />

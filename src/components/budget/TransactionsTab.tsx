@@ -670,7 +670,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                   ) : <span className="inline-block w-7 h-7" />}
                 </div>
                 <div className="flex justify-center">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(g)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(g)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -686,12 +686,12 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                   ) : <span className="inline-block w-7 h-7" />}
                 </div>
                 <div className="flex justify-center">
-                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(g)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(g)}>
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
                 </div>
                 <div className="flex justify-center">
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteGroup(g)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => handleDeleteGroup(g)}>
                     <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
@@ -1018,7 +1018,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                             <Input className="h-7 text-xs" value={li.description} onChange={e => updateLineItem(li.id, "description", e.target.value)} />
                           </td>
                           <td className="px-2 py-1.5">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeLineItem(li.id)} disabled={lineItems.length <= 1}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove" onClick={() => removeLineItem(li.id)} disabled={lineItems.length <= 1}>
                               <Trash2 className="h-3 w-3" />
                             </Button>
                           </td>
@@ -1119,10 +1119,10 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                         <td className="px-3 py-2 text-muted-foreground">{v.phone || "—"}</td>
                         <td className="px-3 py-2">
                           <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { openVendorEdit(v); }}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => { openVendorEdit(v); }}>
                               <Pencil className="h-3.5 w-3.5" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => handleDeleteVendor(v.id)}>
+                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => handleDeleteVendor(v.id)}>
                               <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </div>

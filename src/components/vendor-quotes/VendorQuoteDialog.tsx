@@ -183,7 +183,7 @@ export default function VendorQuoteDialog({ open, onOpenChange, bidItemId, editQ
                       value={a.amount}
                       onChange={(e) => updateAdjustment(i, "amount", e.target.value)}
                     />
-                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive" onClick={() => removeAdjustment(i)}>
+                    <Button type="button" size="icon" variant="ghost" className="h-7 w-7 shrink-0 text-destructive" title="Remove" onClick={() => removeAdjustment(i)}>
                       <X className="h-3.5 w-3.5" />
                     </Button>
                   </div>

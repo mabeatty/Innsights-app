@@ -662,15 +662,15 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                           )}
                           {canEdit && (
                             <div className="flex gap-0.5 shrink-0">
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => openEditReport(r)}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6" title="Edit" onClick={() => openEditReport(r)}>
                                 <Pencil className="h-3 w-3" />
                               </Button>
-                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" onClick={() => setDeleteReport(r)}>
+                              <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" title="Delete" onClick={() => setDeleteReport(r)}>
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
                           )}
-                          <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" onClick={() => toggleExpand(r.id)}>
+                          <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" title="Expand" onClick={() => toggleExpand(r.id)}>
                             {expandedId === r.id ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                           </Button>
                         </div>
@@ -702,7 +702,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                                   className="text-sm"
                                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
                                 />
-                                <Button size="icon" variant="secondary" className="shrink-0" onClick={handleAddComment} disabled={submittingComment || !newComment.trim()}>
+                                <Button size="icon" variant="secondary" className="shrink-0" title="Send comment" onClick={handleAddComment} disabled={submittingComment || !newComment.trim()}>
                                   <Send className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
@@ -750,7 +750,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                   className="text-sm"
                   onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addDriveLink(); } }}
                 />
-                <Button type="button" variant="outline" size="icon" className="shrink-0" onClick={addDriveLink}>
+                <Button type="button" variant="outline" size="icon" className="shrink-0" title="Add link" onClick={addDriveLink}>
                   <Link2 className="h-3.5 w-3.5" />
                 </Button>
               </div>
@@ -760,7 +760,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                 <div key={att.id} className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
                   {att.drive_url ? <ExternalLink className="h-4 w-4 text-primary shrink-0" /> : <FileText className="h-4 w-4 text-destructive shrink-0" />}
                   <span className="text-sm flex-1 truncate">{att.file_name}</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removeExistingAttachment(att)}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" title="Remove" onClick={() => removeExistingAttachment(att)}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
@@ -772,7 +772,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                   <FileText className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm flex-1 truncate">{f.name}</span>
                   <span className="text-xs text-muted-foreground">{formatFileSize(f.size)}</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removePendingFile(i)}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" title="Remove" onClick={() => removePendingFile(i)}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
@@ -784,7 +784,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                   <ExternalLink className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm flex-1 truncate">{link.name}</span>
                   <span className="text-xs text-muted-foreground">Google Drive</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removePendingDriveLink(i)}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" title="Remove" onClick={() => removePendingDriveLink(i)}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
@@ -799,7 +799,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                 <div className="flex items-center gap-2 p-2 rounded-md bg-muted/50">
                   <ImageIcon className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm flex-1 truncate">{existingPhotoAlbum.photo_count} photo{existingPhotoAlbum.photo_count !== 1 ? "s" : ""} already uploaded</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => setDeletePhotoAlbum(true)}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" title="Remove" onClick={() => setDeletePhotoAlbum(true)}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>
@@ -813,7 +813,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                   <ImageIcon className="h-4 w-4 text-primary shrink-0" />
                   <span className="text-sm flex-1 truncate">{f.name}</span>
                   <span className="text-xs text-muted-foreground">{formatFileSize(f.size)}</span>
-                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" onClick={() => removePendingPhoto(i)}>
+                  <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0 text-destructive" title="Remove" onClick={() => removePendingPhoto(i)}>
                     <X className="h-3 w-3" />
                   </Button>
                 </div>

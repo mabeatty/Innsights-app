@@ -110,10 +110,10 @@ export default function BrandsManager() {
                     className="flex-1 h-8 text-sm"
                     autoFocus
                   />
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleUpdate(brand.id)}>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="Save" onClick={() => handleUpdate(brand.id)}>
                     <Check className="h-3.5 w-3.5" />
                   </Button>
-                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditingId(null)}>
+                  <Button size="icon" variant="ghost" className="h-7 w-7" title="Cancel" onClick={() => setEditingId(null)}>
                     <X className="h-3.5 w-3.5" />
                   </Button>
                 </>
@@ -125,11 +125,12 @@ export default function BrandsManager() {
                       size="icon"
                       variant="ghost"
                       className="h-7 w-7"
+                      title="Edit"
                       onClick={() => { setEditingId(brand.id); setEditName(brand.name); }}
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleDelete(brand)}>
+                    <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" title="Delete" onClick={() => handleDelete(brand)}>
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   </div>

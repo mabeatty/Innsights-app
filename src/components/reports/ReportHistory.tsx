@@ -89,12 +89,12 @@ export default function ReportHistory({ projectId, canEdit, refreshTrigger }: Re
                 {r.delivery_method === "both" ? "Download + Email" : r.delivery_method === "email" ? "Email" : "Download"}
               </Badge>
               {r.storage_path && (
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => downloadReport(r)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7" title="Download" onClick={() => downloadReport(r)}>
                   <Download className="h-3.5 w-3.5" />
                 </Button>
               )}
               {canEdit && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteReport(r)}>
+                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete" onClick={() => deleteReport(r)}>
                   <Trash2 className="h-3.5 w-3.5" />
                 </Button>
               )}

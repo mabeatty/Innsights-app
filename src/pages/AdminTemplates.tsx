@@ -342,7 +342,7 @@ function TemplateEditor({
                         />
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemoveExisting(li.id)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Remove" onClick={() => handleRemoveExisting(li.id)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -371,7 +371,7 @@ function TemplateEditor({
                         />
                       </TableCell>
                       <TableCell>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemovePending(idx)}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" title="Remove" onClick={() => handleRemovePending(idx)}>
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -468,6 +468,7 @@ function BrandCard({
               variant="ghost"
               size="icon"
               className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"
+              title="Upload logo"
               disabled={uploading}
             >
               <Upload className="h-4 w-4" />
@@ -599,7 +600,7 @@ export default function AdminTemplates({ embedded }: { embedded?: boolean }) {
     return (
       <div className="space-y-6 max-w-4xl">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLevel("brands")}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Back" onClick={() => setLevel("brands")}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -705,7 +706,7 @@ export default function AdminTemplates({ embedded }: { embedded?: boolean }) {
     return (
       <div className="space-y-6 max-w-4xl">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openBrandWorkspace(selectedBrand)}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Back" onClick={() => openBrandWorkspace(selectedBrand)}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>

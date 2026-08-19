@@ -420,14 +420,14 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                             <td className="px-3 py-2">
                               <div className="flex gap-1">
                                 {c.document_url && (
-                                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7" title="Open document" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
                                     <ExternalLink className="h-3.5 w-3.5 text-primary" />
                                   </Button>
                                 )}
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(c)}>
                                   <Pencil className="h-3.5 w-3.5" />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setDeleteTarget(c); setDeleteConfirmText(""); }}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => { setDeleteTarget(c); setDeleteConfirmText(""); }}>
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
@@ -554,7 +554,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                     <ExternalLink className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{formDocName || formDocUrl}</span>
                   </a>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={clearDocument}><X className="h-3.5 w-3.5" /></Button>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="Remove" onClick={clearDocument}><X className="h-3.5 w-3.5" /></Button>
                 </div>
               ) : (
                 <label

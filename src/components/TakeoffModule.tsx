@@ -482,6 +482,7 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                  title="Remove"
                   onClick={() => removeMatrixRow(i)}
                 >
                   <X className="h-4 w-4" />
@@ -595,6 +596,7 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    title="Delete"
                     onClick={() => handleDeleteVersion(v.id, v.version_number)}
                   >
                     <Trash2 className="h-4 w-4" />

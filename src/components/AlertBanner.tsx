@@ -27,6 +27,7 @@ export function AlertBanner({ alerts, onDismiss }: AlertBannerProps) {
             variant="ghost"
             size="icon"
             className="h-6 w-6 shrink-0 opacity-60 hover:opacity-100"
+            title="Dismiss"
             onClick={() => onDismiss(alert.id)}
           >
             <X className="h-3.5 w-3.5" />

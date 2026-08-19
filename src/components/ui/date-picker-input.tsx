@@ -97,7 +97,7 @@ export default function DatePickerInput({
       />
       <Popover>
         <PopoverTrigger asChild>
-          <Button variant="outline" size="icon" className={cn(heightClass, "w-8 shrink-0")} disabled={disabled}>
+          <Button variant="outline" size="icon" className={cn(heightClass, "w-8 shrink-0")} title="Open calendar" disabled={disabled}>
             <CalendarIcon className="h-3.5 w-3.5" />
           </Button>
         </PopoverTrigger>

@@ -515,7 +515,7 @@ export default function TakeoffView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="Back to project" asChild>
             <Link to={`/project/${id}`}>
               <ArrowLeft className="h-4 w-4" />
             </Link>
@@ -568,6 +568,7 @@ export default function TakeoffView() {
                   variant="ghost"
                   size="icon"
                   className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
+                  title="Remove"
                   onClick={() => removeMatrixRow(i)}
                 >
                   <X className="h-4 w-4" />
@@ -681,6 +682,7 @@ export default function TakeoffView() {
                     variant="ghost"
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    title="Delete"
                     onClick={() => handleDeleteVersion(v.id, v.version_number)}
                   >
                     <Trash2 className="h-4 w-4" />

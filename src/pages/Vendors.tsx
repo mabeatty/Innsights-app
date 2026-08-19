@@ -434,13 +434,14 @@ export default function Vendors() {
                       <Button size="icon" variant="ghost" className="h-8 w-8" title="Link to projects" onClick={() => setDetailVendor(v)}>
                         <Link2 className="h-4 w-4" />
                       </Button>
-                      <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => openEdit(v)}>
+                      <Button size="icon" variant="ghost" className="h-8 w-8" title="Edit" onClick={() => openEdit(v)}>
                         <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
                         size="icon"
                         variant="ghost"
                         className="h-8 w-8 text-destructive hover:text-destructive"
+                        title="Delete"
                         onClick={() => { setDeleteTarget(v); setDeleteConfirm(""); }}
                       >
                         <Trash2 className="h-4 w-4" />

@@ -203,10 +203,10 @@ export default function DebtSubPage({ budgetTotal, debtTranches, addDebt, update
         return (
           <div key={dt.id} className="rounded-lg border p-5 bg-card relative">
             <div className="absolute top-3 right-3 flex gap-1">
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(dt); setModalOpen(true); }}>
+              <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => { setEditing(dt); setModalOpen(true); }}>
                 <Pencil className="h-3.5 w-3.5" />
               </Button>
-              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => deleteDebt(dt.id)}>
+              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" title="Delete" onClick={() => deleteDebt(dt.id)}>
                 <Trash2 className="h-3.5 w-3.5" />
               </Button>
             </div>

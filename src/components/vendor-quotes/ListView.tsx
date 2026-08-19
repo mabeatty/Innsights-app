@@ -99,7 +99,7 @@ export default function ListView({ projectId, bidItems, quotesForItem, adjustmen
                                   <td className="px-2 py-2.5" style={{ width: "4%" }}>
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                        <Button variant="ghost" size="icon" className="h-7 w-7"><MoreVertical className="h-3.5 w-3.5" /></Button>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7" title="More options"><MoreVertical className="h-3.5 w-3.5" /></Button>
                                       </DropdownMenuTrigger>
                                       <DropdownMenuContent align="end" className="bg-popover">
                                         <DropdownMenuItem onClick={(e) => { e.stopPropagation(); setBidDialog({ open: true, edit: bi }); }}>Edit</DropdownMenuItem>
@@ -153,7 +153,7 @@ export default function ListView({ projectId, bidItems, quotesForItem, adjustmen
                                                 <td className="py-1.5 px-1">
                                                   <DropdownMenu>
                                                     <DropdownMenuTrigger asChild>
-                                                      <Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="h-3 w-3" /></Button>
+                                                      <Button variant="ghost" size="icon" className="h-6 w-6" title="More options"><MoreVertical className="h-3 w-3" /></Button>
                                                     </DropdownMenuTrigger>
                                                     <DropdownMenuContent align="end" className="bg-popover">
                                                       <DropdownMenuItem onClick={() => setQuoteDialog({ open: true, bidItemId: bi.id, edit: vq })}>Edit</DropdownMenuItem>

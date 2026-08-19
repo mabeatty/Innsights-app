@@ -598,7 +598,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                         <Input className="h-8 text-xs" value={li.description} onChange={(e) => updateLine(li.id, "description", e.target.value)} />
                       </td>
                       <td className="px-2 py-1.5">
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeLine(li.id)} disabled={lineItems.length <= 1}>
+                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove" onClick={() => removeLine(li.id)} disabled={lineItems.length <= 1}>
                           <Trash2 className="h-3 w-3" />
                         </Button>
                       </td>

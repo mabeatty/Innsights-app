@@ -227,10 +227,10 @@ export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
                       <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setViewDraw(d)}>
                         View
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(d)}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(d)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => { setDeleteDraw(d); setDeleteConfirmText(""); }}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => { setDeleteDraw(d); setDeleteConfirmText(""); }}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
                     </div>
