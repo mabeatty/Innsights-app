@@ -3,6 +3,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { FileDown, FileSpreadsheet } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import DatePickerInput from "@/components/ui/date-picker-input";
 import { format } from "date-fns";
 import { BudgetRow, BudgetTransaction, fmt, fmtDecimal } from "./types";
@@ -159,22 +160,21 @@ export default function G703Tab({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => exportScheduleOfValuesPDF(projectName, budgetRows)}
-          >
-            <FileDown className="h-3.5 w-3.5" /> Schedule of Values (PDF)
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={() => exportScheduleOfValuesXLSX(projectName, budgetRows)}
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Schedule of Values (Excel)
-          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <FileDown className="h-3.5 w-3.5" /> Schedule of Values
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => exportScheduleOfValuesPDF(projectName, budgetRows)}>
+                <FileDown className="h-3.5 w-3.5 mr-2" /> Download as PDF
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => exportScheduleOfValuesXLSX(projectName, budgetRows)}>
+                <FileSpreadsheet className="h-3.5 w-3.5 mr-2" /> Download as Excel
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

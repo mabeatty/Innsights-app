@@ -5,7 +5,7 @@
 // budget: division number, division name, cost type, and scheduled value.
 // No transactions, no "this period"/"to date" math, no retainage.
 
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
@@ -33,39 +33,134 @@ function buildSections(budgetRows: BudgetRow[]) {
   };
 }
 
-export function exportScheduleOfValuesXLSX(projectName: string, budgetRows: BudgetRow[]) {
+export async function exportScheduleOfValuesXLSX(projectName: string, budgetRows: BudgetRow[]) {
   const { hard, soft, other, hardTotal, softTotal, otherTotal, grandTotal } = buildSections(budgetRows);
 
-  const sheetRows: (string | number)[][] = [
-    ["Schedule of Values"],
-    [projectName],
-    [`Generated ${format(new Date(), "MM/dd/yyyy")}`],
-    [],
-    ["Division No.", "Division Name", "Cost Type", "Scheduled Value"],
+  const CUR_FMT = '_("$"* #,##0.00_);_("$"* \\(#,##0.00\\);_("$"* "-"??_);_(@_)';
+  const thinBorder = { style: "thin" as const, color: { argb: "FF000000" } };
+
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet("Schedule of Values");
+  ws.columns = [
+    { width: 4.5 },  // A (spacer, matches reference layout starting at B)
+    { width: 15 },   // B — Division No.
+    { width: 43 },   // C — Division Name
+    { width: 13 },   // D — Cost Type
+    { width: 19 },   // E — Scheduled Value
+    { width: 61 },   // F — Notes
   ];
 
-  const pushSection = (label: string, rows: BudgetRow[], total: number) => {
-    if (rows.length === 0) return;
-    sheetRows.push([label, "", "", ""]);
-    rows.forEach((r) =>
-      sheetRows.push([r.division_number, r.division_name, r.cost_type, Number(r.scheduled_value)])
-    );
-    sheetRows.push([`${label} Subtotal`, "", "", total]);
-    sheetRows.push([]);
+  type BorderSides = { top?: boolean; bottom?: boolean; left?: boolean; right?: boolean };
+  const applyBorder = (cell: ExcelJS.Cell, sides: BorderSides) => {
+    cell.border = {
+      top: sides.top ? thinBorder : undefined,
+      bottom: sides.bottom ? thinBorder : undefined,
+      left: sides.left ? thinBorder : undefined,
+      right: sides.right ? thinBorder : undefined,
+    };
   };
 
-  pushSection("HARD COSTS", hard, hardTotal);
-  pushSection("SOFT COSTS", soft, softTotal);
-  pushSection("OTHER", other, otherTotal);
+  const setCell = (
+    col: string,
+    row: number,
+    value: string | number,
+    opts?: {
+      bold?: boolean; size?: number; align?: "center" | "left" | "right"; fill?: boolean; currency?: boolean;
+      border?: BorderSides;
+    }
+  ) => {
+    const cell = ws.getCell(`${col}${row}`);
+    cell.value = value;
+    cell.font = { name: "Calibri", size: opts?.size ?? 12, bold: !!opts?.bold };
+    cell.alignment = { horizontal: opts?.align ?? (typeof value === "number" ? "right" : "left"), vertical: "middle" };
+    if (opts?.currency) cell.numFmt = CUR_FMT;
+    if (opts?.fill) {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFFFF00" } };
+    }
+    if (opts?.border) applyBorder(cell, opts.border);
+    return cell;
+  };
 
-  sheetRows.push(["TOTAL", "", "", grandTotal]);
+  // Title block
+  setCell("B", 2, projectName, { bold: true, size: 16, align: "center" });
+  setCell("B", 3, "Schedule of Values", { bold: true, size: 12, align: "center" });
+  setCell("B", 4, `Last Updated: ${format(new Date(), "M/d/yy")}`, { size: 12, fill: true });
+  ws.mergeCells("B2:F2");
+  ws.mergeCells("B3:F3");
+  ws.getRow(2).height = 21;
 
-  const ws = XLSX.utils.aoa_to_sheet(sheetRows);
-  ws["!cols"] = [{ wch: 14 }, { wch: 42 }, { wch: 12 }, { wch: 18 }];
+  // Header row
+  const headerRow = 5;
+  ["Division No.", "Division Name", "Cost Type", "Scheduled Value", "Notes"].forEach((label, i) => {
+    const col = ["B", "C", "D", "E", "F"][i];
+    setCell(col, headerRow, label, {
+      bold: true, align: "center",
+      border: { top: true, left: col === "B", right: col === "F" },
+    });
+  });
 
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Schedule of Values");
-  XLSX.writeFile(wb, `${projectName.replace(/\s+/g, "_")}_Schedule_of_Values.xlsx`);
+  let r = headerRow + 2;
+
+  const writeSectionHeader = (label: string) => {
+    setCell("B", r, label, { bold: true, align: "center", border: { top: true, left: true, right: true } });
+    ws.mergeCells(`B${r}:F${r}`);
+    r += 1;
+  };
+
+  const writeRow = (row: BudgetRow) => {
+    setCell("B", r, row.division_number, { border: { left: true } });
+    setCell("C", r, row.division_name, { align: "left" });
+    setCell("D", r, row.cost_type, { align: "left" });
+    setCell("E", r, Number(row.scheduled_value), { currency: true });
+    setCell("F", r, row.notes ?? "", { border: { right: true }, align: "left" });
+    r += 1;
+  };
+
+  const writeSubtotal = (label: string, total: number) => {
+    setCell("B", r, label, { bold: true, align: "left", border: { top: true, bottom: true, left: true } });
+    ws.mergeCells(`B${r}:C${r}`);
+    setCell("D", r, "", { border: { top: true, bottom: true } });
+    setCell("E", r, total, { currency: true, bold: true, border: { top: true, bottom: true } });
+    setCell("F", r, "", { border: { top: true, bottom: true, right: true } });
+    r += 1;
+  };
+
+  if (hard.length > 0) {
+    writeSectionHeader("HARD COSTS");
+    hard.forEach(writeRow);
+    writeSubtotal("HARD COSTS Subtotal", hardTotal);
+    r += 1;
+  }
+  if (soft.length > 0) {
+    writeSectionHeader("SOFT COSTS");
+    soft.forEach(writeRow);
+    writeSubtotal("SOFT COSTS Subtotal", softTotal);
+    r += 1;
+  }
+  if (other.length > 0) {
+    writeSectionHeader("OTHER");
+    other.forEach(writeRow);
+    writeSubtotal("OTHER Subtotal", otherTotal);
+    r += 1;
+  }
+
+  // Grand total
+  setCell("B", r, "TOTAL", { bold: true, border: { top: true, bottom: true, left: true } });
+  setCell("C", r, "", { border: { top: true, bottom: true } });
+  setCell("D", r, "", { border: { top: true, bottom: true } });
+  setCell("E", r, grandTotal, { currency: true, bold: true, border: { top: true, bottom: true } });
+  setCell("F", r, "", { border: { top: true, bottom: true, right: true } });
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${projectName.replace(/\s+/g, "_")}_Schedule_of_Values.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 export function exportScheduleOfValuesPDF(projectName: string, budgetRows: BudgetRow[]) {
