@@ -174,7 +174,7 @@ export default function G703Tab({
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5">
-                <FileDown className="h-3.5 w-3.5" /> Schedule of Values
+                <FileDown className="h-3.5 w-3.5" /> Export SoV
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
