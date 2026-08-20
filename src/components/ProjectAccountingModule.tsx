@@ -8,7 +8,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileSpreadsheet, Lock } from "lucide-react";
+import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { BudgetRow, BudgetTransaction } from "@/components/budget/types";
@@ -215,15 +215,6 @@ export default function ProjectAccountingModule({
         }}>
           <Lock className="h-3.5 w-3.5" /> Close Draw #{nextDrawNumber}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className="gap-1.5"
-          disabled={exporting}
-          onClick={() => handleExportAIA()}
-        >
-          <FileSpreadsheet className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export AIA"}
-        </Button>
       </div>
 
       {/* Sub-tabs */}
@@ -258,6 +249,8 @@ export default function ProjectAccountingModule({
             onScheduledValueChange={onScheduledValueChange}
             onScheduledValueBlur={onScheduledValueBlur}
             materialsStored={materialsStored}
+            exporting={exporting}
+            onExportAIA={handleExportAIA}
           />
         </TabsContent>
 

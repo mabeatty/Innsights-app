@@ -53,13 +53,15 @@ interface Props {
   onScheduledValueChange: (id: string, value: number) => void;
   onScheduledValueBlur: (id: string, value: number) => void;
   materialsStored: Record<string, number>;
+  exporting: boolean;
+  onExportAIA: () => void;
 }
 
 export default function G703Tab({
   budgetRows, transactions, projectName,
   periodStart, periodEnd, onPeriodChange,
   onMaterialsChange, onScheduledValueChange, onScheduledValueBlur,
-  materialsStored,
+  materialsStored, exporting, onExportAIA,
 }: Props) {
   const approvedTxns = useMemo(
     () => transactions.filter((t) => t.status === "Approved" || t.status === "Paid" || t.status === "Deferred"),
@@ -159,7 +161,16 @@ export default function G703Tab({
             <DatePickerInput value={periodEnd} onChange={(d) => d && onPeriodChange(periodStart, d)} />
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-col items-end gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            disabled={exporting}
+            onClick={() => onExportAIA()}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> {exporting ? "Exporting…" : "Export AIA"}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm" className="gap-1.5">
