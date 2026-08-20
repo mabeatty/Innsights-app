@@ -3,7 +3,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
+import { FileDown, FileSpreadsheet } from "lucide-react";
 import { BudgetRow, BudgetTransaction, fmtDecimal } from "./types";
+import { exportScheduleOfValuesPDF, exportScheduleOfValuesXLSX } from "./exportScheduleOfValues";
 
 /* ── Stable sub-components defined OUTSIDE the main component ── */
 
@@ -61,6 +64,7 @@ export interface G702FormData {
 }
 
 interface Props {
+  projectName: string;
   budgetRows: BudgetRow[];
   transactions: BudgetTransaction[];
   materialsStored: Record<string, number>;
@@ -70,7 +74,7 @@ interface Props {
 
 const APPROVED_STATUSES = new Set(["Approved", "Paid", "Deferred"]);
 
-export default function G702Tab({ budgetRows, transactions, materialsStored, formData, onFormChange }: Props) {
+export default function G702Tab({ projectName, budgetRows, transactions, materialsStored, formData, onFormChange }: Props) {
   const approvedTxns = useMemo(
     () => transactions.filter((t) => APPROVED_STATUSES.has(t.status)),
     [transactions]
@@ -109,6 +113,26 @@ export default function G702Tab({ budgetRows, transactions, materialsStored, for
 
   return (
     <div className="space-y-5 pt-2">
+      {/* ── Schedule of Values export (budget only — no draw/pay-app math) ── */}
+      <div className="flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => exportScheduleOfValuesPDF(projectName, budgetRows)}
+        >
+          <FileDown className="h-3.5 w-3.5" /> Schedule of Values (PDF)
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-1.5"
+          onClick={() => exportScheduleOfValuesXLSX(projectName, budgetRows)}
+        >
+          <FileSpreadsheet className="h-3.5 w-3.5" /> Schedule of Values (Excel)
+        </Button>
+      </div>
+
       {/* ── Header Section ── */}
       <Card>
         <CardContent className="pt-5 pb-5">
