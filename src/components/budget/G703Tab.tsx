@@ -1,9 +1,12 @@
 import { useMemo, useState, useCallback } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { FileDown, FileSpreadsheet } from "lucide-react";
 import DatePickerInput from "@/components/ui/date-picker-input";
 import { format } from "date-fns";
 import { BudgetRow, BudgetTransaction, fmt, fmtDecimal } from "./types";
+import { exportScheduleOfValuesPDF, exportScheduleOfValuesXLSX } from "./exportScheduleOfValues";
 
 function CurrencyInput({ value, onChange, onBlur }: { value: number; onChange: (v: number) => void; onBlur: (v: number) => void }) {
   const [editing, setEditing] = useState(false);
@@ -144,14 +147,34 @@ export default function G703Tab({
   return (
     <div className="space-y-4 pt-2">
       {/* Period selector + export */}
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Period Start</Label>
-          <DatePickerInput value={periodStart} onChange={(d) => d && onPeriodChange(d, periodEnd)} />
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Period Start</Label>
+            <DatePickerInput value={periodStart} onChange={(d) => d && onPeriodChange(d, periodEnd)} />
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs text-muted-foreground">Period End</Label>
+            <DatePickerInput value={periodEnd} onChange={(d) => d && onPeriodChange(periodStart, d)} />
+          </div>
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Period End</Label>
-          <DatePickerInput value={periodEnd} onChange={(d) => d && onPeriodChange(periodStart, d)} />
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => exportScheduleOfValuesPDF(projectName, budgetRows)}
+          >
+            <FileDown className="h-3.5 w-3.5" /> Schedule of Values (PDF)
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5"
+            onClick={() => exportScheduleOfValuesXLSX(projectName, budgetRows)}
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Schedule of Values (Excel)
+          </Button>
         </div>
       </div>
 

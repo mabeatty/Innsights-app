@@ -238,7 +238,6 @@ export default function ProjectAccountingModule({
 
         <TabsContent value="g702">
           <G702Tab
-            projectName={projectName}
             budgetRows={budgetRows}
             transactions={transactions}
             materialsStored={materialsStored}
