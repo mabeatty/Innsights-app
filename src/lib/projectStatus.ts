@@ -7,10 +7,10 @@
 // Complete"), add it here AND update the CHECK constraint in the database.
 export const PROJECT_STATUSES = [
   "Prospecting",
-  "Under Contract",
   "Design",
   "Pre-Construction",
   "Under Construction",
+  "On Hold",
   "Open",
 ] as const;
 

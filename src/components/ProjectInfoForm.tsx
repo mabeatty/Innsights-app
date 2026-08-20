@@ -122,16 +122,20 @@ export function ProjectInfoForm({ projectId, brandName, roomMatrixCount, onInfoC
   };
 
   const handleSave = async () => {
+    if (!info.project_status) {
+      toast.error("Project Status is required — every project must have one.");
+      return;
+    }
     setSaving(true);
     const { clickup_list_id, ...infoPayload } = info;
-    // project_status has a DB CHECK constraint that rejects "". Send null when
-    // unselected so the constraint (which allows NULL) passes. The project_type
-    // field was removed from this form, so it is intentionally not written here
-    // (any existing stored value is left untouched).
+    // project_status is NOT NULL in the DB — a project must always have a
+    // status. The project_type field was removed from this form, so it is
+    // intentionally not written here (any existing stored value is left
+    // untouched).
     const payload = {
       ...infoPayload,
       project_id: projectId,
-      project_status: infoPayload.project_status || null,
+      project_status: infoPayload.project_status,
     };
     let saveError = false;
     if (existingId) {

@@ -134,7 +134,7 @@ export default function Dashboard() {
 
       let rows = ((projData as unknown as ProjectRow[]) ?? []).map(p => ({
         ...p,
-        _status: statusMap.get(p.id) || "Draft",
+        _status: statusMap.get(p.id) ?? null,
         _constructionStart: constructionStartMap.get(p.id) ?? null,
         _completionDate: completionMap.get(p.id) ?? null,
         _infoType: infoTypeMap.get(p.id) ?? p.project_type ?? null,
@@ -153,7 +153,9 @@ export default function Dashboard() {
     load();
   }, [isConsultant, consultantProjectIds]);
 
-  const STATUS_ORDER = ["Under Construction", "Pre-Construction", "Design", "Prospecting", "Draft"];
+  // Dashboard shows exactly these 4 stages. Prospecting and Open projects
+  // are intentionally excluded — Prospecting lives on the Prospecting tab.
+  const STATUS_ORDER = ["Under Construction", "Pre-Construction", "Design", "On Hold"];
   const TYPE_ORDER: { label: string; match: (t: string | null | undefined) => boolean }[] = [
     { label: "Development", match: (t) => t === "Development" || t === "New Construction" || t === "Conversion" },
     { label: "Asset Management", match: (t) => t === "Asset Management" || t === "Renovation" },

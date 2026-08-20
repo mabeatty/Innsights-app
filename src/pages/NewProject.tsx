@@ -63,15 +63,17 @@ export default function NewProject() {
 
       // Persist the status to project_info.project_status — the same field the
       // Project Info form reads/writes afterward. project_info.project_id is
-      // UNIQUE, so this is the single status row for the project.
+      // UNIQUE, so this is the single status row for the project. project_status
+      // is NOT NULL in the DB — a project must never exist without one — so a
+      // failure here rolls back the project rather than leaving it half-created.
       const { error: infoError } = await supabase
         .from("project_info")
         .insert({ project_id: project.id, project_status: status });
       if (infoError) {
-        toast.warning("Project created, but the status could not be saved — set it in Project Info.");
-      } else {
-        toast.success("Project created!");
+        await supabase.from("projects").delete().eq("id", project.id);
+        throw new Error(`Could not save project status: ${infoError.message}`);
       }
+      toast.success("Project created!");
       navigate(`/project/${project.id}`);
     } catch (err: any) {
       toast.error(err?.message ?? "Failed to create project.");
