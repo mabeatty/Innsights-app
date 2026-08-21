@@ -2,22 +2,14 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Download, Loader2, Plus, Save, Trash2, X } from "lucide-react";
+import { Download, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -93,7 +85,6 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
   const [matrix, setMatrix] = useState<RoomMatrixRow[]>([]);
   const [selectedPublicAreas, setSelectedPublicAreas] = useState<Set<string>>(new Set());
   const [generating, setGenerating] = useState(false);
-  const [savingMatrix, setSavingMatrix] = useState(false);
   const [setupLoaded, setSetupLoaded] = useState(false);
 
   // Versions
@@ -154,30 +145,20 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
       setPublicAreaTypes(paRes.data ?? []);
 
       const existingMatrix = matrixRes.data ?? [];
-      if (existingMatrix.length > 0) {
-        setMatrix(existingMatrix.map((e: any) => ({
-          id: e.id,
-          roomTypeId: e.room_type_id,
-          bathroomTypeId: e.bathroom_type_id,
-          quantity: e.quantity,
-        })));
-      } else {
-        setMatrix([{ roomTypeId: "", bathroomTypeId: "", quantity: 0 }]);
-      }
+      setMatrix(existingMatrix.map((e: any) => ({
+        id: e.id,
+        roomTypeId: e.room_type_id,
+        bathroomTypeId: e.bathroom_type_id,
+        quantity: e.quantity,
+      })));
       setSetupLoaded(true);
     });
   }, [brandId, projectId, setupLoaded]);
 
-  /* ── Matrix helpers ── */
-  const updateMatrix = (index: number, field: keyof RoomMatrixRow, value: string | number | boolean) => {
-    setMatrix((prev) => prev.map((r, i) => (i === index ? { ...r, [field]: value } : r)));
-  };
-  const addMatrixRow = () => {
-    setMatrix((prev) => [...prev, { roomTypeId: "", bathroomTypeId: "", quantity: 0 }]);
-  };
-  const removeMatrixRow = (index: number) => {
-    setMatrix((prev) => prev.filter((_, i) => i !== index));
-  };
+  /* ── Room type + bathroom type name lookups for read-only display ── */
+  const roomTypeName = (id: string) => roomTypes.find((rt) => rt.id === id)?.name ?? "Unknown";
+  const bathroomTypeName = (id: string) => bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown";
+
   const togglePublicArea = (paId: string) => {
     setSelectedPublicAreas((prev) => {
       const next = new Set(prev);
@@ -186,58 +167,17 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
     });
   };
 
-  /* ── Save Room Matrix ── */
-  const handleSaveMatrix = async () => {
-    setSavingMatrix(true);
-    try {
-      await supabase.from("room_matrix_entries").delete().eq("project_id", projectId);
-      const activeRows = matrix.filter((r) => r.roomTypeId && r.bathroomTypeId);
-      if (activeRows.length > 0) {
-        const { error } = await supabase.from("room_matrix_entries").insert(
-          activeRows.map((r) => ({
-            project_id: projectId,
-            room_type_id: r.roomTypeId,
-            bathroom_type_id: r.bathroomTypeId,
-            is_ada: false,
-            quantity: r.quantity,
-          }))
-        );
-        if (error) throw error;
-      }
-      toast.success("Room matrix saved.");
-    } catch (err: any) {
-      toast.error(err?.message ?? "Failed to save room matrix.");
-    } finally {
-      setSavingMatrix(false);
-    }
-  };
-
   /* ── Generate takeoff (versioned) ── */
   const handleGenerate = async () => {
     if (!user) return;
     const activeRows = matrix.filter((r) => r.quantity > 0 && r.roomTypeId && r.bathroomTypeId);
     if (activeRows.length === 0 && selectedPublicAreas.size === 0) {
-      toast.error("Add at least one room or public area.");
+      toast.error("Add at least one room in the Room Matrix tab, or select a public area.");
       return;
     }
 
     setGenerating(true);
     try {
-      // Save matrix first
-      await supabase.from("room_matrix_entries").delete().eq("project_id", projectId);
-      if (activeRows.length > 0) {
-        const { error: mErr } = await supabase.from("room_matrix_entries").insert(
-          activeRows.map((r) => ({
-            project_id: projectId,
-            room_type_id: r.roomTypeId,
-            bathroom_type_id: r.bathroomTypeId,
-            is_ada: false,
-            quantity: r.quantity,
-          }))
-        );
-        if (mErr) throw mErr;
-      }
-
       const nextVersion = versions.length > 0 ? Math.max(...versions.map((v) => v.version_number)) + 1 : 1;
 
       const { data: versionData, error: vErr } = await supabase
@@ -441,70 +381,44 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
 
   return (
     <div className="space-y-8 pt-2">
-      {/* ── Room Matrix Setup ── */}
-      {setupLoaded && roomTypes.length > 0 && (
+      {/* ── Room Matrix Summary (read-only) ── */}
+      {setupLoaded && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
             Room Matrix
           </h2>
-          <div className="space-y-2">
-            {matrix.map((row, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <Select value={row.roomTypeId} onValueChange={(v) => updateMatrix(i, "roomTypeId", v)}>
-                  <SelectTrigger className="h-9 text-sm flex-1">
-                    <SelectValue placeholder="Room Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roomTypes.map((rt) => (
-                      <SelectItem key={rt.id} value={rt.id}>{rt.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Select value={row.bathroomTypeId} onValueChange={(v) => updateMatrix(i, "bathroomTypeId", v)}>
-                  <SelectTrigger className="h-9 text-sm flex-1">
-                    <SelectValue placeholder="Bathroom Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bathroomTypes.map((bt) => (
-                      <SelectItem key={bt.id} value={bt.id}>{bt.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Input
-                  type="number"
-                  min={0}
-                  className="h-9 w-24 text-sm"
-                  placeholder="Qty"
-                  value={row.quantity || ""}
-                  onChange={(e) => updateMatrix(i, "quantity", parseInt(e.target.value) || 0)}
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-9 w-9 shrink-0 text-muted-foreground hover:text-destructive"
-                  title="Remove"
-                  onClick={() => removeMatrixRow(i)}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={addMatrixRow}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Room Type
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSaveMatrix} disabled={savingMatrix}>
-                {savingMatrix ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                Save Room Matrix
-              </Button>
-            </div>
-            <p className="text-sm text-muted-foreground font-medium">
-              Total Rooms: {matrix.reduce((sum, r) => sum + (r.quantity || 0), 0)}
+          {matrix.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No room matrix set up for this project yet. Add room types and quantities in the{" "}
+              <span className="font-medium text-foreground">Room Matrix</span> tab.
             </p>
-          </div>
+          ) : (
+            <>
+              <div className="rounded-lg border overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-muted/30 text-muted-foreground text-left text-xs">
+                      <th className="px-3 py-2">Room Type</th>
+                      <th className="px-3 py-2">Bathroom Type</th>
+                      <th className="px-3 py-2 text-right">Quantity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrix.map((row) => (
+                      <tr key={row.id} className="border-t">
+                        <td className="px-3 py-1.5">{roomTypeName(row.roomTypeId)}</td>
+                        <td className="px-3 py-1.5">{bathroomTypeName(row.bathroomTypeId)}</td>
+                        <td className="px-3 py-1.5 text-right">{row.quantity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-sm text-muted-foreground font-medium">
+                Total Rooms: {matrix.reduce((sum, r) => sum + (r.quantity || 0), 0)} · Edit in the Room Matrix tab
+              </p>
+            </>
+          )}
         </section>
       )}
 
