@@ -159,6 +159,21 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
   const roomTypeName = (id: string) => roomTypes.find((rt) => rt.id === id)?.name ?? "Unknown";
   const bathroomTypeName = (id: string) => bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown";
 
+  // Raw matrix rows are one-per-floor now; aggregate by (room type, bathroom
+  // type) combo for display here, since this summary isn't floor-organized —
+  // that level of detail lives in the Room Matrix tab.
+  const matrixByCombo = (() => {
+    const map = new Map<string, number>();
+    for (const r of matrix) {
+      const key = `${r.roomTypeId}:${r.bathroomTypeId}`;
+      map.set(key, (map.get(key) ?? 0) + r.quantity);
+    }
+    return Array.from(map.entries()).map(([key, quantity]) => {
+      const [roomTypeId, bathroomTypeId] = key.split(":");
+      return { roomTypeId, bathroomTypeId, quantity };
+    });
+  })();
+
   const togglePublicArea = (paId: string) => {
     setSelectedPublicAreas((prev) => {
       const next = new Set(prev);
@@ -381,7 +396,7 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
 
   return (
     <div className="space-y-8 pt-2">
-      {/* ── Room Matrix Summary (read-only) ── */}
+      {/* ── Room Matrix Summary (read-only, aggregated across floors) ── */}
       {setupLoaded && (
         <section className="space-y-3">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -404,8 +419,8 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
                     </tr>
                   </thead>
                   <tbody>
-                    {matrix.map((row) => (
-                      <tr key={row.id} className="border-t">
+                    {matrixByCombo.map((row) => (
+                      <tr key={`${row.roomTypeId}:${row.bathroomTypeId}`} className="border-t">
                         <td className="px-3 py-1.5">{roomTypeName(row.roomTypeId)}</td>
                         <td className="px-3 py-1.5">{bathroomTypeName(row.bathroomTypeId)}</td>
                         <td className="px-3 py-1.5 text-right">{row.quantity}</td>
