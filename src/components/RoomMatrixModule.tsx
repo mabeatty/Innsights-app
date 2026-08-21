@@ -213,8 +213,8 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
 
     const map = new Map<string, DraftCombo>();
     for (const e of entries) {
-      const key = `${e.roomTypeId}:${e.bathroomTypeId}`;
-      if (!map.has(key)) map.set(key, { key, roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId, quantityByFloor: {} });
+      const key = `${e.roomTypeId}:${e.bathroomTypeId ?? ""}`;
+      if (!map.has(key)) map.set(key, { key, roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId ?? "", quantityByFloor: {} });
       if (e.floorId) map.get(key)!.quantityByFloor[e.floorId] = e.quantity;
     }
     setCombos(map.size > 0 ? Array.from(map.values()) : [{ key: `new-${Date.now()}`, roomTypeId: "", bathroomTypeId: "", quantityByFloor: {} }]);
