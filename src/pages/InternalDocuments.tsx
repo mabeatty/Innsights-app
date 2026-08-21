@@ -38,11 +38,19 @@ interface InternalDoc {
   link: string;
   notes: string | null;
   category: DocumentCategory;
+  brand_id: string | null;
+}
+
+interface Brand {
+  id: string;
+  name: string;
 }
 
 export default function InternalDocuments() {
   const { organizationId, accessLevel } = useAuth();
   const [docs, setDocs] = useState<InternalDoc[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [brandFilter, setBrandFilter] = useState<string>("all");
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DocumentCategory>("Franchise Documents");
   const [search, setSearch] = useState("");
@@ -54,6 +62,7 @@ export default function InternalDocuments() {
   const [formLink, setFormLink] = useState("");
   const [formNotes, setFormNotes] = useState("");
   const [formCategory, setFormCategory] = useState<DocumentCategory>("Franchise Documents");
+  const [formBrandId, setFormBrandId] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   // delete state
@@ -64,26 +73,31 @@ export default function InternalDocuments() {
     if (!organizationId) return;
     const { data } = await supabase
       .from("internal_documents")
-      .select("id, name, link, notes, category")
+      .select("id, name, link, notes, category, brand_id")
       .eq("org_id", organizationId)
       .order("created_at", { ascending: false });
     setDocs((data as InternalDoc[]) ?? []);
     setLoading(false);
   }, [organizationId]);
 
-  useEffect(() => { fetchDocs(); }, [fetchDocs]);
+  const fetchBrands = useCallback(async () => {
+    const { data } = await supabase.from("brands").select("id, name").order("name");
+    setBrands((data as Brand[]) ?? []);
+  }, []);
+
+  useEffect(() => { fetchDocs(); fetchBrands(); }, [fetchDocs, fetchBrands]);
 
   if (accessLevel === "view") return <Navigate to="/dashboard" replace />;
 
   const openAdd = () => {
     setEditingDoc(null);
-    setFormName(""); setFormLink(""); setFormNotes(""); setFormCategory(activeTab);
+    setFormName(""); setFormLink(""); setFormNotes(""); setFormCategory(activeTab); setFormBrandId("");
     setModalOpen(true);
   };
 
   const openEdit = (doc: InternalDoc) => {
     setEditingDoc(doc);
-    setFormName(doc.name); setFormLink(doc.link); setFormNotes(doc.notes ?? ""); setFormCategory(doc.category);
+    setFormName(doc.name); setFormLink(doc.link); setFormNotes(doc.notes ?? ""); setFormCategory(doc.category); setFormBrandId(doc.brand_id ?? "");
     setModalOpen(true);
   };
 
@@ -92,18 +106,23 @@ export default function InternalDocuments() {
       toast.error("Name and Link are required.");
       return;
     }
+    if (formCategory === "Franchise Documents" && !formBrandId) {
+      toast.error("Select a brand for franchise documents.");
+      return;
+    }
     setSaving(true);
+    const brandIdToSave = formCategory === "Franchise Documents" ? formBrandId : null;
     if (editingDoc) {
       const { error } = await supabase
         .from("internal_documents")
-        .update({ name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory })
+        .update({ name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory, brand_id: brandIdToSave })
         .eq("id", editingDoc.id);
       if (error) toast.error("Failed to update document.");
       else toast.success("Document updated.");
     } else {
       const { error } = await supabase
         .from("internal_documents")
-        .insert({ org_id: organizationId!, name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory });
+        .insert({ org_id: organizationId!, name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory, brand_id: brandIdToSave });
       if (error) toast.error("Failed to add document.");
       else toast.success("Document added.");
     }
@@ -125,15 +144,20 @@ export default function InternalDocuments() {
   // Search matches name and notes, and applies within the active tab's
   // category — searching isn't meant to cut across categories, so switching
   // tabs while a search is active narrows within that new category instead
-  // of clearing the search term.
+  // of clearing the search term. The brand filter only has an effect on the
+  // Franchise Documents tab, since brand_id is null for every other category.
   const filteredDocs = useMemo(() => {
-    const inCategory = docs.filter((d) => d.category === activeTab);
+    let inCategory = docs.filter((d) => d.category === activeTab);
+    if (activeTab === "Franchise Documents" && brandFilter !== "all") {
+      inCategory = inCategory.filter((d) => d.brand_id === brandFilter);
+    }
     const q = search.trim().toLowerCase();
     if (!q) return inCategory;
     return inCategory.filter((d) => d.name.toLowerCase().includes(q) || (d.notes ?? "").toLowerCase().includes(q));
-  }, [docs, activeTab, search]);
+  }, [docs, activeTab, search, brandFilter]);
 
   const countFor = (cat: DocumentCategory) => docs.filter((d) => d.category === cat).length;
+  const brandName = (id: string | null) => (id ? brands.find((b) => b.id === id)?.name ?? "Unknown" : "—");
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
@@ -152,14 +176,25 @@ export default function InternalDocuments() {
               </TabsTrigger>
             ))}
           </TabsList>
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-8"
-              placeholder="Search this category…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+            {activeTab === "Franchise Documents" && (
+              <Select value={brandFilter} onValueChange={setBrandFilter}>
+                <SelectTrigger className="w-full sm:w-44"><SelectValue placeholder="All Brands" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Brands</SelectItem>
+                  {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            )}
+            <div className="relative w-full sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-8"
+                placeholder="Search this category…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
@@ -178,6 +213,7 @@ export default function InternalDocuments() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Document Name</TableHead>
+                    {cat === "Franchise Documents" && <TableHead>Brand</TableHead>}
                     <TableHead>Link</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead className="w-24" />
@@ -187,6 +223,7 @@ export default function InternalDocuments() {
                   {filteredDocs.map((doc) => (
                     <TableRow key={doc.id} className="group">
                       <TableCell className="font-medium">{doc.name}</TableCell>
+                      {cat === "Franchise Documents" && <TableCell className="text-sm">{brandName(doc.brand_id)}</TableCell>}
                       <TableCell>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -242,6 +279,17 @@ export default function InternalDocuments() {
                 </SelectContent>
               </Select>
             </div>
+            {formCategory === "Franchise Documents" && (
+              <div className="space-y-1">
+                <Label>Brand *</Label>
+                <Select value={formBrandId} onValueChange={setFormBrandId}>
+                  <SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger>
+                  <SelectContent>
+                    {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="space-y-1">
               <Label>Link *</Label>
               <Input type="url" value={formLink} onChange={(e) => setFormLink(e.target.value)} placeholder="https://..." />
