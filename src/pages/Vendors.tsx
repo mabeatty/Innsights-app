@@ -14,10 +14,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2, Sparkles } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2, Sparkles, FileArchive } from "lucide-react";
 import * as XLSX from "xlsx";
+import JSZip from "jszip";
 import VendorImportDialog from "@/components/vendors/VendorImportDialog";
 import VendorProposalImportDialog from "@/components/vendors/VendorProposalImportDialog";
+import VendorW9Panel, { VendorW9, computeW9Status, w9StatusBadgeClasses, w9StatusLabel } from "@/components/vendors/VendorW9Panel";
 
 const CATEGORIES = [
   "General Contractor",
@@ -114,6 +116,7 @@ export default function Vendors() {
   const [vendors, setVendors] = useState<Vendor[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [vendorProjectMap, setVendorProjectMap] = useState<Record<string, string[]>>({});
+  const [w9ByVendor, setW9ByVendor] = useState<Record<string, VendorW9>>({});
   const [loading, setLoading] = useState(true);
 
   const [search, setSearch] = useState("");
@@ -155,6 +158,11 @@ export default function Vendors() {
       map[row.vendor_id].push(row.project_id);
     });
     setVendorProjectMap(map);
+
+    const { data: w9Data } = await supabase.from("vendor_w9s").select("*").in("vendor_id", ((vData as Vendor[]) ?? []).map((v) => v.id));
+    const w9Map: Record<string, VendorW9> = {};
+    (w9Data ?? []).forEach((row: any) => { w9Map[row.vendor_id] = row as VendorW9; });
+    setW9ByVendor(w9Map);
 
     // Build project -> vendor-name associations from actual pricing data
     const [{ data: vpRows }, { data: bliRows }] = await Promise.all([
@@ -336,6 +344,45 @@ export default function Vendors() {
     toast.success("Vendor database exported");
   };
 
+  const [downloadingW9s, setDownloadingW9s] = useState(false);
+  const handleDownloadAllW9s = async () => {
+    const onFile = Object.entries(w9ByVendor).filter(([, w9]) => !!w9.document_url);
+    if (onFile.length === 0) {
+      toast.error("No W-9s on file to download.");
+      return;
+    }
+    setDownloadingW9s(true);
+    try {
+      const zip = new JSZip();
+      const vendorNameById = new Map(vendors.map((v) => [v.id, v.vendor_name]));
+      await Promise.all(
+        onFile.map(async ([vendorId, w9]) => {
+          try {
+            const resp = await fetch(w9.document_url!);
+            const blob = await resp.blob();
+            const vendorName = (vendorNameById.get(vendorId) ?? "vendor").replace(/[^\w\- ]/g, "").trim();
+            const ext = (w9.document_name?.split(".").pop() || "pdf").toLowerCase();
+            zip.file(`${vendorName}_W9.${ext}`, blob);
+          } catch {
+            // Skip files that fail to fetch rather than aborting the whole zip.
+          }
+        })
+      );
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `W9_Forms_${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloaded ${onFile.length} W-9${onFile.length === 1 ? "" : "s"}.`);
+    } finally {
+      setDownloadingW9s(false);
+    }
+  };
+
   return (
     <div className="p-8 space-y-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between">
@@ -355,6 +402,9 @@ export default function Vendors() {
           </Button>
           <Button variant="outline" onClick={handleExport} className="gap-2">
             <Download className="h-4 w-4" /> Export
+          </Button>
+          <Button variant="outline" onClick={handleDownloadAllW9s} disabled={downloadingW9s} className="gap-2">
+            <FileArchive className="h-4 w-4" /> {downloadingW9s ? "Zipping…" : "Download W-9s"}
           </Button>
           <Button onClick={openCreate} className="gap-2">
             <Plus className="h-4 w-4" /> Add Vendor
@@ -408,14 +458,15 @@ export default function Vendors() {
               <TableHead>Markets</TableHead>
               <TableHead>Notes</TableHead>
               <TableHead>Rating</TableHead>
+              <TableHead>W-9</TableHead>
               <TableHead className="w-[100px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="text-center text-muted-foreground py-8">No vendors found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No vendors found.</TableCell></TableRow>
             ) : (
               filtered.map((v) => (
                 <TableRow key={v.id} className="group cursor-pointer" onClick={() => navigate(`/vendors/${v.id}`)}>
@@ -434,6 +485,18 @@ export default function Vendors() {
                     ) : "—"}
                   </TableCell>
                   <TableCell><StarRating value={v.performance_rating} size={14} /></TableCell>
+                  <TableCell onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5">
+                      <span className={`${w9StatusBadgeClasses(computeW9Status(w9ByVendor[v.id] ?? null))} text-[10px]`}>
+                        {w9StatusLabel(computeW9Status(w9ByVendor[v.id] ?? null))}
+                      </span>
+                      {w9ByVendor[v.id]?.document_url && (
+                        <Button size="icon" variant="ghost" className="h-6 w-6" title="Download W-9" onClick={() => window.open(w9ByVendor[v.id].document_url!, "_blank", "noopener,noreferrer")}>
+                          <Download className="h-3.5 w-3.5 text-primary" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button size="icon" variant="ghost" className="h-8 w-8" title="Link to projects" onClick={() => setDetailVendor(v)}>

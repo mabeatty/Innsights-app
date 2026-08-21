@@ -4,11 +4,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Mail, Phone, MapPin, Pencil } from "lucide-react";
 import { freshness, fmtDate } from "@/lib/pricingFreshness";
+import VendorW9Panel from "@/components/vendors/VendorW9Panel";
 
 const db = supabase as any;
 
 interface VendorInfo {
-  id: string; vendor_name: string; category: string | null; contact_name: string | null;
+  id: string; org_id: string; vendor_name: string; category: string | null; contact_name: string | null;
   phone: string | null; email: string | null; markets: string | null; notes: string | null;
 }
 interface Rec {
@@ -119,6 +120,10 @@ export default function VendorDetail() {
           )}
         </div>
         {vendor!.notes && <p className="mt-3 whitespace-pre-wrap text-sm text-muted-foreground border-t pt-3">{vendor!.notes}</p>}
+      </div>
+
+      <div className="mb-6">
+        <VendorW9Panel vendorId={vendor!.id} vendorName={vendor!.vendor_name} orgId={vendor!.org_id} mode="full" />
       </div>
 
       {/* Summary stats */}

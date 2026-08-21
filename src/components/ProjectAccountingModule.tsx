@@ -34,6 +34,7 @@ interface Props {
   onScheduledValueChange: (id: string, value: number) => void;
   onScheduledValueBlur: (id: string, value: number) => void;
   onTransactionsChange: (txns: BudgetTransaction[]) => void;
+  onTransactionsReload: () => void;
   onBudgetReload: () => void;
 }
 
@@ -42,7 +43,7 @@ export default function ProjectAccountingModule({
   budgetRows, transactions, materialsStored,
   periodStart, periodEnd, onPeriodChange,
   onMaterialsChange, onScheduledValueChange, onScheduledValueBlur,
-  onTransactionsChange, onBudgetReload,
+  onTransactionsChange, onTransactionsReload, onBudgetReload,
 }: Props) {
   const [draws, setDraws] = useState<DrawRecord[]>([]);
   const [closeDrawOpen, setCloseDrawOpen] = useState(false);
@@ -263,7 +264,7 @@ export default function ProjectAccountingModule({
         </TabsContent>
 
         <TabsContent value="draw-history">
-          <DrawHistoryTab projectId={projectId} draws={draws} onRefresh={loadDraws} />
+          <DrawHistoryTab projectId={projectId} draws={draws} onRefresh={() => { loadDraws(); onTransactionsReload(); }} />
         </TabsContent>
       </Tabs>
 

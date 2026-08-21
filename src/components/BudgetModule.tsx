@@ -125,6 +125,7 @@ export default function BudgetModule({ projectId, projectName, projectInfo, acti
       onScheduledValueChange={handleScheduledValueChange}
       onScheduledValueBlur={handleScheduledValueBlur}
       onTransactionsChange={handleTransactionsChange}
+      onTransactionsReload={loadTransactions}
       onBudgetReload={loadBudget}
     />
   );

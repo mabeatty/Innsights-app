@@ -11,9 +11,10 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { ExternalLink, Pencil, Trash2, ListChecks } from "lucide-react";
 import { toast } from "sonner";
 import { fmt } from "./types";
+import EditDrawTransactionsDialog from "./EditDrawTransactionsDialog";
 
 export interface DrawRecord {
   id: string;
@@ -49,6 +50,7 @@ interface Props {
 
 export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
   const [viewDraw, setViewDraw] = useState<DrawRecord | null>(null);
+  const [editTransactionsDraw, setEditTransactionsDraw] = useState<DrawRecord | null>(null);
 
   // Edit state
   const [editDraw, setEditDraw] = useState<DrawRecord | null>(null);
@@ -227,6 +229,9 @@ export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
                       <Button variant="ghost" size="sm" className="text-xs h-7" onClick={() => setViewDraw(d)}>
                         View
                       </Button>
+                      <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit transactions in this draw" onClick={() => setEditTransactionsDraw(d)}>
+                        <ListChecks className="h-3.5 w-3.5" />
+                      </Button>
                       <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(d)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
@@ -382,6 +387,13 @@ export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <EditDrawTransactionsDialog
+        draw={editTransactionsDraw}
+        projectId={projectId}
+        onOpenChange={(open) => { if (!open) setEditTransactionsDraw(null); }}
+        onSaved={onRefresh}
+      />
     </div>
   );
 }
