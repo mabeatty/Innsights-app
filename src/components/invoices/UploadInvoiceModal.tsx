@@ -409,6 +409,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         amount: totalAmount,
         retainage_amount: totalRetainage,
         net_amount: totalNet,
+        lienable_amount: totalNet,
         aia_detail_rows: aiaDetailRows.length ? aiaDetailRows : null,
         cost_type: firstDiv?.cost_type === "hard" ? "Hard Cost" : firstDiv?.cost_type === "soft" ? "Soft Cost" : null,
         budget_line_item: budgetLineSummary,

@@ -114,6 +114,8 @@ export interface Invoice {
   ai_extracted_fields: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  due_date: string | null;
+  lienable_amount: number | null;
   projects?: { id: string; name: string } | null;
 }
 

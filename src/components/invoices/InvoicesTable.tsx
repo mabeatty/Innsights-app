@@ -11,6 +11,7 @@ import DatePickerInput from "@/components/ui/date-picker-input";
 import { Plus, Search, Mail } from "lucide-react";
 import { format } from "date-fns";
 import { Invoice, statusBadgeClasses, formatCurrency } from "./types";
+import { computeLienWaiverStatus, lienWaiverStatusBadgeClasses, lienWaiverStatusLabel, LienWaiverStatus } from "./LienWaiverPanel";
 import UploadInvoiceModal from "./UploadInvoiceModal";
 import InvoiceDetailDialog from "./InvoiceDetailDialog";
 
@@ -25,6 +26,7 @@ interface Props {
 export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
   const { accessLevel, isConsultant } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [lienWaiverStatusByInvoice, setLienWaiverStatusByInvoice] = useState<Record<string, LienWaiverStatus>>({});
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -44,7 +46,22 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
     let q = supabase.from("invoices").select("*, projects(id, name)").order("submitted_at", { ascending: false });
     if (projectId) q = q.eq("project_id", projectId);
     const { data } = await q;
-    setInvoices((data as Invoice[]) ?? []);
+    const invs = (data as Invoice[]) ?? [];
+    setInvoices(invs);
+
+    const gcDrawInvoices = invs.filter((i) => i.type === "Hard Cost — GC Draw");
+    if (gcDrawInvoices.length > 0) {
+      const { data: waivers } = await supabase
+        .from("lien_waivers")
+        .select("invoice_id, waiver_amount")
+        .in("invoice_id", gcDrawInvoices.map((i) => i.id));
+      const statusMap: Record<string, LienWaiverStatus> = {};
+      for (const inv of gcDrawInvoices) {
+        const waiversForInvoice = (waivers ?? []).filter((w: any) => w.invoice_id === inv.id);
+        statusMap[inv.id] = computeLienWaiverStatus(inv.lienable_amount, waiversForInvoice as any).status;
+      }
+      setLienWaiverStatusByInvoice(statusMap);
+    }
     setLoading(false);
   }, [projectId]);
 
@@ -132,13 +149,14 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
               <TableHead className="text-right">Net Amount</TableHead>
               <TableHead>Budget Line Item</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Lien Waiver</TableHead>
               <TableHead>Submitted By</TableHead>
               <TableHead>Submitted</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6 text-sm">Loading…</TableCell></TableRow>}
-            {!loading && filtered.length === 0 && <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-6 text-sm">No invoices.</TableCell></TableRow>}
+            {loading && <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-6 text-sm">Loading…</TableCell></TableRow>}
+            {!loading && filtered.length === 0 && <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-6 text-sm">No invoices.</TableCell></TableRow>}
             {filtered.map((i) => (
               <TableRow key={i.id} className="cursor-pointer" onClick={() => setSelectedId(i.id)}>
                 {!hideProjectColumn && <TableCell className="text-xs">{i.projects?.name || "—"}</TableCell>}
@@ -154,6 +172,13 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
                     <Badge variant="outline" className={`${statusBadgeClasses(i.status)} text-[10px]`}>{i.status}</Badge>
                     {i.source === "email" && <Badge variant="outline" className="text-[10px] gap-1"><Mail className="h-2.5 w-2.5" />Via Email</Badge>}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {i.type === "Hard Cost — GC Draw" && (
+                    <span className={`${lienWaiverStatusBadgeClasses(lienWaiverStatusByInvoice[i.id] ?? "none")} text-[10px]`}>
+                      {lienWaiverStatusLabel(lienWaiverStatusByInvoice[i.id] ?? "none")}
+                    </span>
+                  )}
                 </TableCell>
                 <TableCell className="text-xs">{i.submitted_by_email || "—"}</TableCell>
                 <TableCell className="text-xs">{format(new Date(i.submitted_at), "MMM d, yyyy")}</TableCell>

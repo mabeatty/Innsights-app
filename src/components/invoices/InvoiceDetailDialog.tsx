@@ -15,6 +15,7 @@ import {
   Invoice, InvoiceApproval, InvoiceLineItem, ApproverRole, APPROVER_ROLES,
   statusBadgeClasses, formatCurrency,
 } from "./types";
+import LienWaiverPanel from "./LienWaiverPanel";
 
 interface Comment { id: string; author_name: string | null; body: string; created_at: string; author_id: string | null }
 
@@ -396,6 +397,20 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   <div className="text-xs text-muted-foreground">No approval chain on this invoice. Assign approvers in Project Info and re-upload.</div>
                 )}
               </div>
+
+              {invoice.type === "Hard Cost — GC Draw" && (
+                <LienWaiverPanel
+                  invoiceId={invoice.id}
+                  invoiceLabel={invoice.invoice_number || format(new Date(invoice.invoice_date ?? invoice.submitted_at), "MM/dd/yyyy")}
+                  vendorName={invoice.vendor_name ?? ""}
+                  lienableAmount={invoice.lienable_amount}
+                  onLienableAmountChange={async (amount) => {
+                    const { error } = await supabase.from("invoices").update({ lienable_amount: amount }).eq("id", invoice.id);
+                    if (error) { toast.error(error.message); return; }
+                    setInvoice({ ...invoice, lienable_amount: amount });
+                  }}
+                />
+              )}
 
               <Separator />
 
