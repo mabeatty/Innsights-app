@@ -700,6 +700,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
           contractId={coiPanelContract.id}
           contractLabel={coiPanelContract.contract_number || coiPanelContract.scope_summary}
           vendorName={vendorName(coiPanelContract.vendor_id)}
+          projectId={projectId}
           open={!!coiPanelContract}
           onOpenChange={(open) => { if (!open) setCoiPanelContract(null); }}
           onStatusChange={load}

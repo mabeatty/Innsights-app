@@ -35,37 +35,42 @@ interface CoiRequirement {
   notes: string | null;
 }
 
-interface Coi {
+interface CoverageLine {
   id: string;
-  contract_id: string;
+  certificate_id: string;
   coverage_type: CoverageType;
-  carrier: string | null;
-  policy_number: string | null;
   actual_limit: number | null;
   effective_date: string | null;
   expiration_date: string;
-  document_url: string | null;
-  document_name: string | null;
-  notes: string | null;
 }
 
-// A coverage type is "satisfied" when there's a current (latest expiration_date
-// among its certs) COI on file, not expired, and (if a limit is required) its
-// actual_limit meets or exceeds the requirement.
+interface Certificate {
+  id: string;
+  contract_id: string;
+  carrier: string | null;
+  policy_number: string | null;
+  document_url: string | null;
+  document_name: string | null;
+  document_path: string | null;
+  notes: string | null;
+  lines: CoverageLine[];
+}
+
 export type CoiStatus = "expired" | "expiring" | "insufficient" | "missing" | "current";
 
-export function computeCoiStatus(requirements: CoiRequirement[], certs: Coi[]): {
+export function computeCoiStatus(requirements: CoiRequirement[], certificates: Certificate[]): {
   overall: CoiStatus;
-  byType: Record<string, { status: CoiStatus; current: Coi | null; requirement: CoiRequirement | null }>;
+  byType: Record<string, { status: CoiStatus; current: CoverageLine | null; requirement: CoiRequirement | null }>;
 } {
-  const byType: Record<string, { status: CoiStatus; current: Coi | null; requirement: CoiRequirement | null }> = {};
+  const allLines = certificates.flatMap((c) => c.lines);
+  const byType: Record<string, { status: CoiStatus; current: CoverageLine | null; requirement: CoiRequirement | null }> = {};
   const today = new Date();
 
   for (const req of requirements) {
-    const certsForType = certs
-      .filter((c) => c.coverage_type === req.coverage_type)
+    const linesForType = allLines
+      .filter((l) => l.coverage_type === req.coverage_type)
       .sort((a, b) => new Date(b.expiration_date).getTime() - new Date(a.expiration_date).getTime());
-    const current = certsForType[0] ?? null;
+    const current = linesForType[0] ?? null;
 
     let status: CoiStatus = "missing";
     if (current) {
@@ -105,18 +110,27 @@ export const coiStatusLabel = (status: CoiStatus) => ({
   missing: "Missing",
 }[status]);
 
+interface DraftLine {
+  key: string;
+  coverage_type: CoverageType;
+  actual_limit: number | "";
+  effective_date: Date | undefined;
+  expiration_date: Date | undefined;
+}
+
 interface Props {
   contractId: string;
   contractLabel: string;
   vendorName: string;
+  projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onStatusChange?: () => void; // called after any save/delete so the parent can refresh its badge
+  onStatusChange?: () => void;
 }
 
-export default function CoiPanel({ contractId, contractLabel, vendorName, open, onOpenChange, onStatusChange }: Props) {
+export default function CoiPanel({ contractId, contractLabel, vendorName, projectId, open, onOpenChange, onStatusChange }: Props) {
   const [requirements, setRequirements] = useState<CoiRequirement[]>([]);
-  const [certs, setCerts] = useState<Coi[]>([]);
+  const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [reqDialogOpen, setReqDialogOpen] = useState(false);
@@ -127,26 +141,25 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
 
   const [certDialogOpen, setCertDialogOpen] = useState(false);
   const [certEditingId, setCertEditingId] = useState<string | null>(null);
-  const [certCoverageType, setCertCoverageType] = useState<CoverageType>("General Liability");
   const [certCarrier, setCertCarrier] = useState("");
   const [certPolicyNumber, setCertPolicyNumber] = useState("");
-  const [certLimit, setCertLimit] = useState<number | "">("");
-  const [certEffective, setCertEffective] = useState<Date | undefined>(undefined);
-  const [certExpiration, setCertExpiration] = useState<Date | undefined>(undefined);
   const [certNotes, setCertNotes] = useState("");
   const [certFile, setCertFile] = useState<File | null>(null);
   const [certDocUrl, setCertDocUrl] = useState<string | null>(null);
   const [certDocName, setCertDocName] = useState<string | null>(null);
-  const [uploading, setUploading] = useState(false);
+  const [draftLines, setDraftLines] = useState<DraftLine[]>([]);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     const [reqRes, certRes] = await Promise.all([
       supabase.from("coi_requirements").select("*").eq("contract_id", contractId),
-      supabase.from("certificates_of_insurance").select("*").eq("contract_id", contractId).order("expiration_date", { ascending: false }),
+      supabase.from("certificates_of_insurance").select("*, coi_coverage_lines(*)").eq("contract_id", contractId).order("created_at", { ascending: false }),
     ]);
     setRequirements((reqRes.data as CoiRequirement[]) ?? []);
-    setCerts((certRes.data as Coi[]) ?? []);
+    setCertificates(
+      ((certRes.data ?? []) as any[]).map((c) => ({ ...c, lines: (c.coi_coverage_lines ?? []) as CoverageLine[] }))
+    );
     setLoading(false);
   }, [contractId]);
 
@@ -154,7 +167,7 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
     if (open) load();
   }, [open, load]);
 
-  const { byType } = useMemo(() => computeCoiStatus(requirements, certs), [requirements, certs]);
+  const { byType } = useMemo(() => computeCoiStatus(requirements, certificates), [requirements, certificates]);
 
   const requiredTypesInUse = new Set(requirements.map((r) => r.coverage_type));
   const availableTypesForNewReq = COVERAGE_TYPES.filter((t) => !requiredTypesInUse.has(t));
@@ -200,49 +213,68 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
     onStatusChange?.();
   };
 
+  const newDraftLine = (): DraftLine => ({
+    key: `${Date.now()}-${Math.random()}`,
+    coverage_type: "General Liability",
+    actual_limit: "",
+    effective_date: undefined,
+    expiration_date: undefined,
+  });
+
   const resetCertForm = () => {
     setCertEditingId(null);
-    setCertCoverageType("General Liability");
     setCertCarrier("");
     setCertPolicyNumber("");
-    setCertLimit("");
-    setCertEffective(undefined);
-    setCertExpiration(undefined);
     setCertNotes("");
     setCertFile(null);
     setCertDocUrl(null);
     setCertDocName(null);
+    setDraftLines([newDraftLine()]);
   };
 
-  const openEditCert = (c: Coi) => {
+  const openEditCert = (c: Certificate) => {
     setCertEditingId(c.id);
-    setCertCoverageType(c.coverage_type);
     setCertCarrier(c.carrier ?? "");
     setCertPolicyNumber(c.policy_number ?? "");
-    setCertLimit(c.actual_limit ?? "");
-    setCertEffective(c.effective_date ? new Date(c.effective_date) : undefined);
-    setCertExpiration(new Date(c.expiration_date));
     setCertNotes(c.notes ?? "");
     setCertFile(null);
     setCertDocUrl(c.document_url);
     setCertDocName(c.document_name);
+    setDraftLines(
+      c.lines.length > 0
+        ? c.lines.map((l) => ({
+            key: l.id,
+            coverage_type: l.coverage_type,
+            actual_limit: l.actual_limit ?? "",
+            effective_date: l.effective_date ? new Date(l.effective_date) : undefined,
+            expiration_date: new Date(l.expiration_date),
+          }))
+        : [newDraftLine()]
+    );
     setCertDialogOpen(true);
   };
 
+  const addDraftLine = () => setDraftLines((prev) => [...prev, newDraftLine()]);
+  const removeDraftLine = (key: string) => setDraftLines((prev) => (prev.length > 1 ? prev.filter((l) => l.key !== key) : prev));
+  const updateDraftLine = (key: string, patch: Partial<DraftLine>) =>
+    setDraftLines((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+
   const saveCert = async () => {
-    if (!certExpiration) { toast.error("Expiration date is required."); return; }
-    setUploading(true);
+    const validLines = draftLines.filter((l) => l.expiration_date);
+    if (validLines.length === 0) { toast.error("At least one coverage line with an expiration date is required."); return; }
+
+    setSaving(true);
     let docUrl = certDocUrl;
     let docName = certDocName;
     let docPath: string | null = null;
 
     if (certFile) {
       const timestamp = Date.now();
-      const path = `${contractId}/coi/${timestamp}-${certFile.name}`;
+      const path = `${projectId}/contracts/${contractId}/coi/${timestamp}-${certFile.name}`;
       const { error: uploadError } = await supabase.storage.from("project-documents").upload(path, certFile);
       if (uploadError) {
         toast.error(`File upload failed: ${uploadError.message}`);
-        setUploading(false);
+        setSaving(false);
         return;
       }
       const { data: urlData } = supabase.storage.from("project-documents").getPublicUrl(path);
@@ -251,25 +283,38 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
       docPath = path;
     }
 
-    const payload = {
+    const certPayload = {
       contract_id: contractId,
-      coverage_type: certCoverageType,
       carrier: certCarrier || null,
       policy_number: certPolicyNumber || null,
-      actual_limit: certLimit === "" ? null : Number(certLimit),
-      effective_date: certEffective ? format(certEffective, "yyyy-MM-dd") : null,
-      expiration_date: format(certExpiration, "yyyy-MM-dd"),
       notes: certNotes || null,
       document_url: docUrl,
       document_name: docName,
       ...(docPath ? { document_path: docPath } : {}),
     };
 
-    const { error } = certEditingId
-      ? await supabase.from("certificates_of_insurance").update(payload).eq("id", certEditingId)
-      : await supabase.from("certificates_of_insurance").insert(payload);
-    setUploading(false);
-    if (error) { toast.error(error.message); return; }
+    let certificateId = certEditingId;
+    if (certEditingId) {
+      const { error } = await supabase.from("certificates_of_insurance").update(certPayload).eq("id", certEditingId);
+      if (error) { toast.error(error.message); setSaving(false); return; }
+      await supabase.from("coi_coverage_lines").delete().eq("certificate_id", certEditingId);
+    } else {
+      const { data, error } = await supabase.from("certificates_of_insurance").insert(certPayload).select("id").single();
+      if (error) { toast.error(error.message); setSaving(false); return; }
+      certificateId = data.id;
+    }
+
+    const linesPayload = validLines.map((l) => ({
+      certificate_id: certificateId,
+      coverage_type: l.coverage_type,
+      actual_limit: l.actual_limit === "" ? null : Number(l.actual_limit),
+      effective_date: l.effective_date ? format(l.effective_date, "yyyy-MM-dd") : null,
+      expiration_date: format(l.expiration_date!, "yyyy-MM-dd"),
+    }));
+    const { error: linesError } = await supabase.from("coi_coverage_lines").insert(linesPayload);
+    setSaving(false);
+    if (linesError) { toast.error(linesError.message); return; }
+
     toast.success(certEditingId ? "Certificate updated" : "Certificate added");
     setCertDialogOpen(false);
     resetCertForm();
@@ -321,7 +366,7 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
                         <th className="px-3 py-2">Coverage Type</th>
                         <th className="px-3 py-2 text-right">Required Limit</th>
                         <th className="px-3 py-2 text-right">Actual Limit</th>
-                        <th className="px-3 py-2">Current Cert Expires</th>
+                        <th className="px-3 py-2">Current Expires</th>
                         <th className="px-3 py-2">Status</th>
                         <th className="px-3 py-2 w-16" />
                       </tr>
@@ -359,56 +404,59 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
               )}
 
               <div className="flex items-center justify-between pt-2">
-                <h3 className="text-sm font-medium">Certificate History</h3>
+                <h3 className="text-sm font-medium">Certificates on File</h3>
                 <Button size="sm" className="gap-1.5" onClick={() => { resetCertForm(); setCertDialogOpen(true); }}>
                   <Plus className="h-3.5 w-3.5" /> Log Certificate
                 </Button>
               </div>
 
-              {certs.length === 0 ? (
+              {certificates.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No certificates logged yet.</p>
               ) : (
-                <div className="rounded-lg border overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="bg-muted/30 text-muted-foreground text-left text-xs">
-                        <th className="px-3 py-2">Coverage Type</th>
-                        <th className="px-3 py-2">Carrier</th>
-                        <th className="px-3 py-2">Policy #</th>
-                        <th className="px-3 py-2 text-right">Limit</th>
-                        <th className="px-3 py-2">Effective</th>
-                        <th className="px-3 py-2">Expires</th>
-                        <th className="px-3 py-2 w-20" />
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {certs.map((c) => (
-                        <tr key={c.id} className="border-t">
-                          <td className="px-3 py-2">{c.coverage_type}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{c.carrier ?? "—"}</td>
-                          <td className="px-3 py-2 text-muted-foreground">{c.policy_number ?? "—"}</td>
-                          <td className="px-3 py-2 text-right">{c.actual_limit ? fmt(c.actual_limit) : "—"}</td>
-                          <td className="px-3 py-2">{c.effective_date ? format(new Date(c.effective_date), "MM/dd/yyyy") : "—"}</td>
-                          <td className="px-3 py-2">{format(new Date(c.expiration_date), "MM/dd/yyyy")}</td>
-                          <td className="px-3 py-2">
-                            <div className="flex gap-1">
-                              {c.document_url && (
-                                <Button variant="ghost" size="icon" className="h-7 w-7" title="Open document" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
-                                  <ExternalLink className="h-3.5 w-3.5 text-primary" />
-                                </Button>
-                              )}
-                              <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEditCert(c)}>
-                                <Pencil className="h-3.5 w-3.5" />
-                              </Button>
-                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => deleteCert(c.id)}>
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="space-y-2">
+                  {certificates.map((c) => (
+                    <div key={c.id} className="rounded-lg border overflow-hidden">
+                      <div className="flex items-center justify-between px-3 py-2 bg-muted/20">
+                        <div className="text-sm">
+                          <span className="font-medium">{c.carrier || "Unknown carrier"}</span>
+                          {c.policy_number && <span className="text-muted-foreground"> · Policy {c.policy_number}</span>}
+                        </div>
+                        <div className="flex gap-1">
+                          {c.document_url && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Open document" onClick={() => window.open(c.document_url!, "_blank", "noopener,noreferrer")}>
+                              <ExternalLink className="h-3.5 w-3.5 text-primary" />
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEditCert(c)}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => deleteCert(c.id)}>
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-muted/10 text-muted-foreground text-left text-xs">
+                            <th className="px-3 py-1.5">Coverage</th>
+                            <th className="px-3 py-1.5 text-right">Limit</th>
+                            <th className="px-3 py-1.5">Effective</th>
+                            <th className="px-3 py-1.5">Expires</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {c.lines.map((l) => (
+                            <tr key={l.id} className="border-t">
+                              <td className="px-3 py-1.5">{l.coverage_type}</td>
+                              <td className="px-3 py-1.5 text-right">{l.actual_limit ? fmt(l.actual_limit) : "—"}</td>
+                              <td className="px-3 py-1.5">{l.effective_date ? format(new Date(l.effective_date), "MM/dd/yyyy") : "—"}</td>
+                              <td className="px-3 py-1.5">{format(new Date(l.expiration_date), "MM/dd/yyyy")}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -416,7 +464,6 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
         </DialogContent>
       </Dialog>
 
-      {/* Requirement add/edit dialog */}
       <Dialog open={reqDialogOpen} onOpenChange={setReqDialogOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>{reqEditingId ? "Edit" : "Add"} Coverage Requirement</DialogTitle></DialogHeader>
@@ -445,20 +492,10 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
         </DialogContent>
       </Dialog>
 
-      {/* Certificate add/edit dialog */}
       <Dialog open={certDialogOpen} onOpenChange={setCertDialogOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{certEditingId ? "Edit" : "Log"} Certificate of Insurance</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label className="text-xs">Coverage Type</Label>
-              <Select value={certCoverageType} onValueChange={(v) => setCertCoverageType(v as CoverageType)}>
-                <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {COVERAGE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            </div>
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-xs">Carrier</Label>
@@ -469,20 +506,7 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
                 <Input className="h-8" value={certPolicyNumber} onChange={(e) => setCertPolicyNumber(e.target.value)} />
               </div>
             </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Actual Limit ($)</Label>
-              <Input type="number" className="h-8" value={certLimit} onChange={(e) => setCertLimit(e.target.value === "" ? "" : Number(e.target.value))} />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label className="text-xs">Effective Date</Label>
-                <DatePickerInput value={certEffective} onChange={setCertEffective} />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Expiration Date</Label>
-                <DatePickerInput value={certExpiration} onChange={setCertExpiration} />
-              </div>
-            </div>
+
             <div className="space-y-1">
               <Label className="text-xs">Document</Label>
               {certDocUrl && !certFile ? (
@@ -493,22 +517,71 @@ export default function CoiPanel({ contractId, contractLabel, vendorName, open, 
                   </Button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="file"
-                    accept="application/pdf,image/*"
-                    className="h-8 text-xs"
-                    onChange={(e) => setCertFile(e.target.files?.[0] ?? null)}
-                  />
-                </div>
+                <Input
+                  type="file"
+                  accept="application/pdf,image/*"
+                  className="h-8 text-xs"
+                  onChange={(e) => setCertFile(e.target.files?.[0] ?? null)}
+                />
               )}
             </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Coverage Lines</Label>
+                <Button size="sm" variant="outline" className="h-7 gap-1 text-xs" onClick={addDraftLine}>
+                  <Plus className="h-3 w-3" /> Add Coverage
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {draftLines.map((line) => (
+                  <div key={line.key} className="grid grid-cols-[1.3fr_0.9fr_0.9fr_0.9fr_auto] gap-2 items-end border rounded-md p-2">
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Coverage Type</Label>
+                      <Select value={line.coverage_type} onValueChange={(v) => updateDraftLine(line.key, { coverage_type: v as CoverageType })}>
+                        <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {COVERAGE_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Limit ($)</Label>
+                      <Input
+                        type="number"
+                        className="h-8 text-xs"
+                        value={line.actual_limit}
+                        onChange={(e) => updateDraftLine(line.key, { actual_limit: e.target.value === "" ? "" : Number(e.target.value) })}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Effective</Label>
+                      <DatePickerInput value={line.effective_date} onChange={(d) => updateDraftLine(line.key, { effective_date: d })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-[10px] text-muted-foreground">Expires</Label>
+                      <DatePickerInput value={line.expiration_date} onChange={(d) => updateDraftLine(line.key, { expiration_date: d })} />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      disabled={draftLines.length === 1}
+                      onClick={() => removeDraftLine(line.key)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-1">
               <Label className="text-xs">Notes</Label>
               <Textarea className="text-sm" rows={2} value={certNotes} onChange={(e) => setCertNotes(e.target.value)} />
             </div>
-            <Button className="w-full gap-1.5" onClick={saveCert} disabled={uploading}>
-              <Upload className="h-3.5 w-3.5" /> {uploading ? "Saving…" : certEditingId ? "Save" : "Log Certificate"}
+            <Button className="w-full gap-1.5" onClick={saveCert} disabled={saving}>
+              <Upload className="h-3.5 w-3.5" /> {saving ? "Saving…" : certEditingId ? "Save" : "Log Certificate"}
             </Button>
           </div>
         </DialogContent>

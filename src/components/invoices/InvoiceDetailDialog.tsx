@@ -403,6 +403,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   invoiceId={invoice.id}
                   invoiceLabel={invoice.invoice_number || format(new Date(invoice.invoice_date ?? invoice.submitted_at), "MM/dd/yyyy")}
                   vendorName={invoice.vendor_name ?? ""}
+                  projectId={invoice.project_id ?? ""}
                   lienableAmount={invoice.lienable_amount}
                   onLienableAmountChange={async (amount) => {
                     const { error } = await supabase.from("invoices").update({ lienable_amount: amount }).eq("id", invoice.id);

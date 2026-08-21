@@ -80,6 +80,7 @@ interface Props {
   invoiceId: string;
   invoiceLabel: string;
   vendorName: string;
+  projectId: string;
   lienableAmount: number | null;
   onLienableAmountChange: (amount: number | null) => void;
 }
@@ -89,7 +90,7 @@ interface Props {
  * waivers are specific to a single invoice, so unlike CoiPanel this renders
  * inline as a section rather than being opened from a badge elsewhere.
  */
-export default function LienWaiverPanel({ invoiceId, invoiceLabel, vendorName, lienableAmount, onLienableAmountChange }: Props) {
+export default function LienWaiverPanel({ invoiceId, invoiceLabel, vendorName, projectId, lienableAmount, onLienableAmountChange }: Props) {
   const [waivers, setWaivers] = useState<LienWaiver[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingLienable, setEditingLienable] = useState(false);
@@ -155,7 +156,10 @@ export default function LienWaiverPanel({ invoiceId, invoiceLabel, vendorName, l
 
     if (file) {
       const timestamp = Date.now();
-      const path = `${invoiceId}/lien-waivers/${timestamp}-${file.name}`;
+      // Path must start with the project id — storage RLS on project-documents
+      // checks (storage.foldername(name))[1] against projects the user's org
+      // owns, not the invoice id.
+      const path = `${projectId}/invoices/${invoiceId}/lien-waivers/${timestamp}-${file.name}`;
       const { error: uploadError } = await supabase.storage.from("project-documents").upload(path, file);
       if (uploadError) {
         toast.error(`File upload failed: ${uploadError.message}`);

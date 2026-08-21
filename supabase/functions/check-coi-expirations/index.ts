@@ -24,12 +24,17 @@ interface CoiRequirement {
   required_limit: number | null;
 }
 
-interface Coi {
+interface CoverageLine {
   id: string;
-  contract_id: string;
+  certificate_id: string;
   coverage_type: CoverageType;
   actual_limit: number | null;
   expiration_date: string;
+}
+interface Certificate {
+  id: string;
+  contract_id: string;
+  coi_coverage_lines: CoverageLine[];
 }
 
 function daysUntil(dateStr: string): number {
@@ -60,13 +65,19 @@ Deno.serve(async (req) => {
     const contractIds = contracts.map((c) => c.id);
     const [reqRes, certRes, vendorRes, projectRes] = await Promise.all([
       supabase.from("coi_requirements").select("*").in("contract_id", contractIds),
-      supabase.from("certificates_of_insurance").select("*").in("contract_id", contractIds),
+      supabase.from("certificates_of_insurance").select("*, coi_coverage_lines(*)").in("contract_id", contractIds),
       supabase.from("vendors").select("id, name"),
       supabase.from("projects").select("id, name"),
     ]);
 
     const requirements = (reqRes.data ?? []) as CoiRequirement[];
-    const certs = (certRes.data ?? []) as Coi[];
+    const certificates = (certRes.data ?? []) as Certificate[];
+    // Flatten to one row per coverage line, carrying the parent contract_id
+    // through, so the rest of the matching logic (which is keyed off
+    // contract_id + coverage_type) doesn't need to change.
+    const certs = certificates.flatMap((c) =>
+      (c.coi_coverage_lines ?? []).map((line) => ({ ...line, contract_id: c.contract_id }))
+    );
     const vendorNameById = new Map((vendorRes.data ?? []).map((v: any) => [v.id, v.name]));
     const projectNameById = new Map((projectRes.data ?? []).map((p: any) => [p.id, p.name]));
 
@@ -79,7 +90,7 @@ Deno.serve(async (req) => {
       if (!reqsByContract.has(r.contract_id)) reqsByContract.set(r.contract_id, []);
       reqsByContract.get(r.contract_id)!.push(r);
     }
-    const certsByContractAndType = new Map<string, Coi[]>();
+    const certsByContractAndType = new Map<string, (CoverageLine & { contract_id: string })[]>();
     for (const c of certs) {
       const key = `${c.contract_id}:${c.coverage_type}`;
       if (!certsByContractAndType.has(key)) certsByContractAndType.set(key, []);
