@@ -6,5 +6,8 @@ verify_jwt = false
 [functions.check-alerts]
 verify_jwt = false
 
+[functions.check-coi-expirations]
+verify_jwt = false
+
 [functions.receive-invoice-email]
 verify_jwt = false

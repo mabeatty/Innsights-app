@@ -24,7 +24,7 @@ import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { toast } from "sonner";
-import { Pencil, Plus, AlertTriangle, Trash2 } from "lucide-react";
+import { Pencil, Plus, AlertTriangle, Trash2, ShieldCheck } from "lucide-react";
 
 interface Member {
   id: string;
@@ -65,6 +65,7 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
   const [inviting, setInviting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Member | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [checkingCoi, setCheckingCoi] = useState(false);
 
   // All projects for the picker
   const [allProjects, setAllProjects] = useState<ProjectOption[]>([]);
@@ -125,6 +126,26 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
   };
 
   useEffect(() => { fetchMembers(); }, [organizationId]);
+
+  const handleCheckCoiExpirations = async () => {
+    setCheckingCoi(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("check-coi-expirations", { body: {} });
+      if (error) throw error;
+      if (data?.message) {
+        toast.success(data.message);
+      } else {
+        const sentCount = (data?.results ?? []).filter((r: any) => r.sent).length;
+        const failedCount = (data?.results ?? []).filter((r: any) => !r.sent).length;
+        toast.success(`${data?.issueCount ?? 0} COI issue(s) found. ${sentCount} email(s) sent${failedCount ? `, ${failedCount} failed (see console)` : ""}.`);
+        if (failedCount) console.warn("COI check results:", data.results);
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to run COI check.");
+    } finally {
+      setCheckingCoi(false);
+    }
+  };
 
   const openInviteModal = () => {
     setEditingMember(null);
@@ -320,13 +341,21 @@ export default function AdminTeam({ embedded }: { embedded?: boolean }) {
         {!embedded && (
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-semibold text-foreground">Team</h1>
-            <Button onClick={openInviteModal} size="sm">
-              <Plus className="h-4 w-4 mr-1" /> Invite Member
-            </Button>
+            <div className="flex gap-2">
+              <Button onClick={handleCheckCoiExpirations} size="sm" variant="outline" disabled={checkingCoi} className="gap-1.5">
+                <ShieldCheck className="h-4 w-4" /> {checkingCoi ? "Checking…" : "Check COI Expirations"}
+              </Button>
+              <Button onClick={openInviteModal} size="sm">
+                <Plus className="h-4 w-4 mr-1" /> Invite Member
+              </Button>
+            </div>
           </div>
         )}
         {embedded && (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button onClick={handleCheckCoiExpirations} size="sm" variant="outline" disabled={checkingCoi} className="gap-1.5">
+              <ShieldCheck className="h-4 w-4" /> {checkingCoi ? "Checking…" : "Check COI Expirations"}
+            </Button>
             <Button onClick={openInviteModal} size="sm">
               <Plus className="h-4 w-4 mr-1" /> Invite Member
             </Button>
