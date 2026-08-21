@@ -21,6 +21,8 @@ interface MatrixEntry {
   bathroomTypeId: string | null;
   floorId: string | null;
   quantity: number;
+  leftQty: number;
+  rightQty: number;
 }
 
 interface Props {
@@ -64,6 +66,8 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
         bathroomTypeId: e.bathroom_type_id,
         floorId: e.floor_id,
         quantity: e.quantity,
+        leftQty: e.left_qty ?? 0,
+        rightQty: e.right_qty ?? 0,
       }))
     );
     setLoaded(true);
@@ -75,13 +79,15 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
   const bathroomTypeName = (id: string | null) => (id ? bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown" : "Not set");
 
   const combos = useMemo(() => {
-    const map = new Map<string, { roomTypeId: string; bathroomTypeId: string | null; byFloor: Record<string, number>; noFloorQty: number }>();
+    const map = new Map<string, { roomTypeId: string; bathroomTypeId: string | null; byFloor: Record<string, number>; noFloorQty: number; leftTotal: number; rightTotal: number }>();
     for (const e of entries) {
       const key = `${e.roomTypeId}:${e.bathroomTypeId}`;
-      if (!map.has(key)) map.set(key, { roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId, byFloor: {}, noFloorQty: 0 });
+      if (!map.has(key)) map.set(key, { roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId, byFloor: {}, noFloorQty: 0, leftTotal: 0, rightTotal: 0 });
       const row = map.get(key)!;
       if (e.floorId) row.byFloor[e.floorId] = (row.byFloor[e.floorId] ?? 0) + e.quantity;
       else row.noFloorQty += e.quantity;
+      row.leftTotal += e.leftQty;
+      row.rightTotal += e.rightQty;
     }
     return Array.from(map.values()).sort((a, b) => roomTypeName(a.roomTypeId).localeCompare(roomTypeName(b.roomTypeId)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -92,6 +98,8 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
   const grandTotal = combos.reduce((s, r) => s + rowTotal(r), 0);
   const floorTotal = (floorId: string) => combos.reduce((s, r) => s + (r.byFloor[floorId] ?? 0), 0);
   const unassignedTotal = combos.reduce((s, r) => s + r.noFloorQty, 0);
+  const leftGrandTotal = combos.reduce((s, r) => s + r.leftTotal, 0);
+  const rightGrandTotal = combos.reduce((s, r) => s + r.rightTotal, 0);
 
   if (!loaded) {
     return <p className="text-sm text-muted-foreground py-8 text-center">Loading room matrix…</p>;
@@ -134,6 +142,8 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
                 {floors.map((f) => <th key={f.id} className="px-3 py-2 text-right w-16">{f.name.toUpperCase()}</th>)}
                 {unassignedTotal > 0 && <th className="px-3 py-2 text-right w-20">Unassigned</th>}
                 <th className="px-3 py-2 text-right w-20 font-semibold">Total</th>
+                <th className="px-3 py-2 text-right w-16">Left</th>
+                <th className="px-3 py-2 text-right w-16">Right</th>
                 <th className="px-3 py-2 text-right w-24">% of Total</th>
               </tr>
             </thead>
@@ -149,6 +159,8 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
                     ))}
                     {unassignedTotal > 0 && <td className="px-3 py-1.5 text-right">{row.noFloorQty || ""}</td>}
                     <td className="px-3 py-1.5 text-right font-semibold">{total}</td>
+                    <td className="px-3 py-1.5 text-right">{row.leftTotal || ""}</td>
+                    <td className="px-3 py-1.5 text-right">{row.rightTotal || ""}</td>
                     <td className="px-3 py-1.5 text-right text-muted-foreground">
                       {grandTotal > 0 ? `${((total / grandTotal) * 100).toFixed(1)}%` : "—"}
                     </td>
@@ -160,6 +172,8 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
                 {floors.map((f) => <td key={f.id} className="px-3 py-1.5 text-right">{floorTotal(f.id)}</td>)}
                 {unassignedTotal > 0 && <td className="px-3 py-1.5 text-right">{unassignedTotal}</td>}
                 <td className="px-3 py-1.5 text-right">{grandTotal}</td>
+                <td className="px-3 py-1.5 text-right">{leftGrandTotal}</td>
+                <td className="px-3 py-1.5 text-right">{rightGrandTotal}</td>
                 <td className="px-3 py-1.5 text-right"></td>
               </tr>
             </tbody>
@@ -199,6 +213,8 @@ interface DraftCombo {
   roomTypeId: string;
   bathroomTypeId: string;
   quantityByFloor: Record<string, number | "">;
+  leftQty: number | "";
+  rightQty: number | "";
 }
 
 function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathroomTypes, floors: initialFloors, entries, onSaved }: EditProps) {
@@ -214,10 +230,13 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
     const map = new Map<string, DraftCombo>();
     for (const e of entries) {
       const key = `${e.roomTypeId}:${e.bathroomTypeId ?? ""}`;
-      if (!map.has(key)) map.set(key, { key, roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId ?? "", quantityByFloor: {} });
-      if (e.floorId) map.get(key)!.quantityByFloor[e.floorId] = e.quantity;
+      if (!map.has(key)) map.set(key, { key, roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId ?? "", quantityByFloor: {}, leftQty: 0, rightQty: 0 });
+      const combo = map.get(key)!;
+      if (e.floorId) combo.quantityByFloor[e.floorId] = e.quantity;
+      combo.leftQty = Number(combo.leftQty || 0) + e.leftQty;
+      combo.rightQty = Number(combo.rightQty || 0) + e.rightQty;
     }
-    setCombos(map.size > 0 ? Array.from(map.values()) : [{ key: `new-${Date.now()}`, roomTypeId: "", bathroomTypeId: "", quantityByFloor: {} }]);
+    setCombos(map.size > 0 ? Array.from(map.values()) : [{ key: `new-${Date.now()}`, roomTypeId: "", bathroomTypeId: "", quantityByFloor: {}, leftQty: "", rightQty: "" }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialFloors, entries]);
 
@@ -240,13 +259,17 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
     }));
   };
 
-  const addCombo = () => setCombos((prev) => [...prev, { key: `new-${Date.now()}-${Math.random()}`, roomTypeId: "", bathroomTypeId: "", quantityByFloor: {} }]);
+  const addCombo = () => setCombos((prev) => [...prev, { key: `new-${Date.now()}-${Math.random()}`, roomTypeId: "", bathroomTypeId: "", quantityByFloor: {}, leftQty: "", rightQty: "" }]);
   const removeCombo = (key: string) => setCombos((prev) => prev.filter((c) => c.key !== key));
   const updateCombo = (key: string, patch: Partial<DraftCombo>) =>
     setCombos((prev) => prev.map((c) => (c.key === key ? { ...c, ...patch } : c)));
   const updateQty = (key: string, floorId: string, value: string) => {
     const parsed = value === "" ? "" : Math.max(0, parseInt(value) || 0);
     setCombos((prev) => prev.map((c) => (c.key === key ? { ...c, quantityByFloor: { ...c.quantityByFloor, [floorId]: parsed } } : c)));
+  };
+  const updateLeftRight = (key: string, side: "leftQty" | "rightQty", value: string) => {
+    const parsed = value === "" ? "" : Math.max(0, parseInt(value) || 0);
+    setCombos((prev) => prev.map((c) => (c.key === key ? { ...c, [side]: parsed } : c)));
   };
 
   const rowTotal = (c: DraftCombo) => Object.values(c.quantityByFloor).reduce((s: number, v) => s + (Number(v) || 0), 0);
@@ -260,6 +283,20 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
     if (validCombos.length === 0) {
       toast.error("Add at least one room type and bathroom type.");
       return;
+    }
+
+    // Left + Right must equal the row's Total when either has been entered —
+    // a row with no Left/Right entered at all is left unvalidated (not every
+    // room type needs an orientation split).
+    for (const c of validCombos) {
+      const total = rowTotal(c);
+      const left = Number(c.leftQty || 0);
+      const right = Number(c.rightQty || 0);
+      const hasEntry = c.leftQty !== "" || c.rightQty !== "";
+      if (hasEntry && left + right !== total) {
+        toast.error(`Left (${left}) + Right (${right}) must equal Total (${total}) for ${roomTypes.find((rt) => rt.id === c.roomTypeId)?.name ?? "a room type"}.`);
+        return;
+      }
     }
     setSaving(true);
     try {
@@ -287,7 +324,7 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
       for (const c of validCombos) {
         const floorEntries = Object.entries(c.quantityByFloor).filter(([, q]) => Number(q) > 0);
         if (floorEntries.length === 0) continue;
-        for (const [floorId, qty] of floorEntries) {
+        floorEntries.forEach(([floorId, qty], i) => {
           insertRows.push({
             project_id: projectId,
             room_type_id: c.roomTypeId,
@@ -295,8 +332,13 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
             floor_id: resolveFloorId(floorId),
             is_ada: false,
             quantity: Number(qty),
+            // Left/Right is tracked once per room-type row, not per floor —
+            // store it on the first floor's row for this combo and zero on
+            // the rest, so the sum across floors reproduces the entered value.
+            left_qty: i === 0 ? Number(c.leftQty || 0) : 0,
+            right_qty: i === 0 ? Number(c.rightQty || 0) : 0,
           });
-        }
+        });
       }
       if (insertRows.length > 0) {
         const { error } = await supabase.from("room_matrix_entries").insert(insertRows);
@@ -351,6 +393,8 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
                     </th>
                   ))}
                   <th className="px-2 py-2 w-16 text-right">Total</th>
+                  <th className="px-2 py-2 w-16 text-right">Left</th>
+                  <th className="px-2 py-2 w-16 text-right">Right</th>
                   <th className="px-2 py-2 w-10" />
                 </tr>
               </thead>
@@ -386,6 +430,24 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
                     ))}
                     <td className="px-2 py-1.5 text-right font-medium">{rowTotal(c)}</td>
                     <td className="px-2 py-1.5">
+                      <Input
+                        type="number"
+                        min={0}
+                        className="h-8 text-xs text-right"
+                        value={c.leftQty}
+                        onChange={(e) => updateLeftRight(c.key, "leftQty", e.target.value)}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
+                      <Input
+                        type="number"
+                        min={0}
+                        className="h-8 text-xs text-right"
+                        value={c.rightQty}
+                        onChange={(e) => updateLeftRight(c.key, "rightQty", e.target.value)}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5">
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => removeCombo(c.key)}>
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>
@@ -400,6 +462,8 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
                     </td>
                   ))}
                   <td className="px-2 py-1.5 text-right">{grandTotal}</td>
+                  <td className="px-2 py-1.5 text-right">{combos.reduce((s, c) => s + (Number(c.leftQty) || 0), 0)}</td>
+                  <td className="px-2 py-1.5 text-right">{combos.reduce((s, c) => s + (Number(c.rightQty) || 0), 0)}</td>
                   <td />
                 </tr>
               </tbody>
