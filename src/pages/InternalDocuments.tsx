@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -6,6 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Navigate } from "react-router-dom";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -17,20 +21,31 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Plus, Pencil, Trash2, ExternalLink } from "lucide-react";
+import { Plus, Pencil, Trash2, ExternalLink, Search } from "lucide-react";
 import { toast } from "sonner";
+
+export const DOCUMENT_CATEGORIES = [
+  "Franchise Documents",
+  "Form Agreements",
+  "Corporate Documents",
+  "Miscellaneous",
+] as const;
+type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
 
 interface InternalDoc {
   id: string;
   name: string;
   link: string;
   notes: string | null;
+  category: DocumentCategory;
 }
 
 export default function InternalDocuments() {
   const { organizationId, accessLevel } = useAuth();
   const [docs, setDocs] = useState<InternalDoc[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<DocumentCategory>("Franchise Documents");
+  const [search, setSearch] = useState("");
 
   // modal state
   const [modalOpen, setModalOpen] = useState(false);
@@ -38,6 +53,7 @@ export default function InternalDocuments() {
   const [formName, setFormName] = useState("");
   const [formLink, setFormLink] = useState("");
   const [formNotes, setFormNotes] = useState("");
+  const [formCategory, setFormCategory] = useState<DocumentCategory>("Franchise Documents");
   const [saving, setSaving] = useState(false);
 
   // delete state
@@ -48,7 +64,7 @@ export default function InternalDocuments() {
     if (!organizationId) return;
     const { data } = await supabase
       .from("internal_documents")
-      .select("id, name, link, notes")
+      .select("id, name, link, notes, category")
       .eq("org_id", organizationId)
       .order("created_at", { ascending: false });
     setDocs((data as InternalDoc[]) ?? []);
@@ -61,13 +77,13 @@ export default function InternalDocuments() {
 
   const openAdd = () => {
     setEditingDoc(null);
-    setFormName(""); setFormLink(""); setFormNotes("");
+    setFormName(""); setFormLink(""); setFormNotes(""); setFormCategory(activeTab);
     setModalOpen(true);
   };
 
   const openEdit = (doc: InternalDoc) => {
     setEditingDoc(doc);
-    setFormName(doc.name); setFormLink(doc.link); setFormNotes(doc.notes ?? "");
+    setFormName(doc.name); setFormLink(doc.link); setFormNotes(doc.notes ?? ""); setFormCategory(doc.category);
     setModalOpen(true);
   };
 
@@ -80,14 +96,14 @@ export default function InternalDocuments() {
     if (editingDoc) {
       const { error } = await supabase
         .from("internal_documents")
-        .update({ name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null })
+        .update({ name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory })
         .eq("id", editingDoc.id);
       if (error) toast.error("Failed to update document.");
       else toast.success("Document updated.");
     } else {
       const { error } = await supabase
         .from("internal_documents")
-        .insert({ org_id: organizationId!, name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null });
+        .insert({ org_id: organizationId!, name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory });
       if (error) toast.error("Failed to add document.");
       else toast.success("Document added.");
     }
@@ -106,59 +122,102 @@ export default function InternalDocuments() {
     fetchDocs();
   };
 
+  // Search matches name and notes, and applies within the active tab's
+  // category — searching isn't meant to cut across categories, so switching
+  // tabs while a search is active narrows within that new category instead
+  // of clearing the search term.
+  const filteredDocs = useMemo(() => {
+    const inCategory = docs.filter((d) => d.category === activeTab);
+    const q = search.trim().toLowerCase();
+    if (!q) return inCategory;
+    return inCategory.filter((d) => d.name.toLowerCase().includes(q) || (d.notes ?? "").toLowerCase().includes(q));
+  }, [docs, activeTab, search]);
+
+  const countFor = (cat: DocumentCategory) => docs.filter((d) => d.category === cat).length;
+
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Internal Documents</h1>
+        <h1 className="text-2xl font-bold text-foreground">Document Library</h1>
         <Button onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Document</Button>
       </div>
 
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : docs.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No documents yet. Click "Add Document" to get started.</p>
-      ) : (
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Document Name</TableHead>
-              <TableHead>Link</TableHead>
-              <TableHead>Notes</TableHead>
-              <TableHead className="w-24" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {docs.map((doc) => (
-              <TableRow key={doc.id} className="group">
-                <TableCell className="font-medium">{doc.name}</TableCell>
-                <TableCell>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <a
-                        href={doc.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-primary hover:underline max-w-[250px] truncate"
-                      >
-                        <span className="truncate">{doc.link}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    </TooltipTrigger>
-                    <TooltipContent className="max-w-md break-all">{doc.link}</TooltipContent>
-                  </Tooltip>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
-                <TableCell>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(doc)}><Pencil className="h-4 w-4" /></Button>
-                    <Button variant="ghost" size="icon" title="Delete" onClick={() => setDeleteDoc(doc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                  </div>
-                </TableCell>
-              </TableRow>
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as DocumentCategory)}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <TabsList>
+            {DOCUMENT_CATEGORIES.map((cat) => (
+              <TabsTrigger key={cat} value={cat} className="gap-1.5">
+                {cat}
+                <span className="text-xs text-muted-foreground">({countFor(cat)})</span>
+              </TabsTrigger>
             ))}
-          </TableBody>
-        </Table>
-      )}
+          </TabsList>
+          <div className="relative w-full sm:w-64">
+            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              className="pl-8"
+              placeholder="Search this category…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+        </div>
+
+        {DOCUMENT_CATEGORIES.map((cat) => (
+          <TabsContent key={cat} value={cat} className="mt-4">
+            {loading ? (
+              <p className="text-muted-foreground text-sm">Loading…</p>
+            ) : filteredDocs.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                {search
+                  ? `No documents matching "${search}" in ${cat}.`
+                  : `No documents in ${cat} yet. Click "Add Document" to get started.`}
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Document Name</TableHead>
+                    <TableHead>Link</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead className="w-24" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDocs.map((doc) => (
+                    <TableRow key={doc.id} className="group">
+                      <TableCell className="font-medium">{doc.name}</TableCell>
+                      <TableCell>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <a
+                              href={doc.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-primary hover:underline max-w-[250px] truncate"
+                            >
+                              <span className="truncate">{doc.link}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            </a>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-md break-all">{doc.link}</TooltipContent>
+                        </Tooltip>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(doc)}><Pencil className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="icon" title="Delete" onClick={() => setDeleteDoc(doc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
 
       {/* Add / Edit Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
@@ -173,6 +232,15 @@ export default function InternalDocuments() {
             <div className="space-y-1">
               <Label>Document Name *</Label>
               <Input value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="e.g. Company Handbook" />
+            </div>
+            <div className="space-y-1">
+              <Label>Category *</Label>
+              <Select value={formCategory} onValueChange={(v) => setFormCategory(v as DocumentCategory)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DOCUMENT_CATEGORIES.map((cat) => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1">
               <Label>Link *</Label>

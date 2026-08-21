@@ -23,7 +23,7 @@ const STORAGE_KEY = "innsights-sidebar-order";
 const defaultDraggableItems = [
   { title: "Investment Management", url: "/investments", icon: TrendingUp, requiresInvestmentAccess: true },
   { title: "Prospecting", url: "/prospecting", icon: Compass, requiresInvestmentAccess: false },
-  { title: "Internal Documents", url: "/internal-documents", icon: FolderOpen, requiresInvestmentAccess: false },
+  { title: "Document Library", url: "/internal-documents", icon: FolderOpen, requiresInvestmentAccess: false },
   { title: "Vendors", url: "/vendors", icon: Building2, requiresInvestmentAccess: false },
   { title: "Expense Reporting", url: "/expenses", icon: Receipt, requiresInvestmentAccess: false },
   { title: "Invoices", url: "/invoices", icon: FileCheck, requiresInvestmentAccess: false },

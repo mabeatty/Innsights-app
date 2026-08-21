@@ -210,9 +210,9 @@ export type Database = {
         Relationships: [{ foreignKeyName: "integrations_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
       }
       internal_documents: {
-        Row: { created_at: string; id: string; link: string; name: string; notes: string | null; org_id: string; updated_at: string }
-        Insert: { created_at?: string; id?: string; link: string; name: string; notes?: string | null; org_id: string; updated_at?: string }
-        Update: { created_at?: string; id?: string; link?: string; name?: string; notes?: string | null; org_id?: string; updated_at?: string }
+        Row: { category: string; created_at: string; id: string; link: string; name: string; notes: string | null; org_id: string; updated_at: string }
+        Insert: { category?: string; created_at?: string; id?: string; link: string; name: string; notes?: string | null; org_id: string; updated_at?: string }
+        Update: { category?: string; created_at?: string; id?: string; link?: string; name?: string; notes?: string | null; org_id?: string; updated_at?: string }
         Relationships: [{ foreignKeyName: "internal_documents_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
       }
       investor_positions: {
