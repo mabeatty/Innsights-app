@@ -22,6 +22,8 @@ import {
   Contract, ContractType, ContractStatus,
   CONTRACT_TYPES, CONTRACT_STATUSES, fmt,
 } from "@/components/budget/types";
+import CoiPanel, { computeCoiStatus, coiStatusBadgeClasses, coiStatusLabel, CoiStatus } from "@/components/coi/CoiPanel";
+import { ShieldCheck } from "lucide-react";
 
 interface Props {
   projectId: string;
@@ -48,6 +50,8 @@ export default function ContractsModule({ projectId, projectName }: Props) {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [billedByContract, setBilledByContract] = useState<Record<string, number>>({});
   const [coByContract, setCoByContract] = useState<Record<string, number>>({});
+  const [coiStatusByContract, setCoiStatusByContract] = useState<Record<string, CoiStatus>>({});
+  const [coiPanelContract, setCoiPanelContract] = useState<Contract | null>(null);
   const [loading, setLoading] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -113,6 +117,24 @@ export default function ContractsModule({ projectId, projectName }: Props) {
         if (r.contract_id) map[r.contract_id] = (map[r.contract_id] ?? 0) + Number(r.amount);
       }
       setCoByContract(map);
+    }
+
+    const contractIds = ((contractsRes.data ?? []) as Contract[]).map((c) => c.id);
+    if (contractIds.length > 0) {
+      const [reqRes, certRes] = await Promise.all([
+        supabase.from("coi_requirements").select("*").in("contract_id", contractIds),
+        supabase.from("certificates_of_insurance").select("*").in("contract_id", contractIds),
+      ]);
+      if (!reqRes.error && !certRes.error) {
+        const statusMap: Record<string, CoiStatus> = {};
+        for (const id of contractIds) {
+          const reqsForContract = (reqRes.data ?? []).filter((r: any) => r.contract_id === id);
+          const certsForContract = (certRes.data ?? []).filter((c: any) => c.contract_id === id);
+          if (reqsForContract.length === 0) continue; // no requirements set — don't show a badge at all
+          statusMap[id] = computeCoiStatus(reqsForContract as any, certsForContract as any).overall;
+        }
+        setCoiStatusByContract(statusMap);
+      }
     }
     setLoading(false);
   }, [projectId]);
@@ -404,6 +426,7 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                           <th className="px-3 py-2 text-right w-24">Retainage</th>
                           <th className="px-3 py-2 text-right w-20">Terms</th>
                           <th className="px-3 py-2 w-24">Status</th>
+                          <th className="px-3 py-2 w-28">COI</th>
                           <th className="px-3 py-2 w-20" />
                         </tr>
                       </thead>
@@ -423,6 +446,16 @@ export default function ContractsModule({ projectId, projectName }: Props) {
                             <td className="px-3 py-2 text-right">{Number(c.default_retainage_percent)}%</td>
                             <td className="px-3 py-2 text-right text-muted-foreground">{c.payment_terms_days ? `Net ${c.payment_terms_days}` : "—"}</td>
                             <td className="px-3 py-2"><span className={statusPillClasses(c.status)}>{c.status}</span></td>
+                            <td className="px-3 py-2">
+                              <button
+                                className={cn(coiStatusBadgeClasses(coiStatusByContract[c.id] ?? "missing"), "hover:opacity-80")}
+                                title="Manage certificates of insurance"
+                                onClick={() => setCoiPanelContract(c)}
+                              >
+                                <ShieldCheck className="h-3 w-3" />
+                                {coiStatusByContract[c.id] ? coiStatusLabel(coiStatusByContract[c.id]) : "Set up"}
+                              </button>
+                            </td>
                             <td className="px-3 py-2">
                               <div className="flex gap-1">
                                 {c.document_url && (
@@ -661,6 +694,17 @@ export default function ContractsModule({ projectId, projectName }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {coiPanelContract && (
+        <CoiPanel
+          contractId={coiPanelContract.id}
+          contractLabel={coiPanelContract.contract_number || coiPanelContract.scope_summary}
+          vendorName={vendorName(coiPanelContract.vendor_id)}
+          open={!!coiPanelContract}
+          onOpenChange={(open) => { if (!open) setCoiPanelContract(null); }}
+          onStatusChange={load}
+        />
+      )}
     </div>
   );
 }
