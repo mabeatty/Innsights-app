@@ -9,7 +9,12 @@ import { format } from "date-fns";
 import { BudgetRow, BudgetTransaction, fmt, fmtDecimal } from "./types";
 import { exportScheduleOfValuesPDF, exportScheduleOfValuesXLSX } from "./exportScheduleOfValues";
 
-function CurrencyInput({ value, onChange, onBlur }: { value: number; onChange: (v: number) => void; onBlur: (v: number) => void }) {
+function CurrencyInput({
+  value, onChange, onBlur, rowIndex, colIndex,
+}: {
+  value: number; onChange: (v: number) => void; onBlur: (v: number) => void;
+  rowIndex: number; colIndex: number;
+}) {
   const [editing, setEditing] = useState(false);
   const [raw, setRaw] = useState("");
 
@@ -30,6 +35,37 @@ function CurrencyInput({ value, onChange, onBlur }: { value: number; onChange: (
     onChange(parsed);
   }, [onChange]);
 
+  // Enter/Up/Down/Left/Right move focus to the neighboring Scheduled Value or
+  // Materials Stored cell, spreadsheet-style, instead of the browser default
+  // (Enter does nothing on a text input; arrows just move the caret).
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
+    let deltaRow = 0;
+    let deltaCol = 0;
+    if (e.key === "Enter" || e.key === "ArrowDown") deltaRow = 1;
+    else if (e.key === "ArrowUp") deltaRow = -1;
+    else if (e.key === "ArrowRight") deltaCol = 1;
+    else if (e.key === "ArrowLeft") deltaCol = -1;
+    else return;
+
+    // Left/Right should still let the user move the caret within the text —
+    // only jump cells when the caret is already at that edge of the field.
+    const input = e.currentTarget;
+    if (deltaCol !== 0) {
+      const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
+      const atEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
+      if ((deltaCol < 0 && !atStart) || (deltaCol > 0 && !atEnd)) return;
+    }
+
+    const target = document.querySelector<HTMLInputElement>(
+      `input[data-sov-row="${rowIndex + deltaRow}"][data-sov-col="${colIndex + deltaCol}"]`
+    );
+    if (target) {
+      e.preventDefault();
+      target.focus();
+      target.select();
+    }
+  }, [rowIndex, colIndex]);
+
   return (
     <Input
       type="text"
@@ -38,6 +74,9 @@ function CurrencyInput({ value, onChange, onBlur }: { value: number; onChange: (
       onChange={handleChange}
       onFocus={handleFocus}
       onBlur={handleBlur}
+      onKeyDown={handleKeyDown}
+      data-sov-row={rowIndex}
+      data-sov-col={colIndex}
     />
   );
 }
@@ -98,12 +137,12 @@ export default function G703Tab({
 
   // CSV export removed — export is now centralized in BudgetModule
 
-  const renderSection = (title: string, rows: typeof allRows) => (
+  const renderSection = (title: string, rows: typeof allRows, startIndex: number) => (
     <tbody>
       <tr className="bg-muted/30">
         <td colSpan={10} className="px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</td>
       </tr>
-      {rows.map((r) => (
+      {rows.map((r, i) => (
         <tr key={r.div.id} className="border-t hover:bg-muted/20 transition-colors">
           <td className="px-3 py-1.5 font-mono text-muted-foreground text-xs">{r.div.division_number}</td>
           <td className="px-3 py-1.5 text-xs">{r.div.division_name}</td>
@@ -112,6 +151,8 @@ export default function G703Tab({
               value={r.scheduled}
               onChange={(v) => onScheduledValueChange(r.div.id, v)}
               onBlur={(v) => onScheduledValueBlur(r.div.id, v)}
+              rowIndex={startIndex + i}
+              colIndex={0}
             />
           </td>
           <td className="px-3 py-1.5 text-right text-xs">{fmtDecimal(r.previous)}</td>
@@ -121,6 +162,8 @@ export default function G703Tab({
               value={r.materials}
               onChange={(v) => onMaterialsChange(r.div.division_number, v)}
               onBlur={(v) => onMaterialsChange(r.div.division_number, v)}
+              rowIndex={startIndex + i}
+              colIndex={1}
             />
           </td>
           <td className="px-3 py-1.5 text-right text-xs font-medium">{fmtDecimal(r.totalCompleted)}</td>
@@ -206,8 +249,8 @@ export default function G703Tab({
               <th className="px-3 py-2 text-right w-24">Retainage</th>
             </tr>
           </thead>
-          {renderSection("Hard Costs", hardRows)}
-          {renderSection("Soft Costs", softRows)}
+          {renderSection("Hard Costs", hardRows, 0)}
+          {renderSection("Soft Costs", softRows, hardRows.length)}
           <tfoot>
             <tr className="border-t bg-primary/5 font-bold text-xs">
               <td className="px-3 py-2" colSpan={2}>Project Cost</td>
