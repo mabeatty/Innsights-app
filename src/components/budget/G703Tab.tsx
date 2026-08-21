@@ -35,26 +35,19 @@ function CurrencyInput({
     onChange(parsed);
   }, [onChange]);
 
-  // Enter/Up/Down/Left/Right move focus to the neighboring Scheduled Value or
-  // Materials Stored cell, spreadsheet-style, instead of the browser default
-  // (Enter does nothing on a text input; arrows just move the caret).
+  // Enter/Up/Down move focus to the same column in the adjacent row.
+  // Tab/Shift+Tab move to the other editable column (Scheduled Value <->
+  // Materials Stored) in the same row, overriding the browser's default
+  // tab-to-next-element behavior. Left/Right are left alone for normal
+  // in-field caret movement.
   const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLInputElement>) => {
     let deltaRow = 0;
     let deltaCol = 0;
     if (e.key === "Enter" || e.key === "ArrowDown") deltaRow = 1;
     else if (e.key === "ArrowUp") deltaRow = -1;
-    else if (e.key === "ArrowRight") deltaCol = 1;
-    else if (e.key === "ArrowLeft") deltaCol = -1;
+    else if (e.key === "Tab" && !e.shiftKey) deltaCol = 1;
+    else if (e.key === "Tab" && e.shiftKey) deltaCol = -1;
     else return;
-
-    // Left/Right should still let the user move the caret within the text —
-    // only jump cells when the caret is already at that edge of the field.
-    const input = e.currentTarget;
-    if (deltaCol !== 0) {
-      const atStart = input.selectionStart === 0 && input.selectionEnd === 0;
-      const atEnd = input.selectionStart === input.value.length && input.selectionEnd === input.value.length;
-      if ((deltaCol < 0 && !atStart) || (deltaCol > 0 && !atEnd)) return;
-    }
 
     const target = document.querySelector<HTMLInputElement>(
       `input[data-sov-row="${rowIndex + deltaRow}"][data-sov-col="${colIndex + deltaCol}"]`
