@@ -48,7 +48,7 @@ interface PublicAreaType { id: string; name: string; }
 interface RoomMatrixRow {
   id?: string;
   roomTypeId: string;
-  bathroomTypeId: string;
+  bathroomTypeId: string | null;
   quantity: number;
 }
 
@@ -157,7 +157,7 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
 
   /* ── Room type + bathroom type name lookups for read-only display ── */
   const roomTypeName = (id: string) => roomTypes.find((rt) => rt.id === id)?.name ?? "Unknown";
-  const bathroomTypeName = (id: string) => bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown";
+  const bathroomTypeName = (id: string | null) => (id ? bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown" : "Not set");
 
   // Raw matrix rows are one-per-floor now; aggregate by (room type, bathroom
   // type) combo for display here, since this summary isn't floor-organized —

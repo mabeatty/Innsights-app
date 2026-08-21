@@ -18,7 +18,7 @@ interface Floor { id: string; name: string; display_order: number; }
 interface MatrixEntry {
   id: string;
   roomTypeId: string;
-  bathroomTypeId: string;
+  bathroomTypeId: string | null;
   floorId: string | null;
   quantity: number;
 }
@@ -72,10 +72,10 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
   useEffect(() => { load(); }, [load]);
 
   const roomTypeName = (id: string) => roomTypes.find((rt) => rt.id === id)?.name ?? "Unknown";
-  const bathroomTypeName = (id: string) => bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown";
+  const bathroomTypeName = (id: string | null) => (id ? bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown" : "Not set");
 
   const combos = useMemo(() => {
-    const map = new Map<string, { roomTypeId: string; bathroomTypeId: string; byFloor: Record<string, number>; noFloorQty: number }>();
+    const map = new Map<string, { roomTypeId: string; bathroomTypeId: string | null; byFloor: Record<string, number>; noFloorQty: number }>();
     for (const e of entries) {
       const key = `${e.roomTypeId}:${e.bathroomTypeId}`;
       if (!map.has(key)) map.set(key, { roomTypeId: e.roomTypeId, bathroomTypeId: e.bathroomTypeId, byFloor: {}, noFloorQty: 0 });
@@ -253,7 +253,10 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
   const grandTotal = combos.reduce((s, c) => s + rowTotal(c), 0);
 
   const handleSave = async () => {
-    const validCombos = combos.filter((c) => c.roomTypeId && c.bathroomTypeId);
+    // Only require the room type — bathroom type can be confirmed later.
+    // Requiring both meant any row where the user hadn't picked a bathroom
+    // type yet got silently dropped on save instead of persisted as-is.
+    const validCombos = combos.filter((c) => c.roomTypeId);
     if (validCombos.length === 0) {
       toast.error("Add at least one room type and bathroom type.");
       return;
@@ -288,7 +291,7 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
           insertRows.push({
             project_id: projectId,
             room_type_id: c.roomTypeId,
-            bathroom_type_id: c.bathroomTypeId,
+            bathroom_type_id: c.bathroomTypeId || null,
             floor_id: resolveFloorId(floorId),
             is_ada: false,
             quantity: Number(qty),
