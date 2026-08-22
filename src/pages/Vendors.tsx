@@ -457,16 +457,16 @@ export default function Vendors() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Vendor Name</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Contact Name</TableHead>
-              <TableHead>Phone</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Markets</TableHead>
-              <TableHead>Notes</TableHead>
-              <TableHead>Rating</TableHead>
-              <TableHead>W-9</TableHead>
-              <TableHead className="w-[100px]" />
+              <TableHead className="h-9 py-2">Vendor Name</TableHead>
+              <TableHead className="h-9 py-2">Category</TableHead>
+              <TableHead className="h-9 py-2">Contact Name</TableHead>
+              <TableHead className="h-9 py-2">Phone</TableHead>
+              <TableHead className="h-9 py-2">Email</TableHead>
+              <TableHead className="h-9 py-2">Markets</TableHead>
+              <TableHead className="h-9 py-2">Notes</TableHead>
+              <TableHead className="h-9 py-2">Rating</TableHead>
+              <TableHead className="h-9 py-2">W-9</TableHead>
+              <TableHead className="h-9 py-2 w-[100px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -477,13 +477,13 @@ export default function Vendors() {
             ) : (
               filtered.map((v) => (
                 <TableRow key={v.id} className="group cursor-pointer" onClick={() => navigate(`/vendors/${v.id}`)}>
-                  <TableCell className="font-medium">{v.vendor_name}</TableCell>
-                  <TableCell><Badge variant="secondary">{v.category}</Badge></TableCell>
-                  <TableCell>{v.contact_name || "—"}</TableCell>
-                  <TableCell>{v.phone || "—"}</TableCell>
-                  <TableCell>{v.email || "—"}</TableCell>
-                  <TableCell className="max-w-[160px] truncate">{v.markets || "—"}</TableCell>
-                  <TableCell className="max-w-[200px] truncate">
+                  <TableCell className="py-1.5 font-medium">{v.vendor_name}</TableCell>
+                  <TableCell className="py-1.5"><Badge variant="secondary">{v.category}</Badge></TableCell>
+                  <TableCell className="py-1.5">{v.contact_name || "—"}</TableCell>
+                  <TableCell className="py-1.5">{v.phone || "—"}</TableCell>
+                  <TableCell className="py-1.5">{v.email || "—"}</TableCell>
+                  <TableCell className="py-1.5 max-w-[160px] truncate">{v.markets || "—"}</TableCell>
+                  <TableCell className="py-1.5 max-w-[200px] truncate">
                     {v.notes ? (
                       <Tooltip>
                         <TooltipTrigger asChild><span className="truncate block">{v.notes}</span></TooltipTrigger>
@@ -491,8 +491,8 @@ export default function Vendors() {
                       </Tooltip>
                     ) : "—"}
                   </TableCell>
-                  <TableCell><StarRating value={v.performance_rating} size={14} /></TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="py-1.5"><StarRating value={v.performance_rating} size={14} /></TableCell>
+                  <TableCell className="py-1.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center gap-1.5">
                       <span className={`${w9StatusBadgeClasses(computeW9Status(w9ByVendor[v.id] ?? null))} text-[10px]`}>
                         {w9StatusLabel(computeW9Status(w9ByVendor[v.id] ?? null))}
@@ -504,7 +504,7 @@ export default function Vendors() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell onClick={(e) => e.stopPropagation()}>
+                  <TableCell className="py-1.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Button size="icon" variant="ghost" className="h-8 w-8" title="Link to projects" onClick={() => setDetailVendor(v)}>
                         <Link2 className="h-4 w-4" />
