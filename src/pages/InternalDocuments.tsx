@@ -21,7 +21,7 @@ import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell,
 } from "@/components/ui/table";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
-import { Plus, Pencil, Trash2, ExternalLink, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Download, Search, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 export const DOCUMENT_CATEGORIES = [
@@ -31,6 +31,17 @@ export const DOCUMENT_CATEGORIES = [
   "Miscellaneous",
 ] as const;
 type DocumentCategory = (typeof DOCUMENT_CATEGORIES)[number];
+
+// Google Drive file links (.../file/d/{ID}/view...) are embeddable via the
+// /preview variant of the same URL. Anything else (a non-Drive link someone
+// pasted in) has no reliable universal preview, so those just open directly.
+function getDrivePreviewUrl(link: string): string | null {
+  const match = link.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+  if (match) return `https://drive.google.com/file/d/${match[1]}/preview`;
+  const docsMatch = link.match(/docs\.google\.com\/(document|spreadsheets|presentation)\/d\/([^/]+)/);
+  if (docsMatch) return `https://docs.google.com/${docsMatch[1]}/d/${docsMatch[2]}/preview`;
+  return null;
+}
 
 interface InternalDoc {
   id: string;
@@ -68,6 +79,9 @@ export default function InternalDocuments() {
   // delete state
   const [deleteDoc, setDeleteDoc] = useState<InternalDoc | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+
+  // preview state
+  const [previewDoc, setPreviewDoc] = useState<InternalDoc | null>(null);
 
   const fetchDocs = useCallback(async () => {
     if (!organizationId) return;
@@ -214,7 +228,7 @@ export default function InternalDocuments() {
                   <TableRow>
                     <TableHead>Document Name</TableHead>
                     {cat === "Franchise Documents" && <TableHead>Brand</TableHead>}
-                    <TableHead>Link</TableHead>
+                    <TableHead className="w-16">Link</TableHead>
                     <TableHead>Notes</TableHead>
                     <TableHead className="w-24" />
                   </TableRow>
@@ -222,19 +236,23 @@ export default function InternalDocuments() {
                 <TableBody>
                   {filteredDocs.map((doc) => (
                     <TableRow key={doc.id} className="group">
-                      <TableCell className="font-medium">{doc.name}</TableCell>
+                      <TableCell className="font-medium">
+                        <button
+                          className="inline-flex items-center gap-1.5 text-left hover:text-primary hover:underline"
+                          onClick={() => setPreviewDoc(doc)}
+                        >
+                          <Eye className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                          {doc.name}
+                        </button>
+                      </TableCell>
                       {cat === "Franchise Documents" && <TableCell className="text-sm">{brandName(doc.brand_id)}</TableCell>}
                       <TableCell>
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <a
-                              href={doc.link}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1 text-primary hover:underline max-w-[250px] truncate"
-                            >
-                              <span className="truncate">{doc.link}</span>
-                              <ExternalLink className="h-3 w-3 shrink-0" />
+                            <a href={doc.link} target="_blank" rel="noopener noreferrer">
+                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Open / Download">
+                                <Download className="h-4 w-4 text-primary" />
+                              </Button>
                             </a>
                           </TooltipTrigger>
                           <TooltipContent className="max-w-md break-all">{doc.link}</TooltipContent>
@@ -322,6 +340,43 @@ export default function InternalDocuments() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Preview Dialog */}
+      <Dialog open={!!previewDoc} onOpenChange={(open) => { if (!open) setPreviewDoc(null); }}>
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center justify-between gap-4 pr-6">
+              <span className="truncate">{previewDoc?.name}</span>
+              {previewDoc && (
+                <a href={previewDoc.link} target="_blank" rel="noopener noreferrer">
+                  <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+                    <Download className="h-3.5 w-3.5" /> Open / Download
+                  </Button>
+                </a>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="flex-1 min-h-0">
+            {previewDoc && getDrivePreviewUrl(previewDoc.link) ? (
+              <iframe
+                src={getDrivePreviewUrl(previewDoc.link)!}
+                className="w-full h-full rounded-md border"
+                allow="autoplay"
+                title={previewDoc.name}
+              />
+            ) : (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-3 text-muted-foreground text-sm border rounded-md">
+                <p>No inline preview available for this link.</p>
+                {previewDoc && (
+                  <a href={previewDoc.link} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                    Open in a new tab
+                  </a>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
