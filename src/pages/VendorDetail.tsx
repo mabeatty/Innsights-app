@@ -1,8 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Mail, Phone, MapPin, Pencil } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ArrowLeft, Mail, Phone, MapPin, Pencil, Star } from "lucide-react";
+import { toast } from "sonner";
 import { freshness, fmtDate } from "@/lib/pricingFreshness";
 import VendorW9Panel from "@/components/vendors/VendorW9Panel";
 
@@ -10,7 +17,7 @@ const db = supabase as any;
 
 interface VendorInfo {
   id: string; org_id: string; vendor_name: string; category: string | null; contact_name: string | null;
-  phone: string | null; email: string | null; markets: string | null; notes: string | null;
+  phone: string | null; email: string | null; markets: string | null; notes: string | null; performance_rating: number | null;
 }
 interface Rec {
   id: string; grain: "line" | "gross"; item_name: string | null; category: string | null;
@@ -22,6 +29,18 @@ interface Rec {
 const money = (n: number | null) =>
   n == null ? "—" : Number(n).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2 });
 
+function StarRating({ value, onChange, size = 20 }: { value: number; onChange: (v: number) => void; size?: number }) {
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((n) => (
+        <button key={n} type="button" onClick={() => onChange(n === value ? 0 : n)}>
+          <Star size={size} className={n <= value ? "fill-yellow-400 text-yellow-400" : "text-muted-foreground"} />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function VendorDetail() {
   const { vendorId } = useParams();
   const navigate = useNavigate();
@@ -30,17 +49,66 @@ export default function VendorDetail() {
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
 
+  const [editOpen, setEditOpen] = useState(false);
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [form, setForm] = useState({
+    vendor_name: "", category: "", contact_name: "", phone: "", email: "", markets: "", notes: "", performance_rating: 0,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const openEdit = () => {
+    if (!vendor) return;
+    setForm({
+      vendor_name: vendor.vendor_name,
+      category: vendor.category ?? "",
+      contact_name: vendor.contact_name ?? "",
+      phone: vendor.phone ?? "",
+      email: vendor.email ?? "",
+      markets: vendor.markets ?? "",
+      notes: vendor.notes ?? "",
+      performance_rating: vendor.performance_rating ?? 0,
+    });
+    setEditOpen(true);
+  };
+
+  const saveVendor = async () => {
+    if (!vendor) return;
+    if (!form.vendor_name.trim() || !form.category) {
+      toast.error("Vendor name and category are required.");
+      return;
+    }
+    setSaving(true);
+    const payload = {
+      vendor_name: form.vendor_name.trim(),
+      category: form.category,
+      contact_name: form.contact_name.trim() || null,
+      phone: form.phone.trim() || null,
+      email: form.email.trim() || null,
+      markets: form.markets.trim() || null,
+      notes: form.notes.trim() || null,
+      performance_rating: form.performance_rating,
+    };
+    const { error } = await supabase.from("global_vendors").update(payload).eq("id", vendor.id);
+    setSaving(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Vendor updated.");
+    setEditOpen(false);
+    setVendor({ ...vendor, ...payload });
+  };
+
   useEffect(() => {
     if (!vendorId) return;
     (async () => {
       setLoading(true);
-      const [vRes, iRes, lRes, gRes] = await Promise.all([
+      const [vRes, iRes, lRes, gRes, catRes] = await Promise.all([
         db.from("global_vendors").select("*").eq("id", vendorId).maybeSingle(),
         db.from("catalog_items").select("id, canonical_name"),
         db.from("bid_line_items").select("*").eq("global_vendor_id", vendorId),
         db.from("vendor_pricing").select("*").eq("global_vendor_id", vendorId),
+        db.from("global_vendors").select("category"),
       ]);
       if (!vRes.data) { setNotFound(true); setLoading(false); return; }
+      setCategoryOptions(Array.from(new Set((catRes.data ?? []).map((r: any) => r.category).filter(Boolean))).sort());
       const nameById = new Map((iRes.data ?? []).map((c: any) => [c.id, c.canonical_name]));
       const line: Rec[] = (lRes.data ?? []).map((r: any) => ({
         id: "l_" + r.id, grain: "line", item_name: r.item_name,
@@ -95,9 +163,9 @@ export default function VendorDetail() {
             <h1 className="text-2xl font-bold text-primary">{vendor!.vendor_name}</h1>
             {vendor!.category && <Badge variant="secondary" className="mt-1">{vendor!.category}</Badge>}
           </div>
-          <Link to="/vendors" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            <Pencil className="h-3.5 w-3.5" /> Edit in Vendors
-          </Link>
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={openEdit}>
+            <Pencil className="h-3.5 w-3.5" /> Edit
+          </Button>
         </div>
         <div className="mt-4 grid gap-2 sm:grid-cols-3 text-sm">
           <div className="flex items-center gap-2">
@@ -178,6 +246,61 @@ export default function VendorDetail() {
           </tbody>
         </table>
       </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Vendor</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Vendor Name *</Label>
+              <Input value={form.vendor_name} onChange={(e) => setForm({ ...form, vendor_name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Category *</Label>
+              <Select value={form.category} onValueChange={(v) => setForm({ ...form, category: v })}>
+                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                <SelectContent>
+                  {categoryOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Contact Name</Label>
+              <Input value={form.contact_name} onChange={(e) => setForm({ ...form, contact_name: e.target.value })} />
+            </div>
+            <div className="space-y-2">
+              <Label>Phone</Label>
+              <Input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Email</Label>
+              <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Markets / Geographies Served</Label>
+              <Input
+                placeholder="e.g. New York, Miami, Chicago"
+                value={form.markets}
+                onChange={(e) => setForm({ ...form, markets: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Notes</Label>
+              <Textarea rows={3} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Performance Rating</Label>
+              <StarRating value={form.performance_rating} onChange={(v) => setForm({ ...form, performance_rating: v })} size={24} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={saveVendor} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
