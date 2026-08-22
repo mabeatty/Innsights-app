@@ -459,7 +459,7 @@ export default function Vendors() {
             <TableRow>
               <TableHead className="h-9 py-2">Vendor Name</TableHead>
               <TableHead className="h-9 py-2">Category</TableHead>
-              <TableHead className="h-9 py-2">Contact Name</TableHead>
+              <TableHead className="h-9 py-2">Contact</TableHead>
               <TableHead className="h-9 py-2">Phone</TableHead>
               <TableHead className="h-9 py-2">Email</TableHead>
               <TableHead className="h-9 py-2">Markets</TableHead>
