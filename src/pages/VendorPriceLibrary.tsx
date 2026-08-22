@@ -2,11 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, Search, Download } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { freshness, fmtDate } from "@/lib/pricingFreshness";
+import * as XLSX from "xlsx";
 
 const db = supabase as any;
 
@@ -116,6 +118,55 @@ export default function VendorPriceLibrary() {
     ? <span>{money(r.unit_price)}<span className="text-xs font-normal text-muted-foreground">{r.unit ? ` /${r.unit}` : ""}</span></span>
     : <span>{money(r.gross_price)}<span className="ml-1 rounded bg-muted px-1 text-[10px] uppercase text-muted-foreground">program</span></span>;
 
+  // Exports whatever is currently on screen — i.e. itemRows/vendorRows after
+  // the active search, brand, and project filters — not the whole table.
+  // That's the point: isolate a hotel type or project on screen, then export
+  // just that slice.
+  const downloadWorkbook = (rows: Record<string, unknown>[], filename: string) => {
+    if (rows.length === 0) return;
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Pricing");
+    XLSX.writeFile(wb, filename);
+  };
+
+  const exportItemRows = () => {
+    const rows = itemRows.map((r) => ({
+      Item: r.item_name ?? "",
+      Category: r.category ?? "",
+      Vendor: r.vendor_name,
+      Description: r.description ?? "",
+      Price: r.grain === "line" ? r.unit_price : r.gross_price,
+      Unit: r.grain === "line" ? r.unit ?? "" : "program",
+      "Room / Location": r.room_type ?? "",
+      Project: r.project_label ?? "",
+      Brand: r.brand ?? "",
+      Date: r.price_date ?? "",
+      Source: r.source_doc ?? "",
+    }));
+    const label = [brandFilter !== "all" ? brandFilter : null, projectFilter !== "all" ? projectFilter : null]
+      .filter(Boolean).join("_") || "All";
+    downloadWorkbook(rows, `Pricing_Library_${label.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
+  const exportVendorRows = () => {
+    const rows = vendorRows.map((r) => ({
+      Vendor: r.vendor_name,
+      Item: r.item_name ?? "",
+      Category: r.category ?? "",
+      Description: r.description ?? "",
+      Price: r.grain === "line" ? r.unit_price : r.gross_price,
+      Unit: r.grain === "line" ? r.unit ?? "" : "program",
+      "Room / Location": r.room_type ?? "",
+      Project: r.project_label ?? "",
+      Brand: r.brand ?? "",
+      Date: r.price_date ?? "",
+      Source: r.source_doc ?? "",
+    }));
+    const label = [selectedVendor || "Vendor", projectFilter !== "all" ? projectFilter : null].filter(Boolean).join("_");
+    downloadWorkbook(rows, `Pricing_Library_${label.replace(/\s+/g, "_")}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  };
+
   if (loading) return <div className="p-6 text-sm text-muted-foreground">Loading vendor price library…</div>;
 
   return (
@@ -175,7 +226,12 @@ export default function VendorPriceLibrary() {
 
           {itemFilterActive ? (
             <div className="rounded-lg border overflow-auto">
-              <div className="px-3 py-2 text-xs text-muted-foreground border-b bg-muted/30">{itemRows.length} record{itemRows.length === 1 ? "" : "s"}</div>
+              <div className="flex items-center justify-between px-3 py-2 text-xs text-muted-foreground border-b bg-muted/30">
+                <span>{itemRows.length} record{itemRows.length === 1 ? "" : "s"}</span>
+                <Button variant="outline" size="sm" className="h-7 gap-1.5" onClick={exportItemRows} disabled={itemRows.length === 0}>
+                  <Download className="h-3.5 w-3.5" /> Export
+                </Button>
+              </div>
               <table className="w-full text-sm min-w-[900px]">
                 <thead>
                   <tr className="bg-muted/50 text-left text-muted-foreground">
@@ -257,6 +313,9 @@ export default function VendorPriceLibrary() {
                     View full profile & contact info →
                   </Link>
                 )}
+                <Button variant="outline" size="sm" className="h-8 gap-1.5" onClick={exportVendorRows} disabled={vendorRows.length === 0}>
+                  <Download className="h-3.5 w-3.5" /> Export
+                </Button>
               </div>
 
               {vendorItems.length > 0 && (
