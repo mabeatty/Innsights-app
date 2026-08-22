@@ -66,7 +66,7 @@ export const w9StatusLabel = (status: W9Status) => ({
   on_file: "On File",
   renewal_due_soon: "Renewal Due Soon",
   renewal_overdue: "Renewal Overdue",
-  missing: "No W-9 on File",
+  missing: "None",
 }[status]);
 
 interface Props {
