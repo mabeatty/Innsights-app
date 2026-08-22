@@ -177,7 +177,7 @@ export default function InternalDocuments() {
   const brandName = (id: string | null) => (id ? brands.find((b) => b.id === id)?.name ?? "Unknown" : "—");
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-foreground">Document Library</h1>
         <Button onClick={openAdd}><Plus className="h-4 w-4 mr-1" />Add Document</Button>
@@ -229,17 +229,17 @@ export default function InternalDocuments() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Document Name</TableHead>
-                    {cat === "Franchise Documents" && <TableHead>Brand</TableHead>}
-                    {cat === "Franchise Documents" && <TableHead>Generation</TableHead>}
-                    <TableHead>Notes</TableHead>
-                    <TableHead className="w-32" />
+                    <TableHead className="h-9 py-2">Document Name</TableHead>
+                    {cat === "Franchise Documents" && <TableHead className="h-9 py-2">Brand</TableHead>}
+                    {cat === "Franchise Documents" && <TableHead className="h-9 py-2">Generation</TableHead>}
+                    <TableHead className="h-9 py-2">Notes</TableHead>
+                    <TableHead className="h-9 py-2 w-32" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredDocs.map((doc) => (
                     <TableRow key={doc.id} className="group">
-                      <TableCell className="font-medium">
+                      <TableCell className="py-1.5 font-medium">
                         <button
                           className="inline-flex items-center gap-1.5 text-left hover:text-primary hover:underline"
                           onClick={() => setPreviewDoc(doc)}
@@ -248,10 +248,10 @@ export default function InternalDocuments() {
                           {doc.name}
                         </button>
                       </TableCell>
-                      {cat === "Franchise Documents" && <TableCell className="text-sm">{brandName(doc.brand_id)}</TableCell>}
-                      {cat === "Franchise Documents" && <TableCell className="text-sm">{doc.generation ?? "—"}</TableCell>}
-                      <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
-                      <TableCell>
+                      {cat === "Franchise Documents" && <TableCell className="py-1.5 text-sm">{brandName(doc.brand_id)}</TableCell>}
+                      {cat === "Franchise Documents" && <TableCell className="py-1.5 text-sm">{doc.generation ?? "—"}</TableCell>}
+                      <TableCell className="py-1.5 text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
+                      <TableCell className="py-1.5">
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <Tooltip>
                             <TooltipTrigger asChild>
