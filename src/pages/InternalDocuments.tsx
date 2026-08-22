@@ -50,6 +50,7 @@ interface InternalDoc {
   notes: string | null;
   category: DocumentCategory;
   brand_id: string | null;
+  generation: string | null;
 }
 
 interface Brand {
@@ -74,6 +75,7 @@ export default function InternalDocuments() {
   const [formNotes, setFormNotes] = useState("");
   const [formCategory, setFormCategory] = useState<DocumentCategory>("Franchise Documents");
   const [formBrandId, setFormBrandId] = useState<string>("");
+  const [formGeneration, setFormGeneration] = useState<string>("");
   const [saving, setSaving] = useState(false);
 
   // delete state
@@ -87,7 +89,7 @@ export default function InternalDocuments() {
     if (!organizationId) return;
     const { data } = await supabase
       .from("internal_documents")
-      .select("id, name, link, notes, category, brand_id")
+      .select("id, name, link, notes, category, brand_id, generation")
       .eq("org_id", organizationId)
       .order("created_at", { ascending: false });
     setDocs((data as InternalDoc[]) ?? []);
@@ -105,13 +107,13 @@ export default function InternalDocuments() {
 
   const openAdd = () => {
     setEditingDoc(null);
-    setFormName(""); setFormLink(""); setFormNotes(""); setFormCategory(activeTab); setFormBrandId("");
+    setFormName(""); setFormLink(""); setFormNotes(""); setFormCategory(activeTab); setFormBrandId(""); setFormGeneration("");
     setModalOpen(true);
   };
 
   const openEdit = (doc: InternalDoc) => {
     setEditingDoc(doc);
-    setFormName(doc.name); setFormLink(doc.link); setFormNotes(doc.notes ?? ""); setFormCategory(doc.category); setFormBrandId(doc.brand_id ?? "");
+    setFormName(doc.name); setFormLink(doc.link); setFormNotes(doc.notes ?? ""); setFormCategory(doc.category); setFormBrandId(doc.brand_id ?? ""); setFormGeneration(doc.generation ?? "");
     setModalOpen(true);
   };
 
@@ -126,17 +128,18 @@ export default function InternalDocuments() {
     }
     setSaving(true);
     const brandIdToSave = formCategory === "Franchise Documents" ? formBrandId : null;
+    const generationToSave = formCategory === "Franchise Documents" ? (formGeneration.trim() || null) : null;
     if (editingDoc) {
       const { error } = await supabase
         .from("internal_documents")
-        .update({ name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory, brand_id: brandIdToSave })
+        .update({ name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory, brand_id: brandIdToSave, generation: generationToSave })
         .eq("id", editingDoc.id);
       if (error) toast.error("Failed to update document.");
       else toast.success("Document updated.");
     } else {
       const { error } = await supabase
         .from("internal_documents")
-        .insert({ org_id: organizationId!, name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory, brand_id: brandIdToSave });
+        .insert({ org_id: organizationId!, name: formName.trim(), link: formLink.trim(), notes: formNotes.trim() || null, category: formCategory, brand_id: brandIdToSave, generation: generationToSave });
       if (error) toast.error("Failed to add document.");
       else toast.success("Document added.");
     }
@@ -228,6 +231,7 @@ export default function InternalDocuments() {
                   <TableRow>
                     <TableHead>Document Name</TableHead>
                     {cat === "Franchise Documents" && <TableHead>Brand</TableHead>}
+                    {cat === "Franchise Documents" && <TableHead>Generation</TableHead>}
                     <TableHead>Notes</TableHead>
                     <TableHead className="w-32" />
                   </TableRow>
@@ -245,6 +249,7 @@ export default function InternalDocuments() {
                         </button>
                       </TableCell>
                       {cat === "Franchise Documents" && <TableCell className="text-sm">{brandName(doc.brand_id)}</TableCell>}
+                      {cat === "Franchise Documents" && <TableCell className="text-sm">{doc.generation ?? "—"}</TableCell>}
                       <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -295,14 +300,20 @@ export default function InternalDocuments() {
               </Select>
             </div>
             {formCategory === "Franchise Documents" && (
-              <div className="space-y-1">
-                <Label>Brand *</Label>
-                <Select value={formBrandId} onValueChange={setFormBrandId}>
-                  <SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger>
-                  <SelectContent>
-                    {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>Brand *</Label>
+                  <Select value={formBrandId} onValueChange={setFormBrandId}>
+                    <SelectTrigger><SelectValue placeholder="Select a brand" /></SelectTrigger>
+                    <SelectContent>
+                      {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label>Generation</Label>
+                  <Input value={formGeneration} onChange={(e) => setFormGeneration(e.target.value)} placeholder="e.g. Gen 5" />
+                </div>
               </div>
             )}
             <div className="space-y-1">

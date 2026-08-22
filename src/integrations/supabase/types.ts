@@ -210,9 +210,9 @@ export type Database = {
         Relationships: [{ foreignKeyName: "integrations_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
       }
       internal_documents: {
-        Row: { brand_id: string | null; category: string; created_at: string; id: string; link: string; name: string; notes: string | null; org_id: string; updated_at: string }
-        Insert: { brand_id?: string | null; category?: string; created_at?: string; id?: string; link: string; name: string; notes?: string | null; org_id: string; updated_at?: string }
-        Update: { brand_id?: string | null; category?: string; created_at?: string; id?: string; link?: string; name?: string; notes?: string | null; org_id?: string; updated_at?: string }
+        Row: { brand_id: string | null; category: string; created_at: string; generation: string | null; id: string; link: string; name: string; notes: string | null; org_id: string; updated_at: string }
+        Insert: { brand_id?: string | null; category?: string; created_at?: string; generation?: string | null; id?: string; link: string; name: string; notes?: string | null; org_id: string; updated_at?: string }
+        Update: { brand_id?: string | null; category?: string; created_at?: string; generation?: string | null; id?: string; link?: string; name?: string; notes?: string | null; org_id?: string; updated_at?: string }
         Relationships: [{ foreignKeyName: "internal_documents_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
       }
       investor_positions: {
