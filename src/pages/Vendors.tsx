@@ -14,13 +14,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2, Sparkles, FileArchive, Tags } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Download, Library, Link2, Tags } from "lucide-react";
 import * as XLSX from "xlsx";
-import JSZip from "jszip";
-import VendorImportDialog from "@/components/vendors/VendorImportDialog";
 import VendorProposalImportDialog from "@/components/vendors/VendorProposalImportDialog";
 import VendorW9Panel, { VendorW9, computeW9Status, w9StatusBadgeClasses, w9StatusLabel } from "@/components/vendors/VendorW9Panel";
 import ManageCategoriesDialog, { VendorCategory } from "@/components/vendors/ManageCategoriesDialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const CATEGORIES = [
   "General Contractor",
@@ -152,7 +151,6 @@ export default function Vendors() {
 
   const [detailVendor, setDetailVendor] = useState<Vendor | null>(null);
 
-  const [importOpen, setImportOpen] = useState(false);
   const [proposalImportOpen, setProposalImportOpen] = useState(false);
 
   const loadAll = async () => {
@@ -366,45 +364,6 @@ export default function Vendors() {
     toast.success(`Exported ${rows.length} vendor${rows.length === 1 ? "" : "s"}${filterLabel ? ` (${filterLabel.replace(/_/g, " ")})` : ""}`);
   };
 
-  const [downloadingW9s, setDownloadingW9s] = useState(false);
-  const handleDownloadAllW9s = async () => {
-    const onFile = Object.entries(w9ByVendor).filter(([, w9]) => !!w9.document_url);
-    if (onFile.length === 0) {
-      toast.error("No W-9s on file to download.");
-      return;
-    }
-    setDownloadingW9s(true);
-    try {
-      const zip = new JSZip();
-      const vendorNameById = new Map(vendors.map((v) => [v.id, v.vendor_name]));
-      await Promise.all(
-        onFile.map(async ([vendorId, w9]) => {
-          try {
-            const resp = await fetch(w9.document_url!);
-            const blob = await resp.blob();
-            const vendorName = (vendorNameById.get(vendorId) ?? "vendor").replace(/[^\w\- ]/g, "").trim();
-            const ext = (w9.document_name?.split(".").pop() || "pdf").toLowerCase();
-            zip.file(`${vendorName}_W9.${ext}`, blob);
-          } catch {
-            // Skip files that fail to fetch rather than aborting the whole zip.
-          }
-        })
-      );
-      const content = await zip.generateAsync({ type: "blob" });
-      const url = URL.createObjectURL(content);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `W9_Forms_${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-      toast.success(`Downloaded ${onFile.length} W-9${onFile.length === 1 ? "" : "s"}.`);
-    } finally {
-      setDownloadingW9s(false);
-    }
-  };
-
   return (
     <div className="p-8 space-y-6 max-w-[1400px] mx-auto">
       <div className="flex items-center justify-between">
@@ -416,24 +375,33 @@ export default function Vendors() {
           <Button variant="outline" onClick={() => navigate("/vendors/pricing")} className="gap-2">
             <Library className="h-4 w-4" /> Pricing Library
           </Button>
-          <Button variant="outline" onClick={() => setProposalImportOpen(true)} className="gap-2">
-            <Sparkles className="h-4 w-4" /> Upload Proposal
-          </Button>
-          <Button variant="outline" onClick={() => setImportOpen(true)} className="gap-2">
-            <Upload className="h-4 w-4" /> Import Vendors (CSV)
-          </Button>
-          <Button variant="outline" onClick={handleExport} className="gap-2">
-            <Download className="h-4 w-4" /> Export
-          </Button>
-          <Button variant="outline" onClick={handleDownloadAllW9s} disabled={downloadingW9s} className="gap-2">
-            <FileArchive className="h-4 w-4" /> {downloadingW9s ? "Zipping…" : "Download W-9s"}
-          </Button>
-          <Button variant="outline" onClick={() => setManageCategoriesOpen(true)} className="gap-2">
-            <Tags className="h-4 w-4" /> Manage Categories
-          </Button>
-          <Button onClick={openCreate} className="gap-2">
-            <Plus className="h-4 w-4" /> Add Vendor
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon" variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Export</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="icon" variant="outline" onClick={() => setManageCategoriesOpen(true)}>
+                <Tags className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Manage Categories</TooltipContent>
+          </Tooltip>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="icon" title="Add Vendor">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={openCreate}>Add Manually</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setProposalImportOpen(true)}>Upload Proposal</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -698,14 +666,6 @@ export default function Vendors() {
           )}
         </SheetContent>
       </Sheet>
-
-      <VendorImportDialog
-        open={importOpen}
-        onOpenChange={setImportOpen}
-        organizationId={organizationId}
-        existingVendorNames={vendors.map((v) => v.vendor_name)}
-        onImported={loadAll}
-      />
 
       <VendorProposalImportDialog
         open={proposalImportOpen}
