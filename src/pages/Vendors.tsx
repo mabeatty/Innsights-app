@@ -296,7 +296,7 @@ export default function Vendors() {
       if (isNaN(d.getTime())) return "";
       return `${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}/${d.getFullYear()}`;
     };
-    const rows = vendors.map((v) => {
+    const rows = filtered.map((v) => {
       const projectIds = vendorProjectMap[v.id] ?? [];
       const projectNames = projectIds
         .map((pid) => projectNameById.get(pid))
@@ -340,8 +340,15 @@ export default function Vendors() {
     XLSX.utils.book_append_sheet(wb, ws, "Vendors");
     const today = new Date();
     const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-    XLSX.writeFile(wb, `Witness_Vendor_Database_${dateStr}.xlsx`);
-    toast.success("Vendor database exported");
+    const filterLabel = [
+      categoryFilter !== "all" ? categoryFilter : null,
+      projectFilter !== "all" ? projectNameById.get(projectFilter) : null,
+    ].filter(Boolean).join("_").replace(/\s+/g, "_");
+    const filename = filterLabel
+      ? `Witness_Vendor_Database_${filterLabel}_${dateStr}.xlsx`
+      : `Witness_Vendor_Database_${dateStr}.xlsx`;
+    XLSX.writeFile(wb, filename);
+    toast.success(`Exported ${rows.length} vendor${rows.length === 1 ? "" : "s"}${filterLabel ? ` (${filterLabel.replace(/_/g, " ")})` : ""}`);
   };
 
   const [downloadingW9s, setDownloadingW9s] = useState(false);
