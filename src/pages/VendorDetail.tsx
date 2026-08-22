@@ -100,15 +100,15 @@ export default function VendorDetail() {
     if (!vendorId) return;
     (async () => {
       setLoading(true);
-      const [vRes, iRes, lRes, gRes, catRes] = await Promise.all([
+      const [vRes, iRes, lRes, gRes] = await Promise.all([
         db.from("global_vendors").select("*").eq("id", vendorId).maybeSingle(),
         db.from("catalog_items").select("id, canonical_name"),
         db.from("bid_line_items").select("*").eq("global_vendor_id", vendorId),
         db.from("vendor_pricing").select("*").eq("global_vendor_id", vendorId),
-        db.from("global_vendors").select("category"),
       ]);
       if (!vRes.data) { setNotFound(true); setLoading(false); return; }
-      setCategoryOptions(Array.from(new Set((catRes.data ?? []).map((r: any) => r.category).filter(Boolean))).sort());
+      const catRes = await db.from("vendor_categories").select("name").eq("org_id", vRes.data.org_id);
+      setCategoryOptions(Array.from(new Set((catRes.data ?? []).map((r: any) => r.name).filter(Boolean))).sort());
       const nameById = new Map((iRes.data ?? []).map((c: any) => [c.id, c.canonical_name]));
       const line: Rec[] = (lRes.data ?? []).map((r: any) => ({
         id: "l_" + r.id, grain: "line", item_name: r.item_name,

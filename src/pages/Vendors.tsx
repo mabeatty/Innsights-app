@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -14,12 +14,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2, Sparkles, FileArchive } from "lucide-react";
+import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Upload, Download, Library, Link2, Sparkles, FileArchive, Tags } from "lucide-react";
 import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import VendorImportDialog from "@/components/vendors/VendorImportDialog";
 import VendorProposalImportDialog from "@/components/vendors/VendorProposalImportDialog";
 import VendorW9Panel, { VendorW9, computeW9Status, w9StatusBadgeClasses, w9StatusLabel } from "@/components/vendors/VendorW9Panel";
+import ManageCategoriesDialog, { VendorCategory } from "@/components/vendors/ManageCategoriesDialog";
 
 const CATEGORIES = [
   "General Contractor",
@@ -124,10 +125,23 @@ export default function Vendors() {
   const [projectFilter, setProjectFilter] = useState<string>("all");
   const [projectVendorNames, setProjectVendorNames] = useState<Record<string, string[]>>({});
 
-  const categoryOptions = useMemo(
-    () => Array.from(new Set([...CATEGORIES, ...vendors.map(v => v.category)].filter(Boolean))).sort(),
-    [vendors]
-  );
+  const [categories, setCategories] = useState<VendorCategory[]>([]);
+  const [manageCategoriesOpen, setManageCategoriesOpen] = useState(false);
+  const categoryOptions = useMemo(() => categories.map((c) => c.name).sort(), [categories]);
+  const vendorCountByCategory = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const v of vendors) {
+      if (!v.category) continue;
+      map[v.category] = (map[v.category] ?? 0) + 1;
+    }
+    return map;
+  }, [vendors]);
+
+  const loadCategories = useCallback(async () => {
+    if (!organizationId) return;
+    const { data } = await supabase.from("vendor_categories").select("id, name").eq("org_id", organizationId);
+    setCategories((data as VendorCategory[]) ?? []);
+  }, [organizationId]);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Vendor | null>(null);
@@ -181,6 +195,7 @@ export default function Vendors() {
 
   useEffect(() => {
     loadAll();
+    loadCategories();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [organizationId]);
 
@@ -412,6 +427,9 @@ export default function Vendors() {
           </Button>
           <Button variant="outline" onClick={handleDownloadAllW9s} disabled={downloadingW9s} className="gap-2">
             <FileArchive className="h-4 w-4" /> {downloadingW9s ? "Zipping…" : "Download W-9s"}
+          </Button>
+          <Button variant="outline" onClick={() => setManageCategoriesOpen(true)} className="gap-2">
+            <Tags className="h-4 w-4" /> Manage Categories
           </Button>
           <Button onClick={openCreate} className="gap-2">
             <Plus className="h-4 w-4" /> Add Vendor
@@ -696,6 +714,17 @@ export default function Vendors() {
         existingVendorNames={vendors.map((v) => v.vendor_name)}
         onImported={loadAll}
       />
+
+      {organizationId && (
+        <ManageCategoriesDialog
+          open={manageCategoriesOpen}
+          onOpenChange={setManageCategoriesOpen}
+          organizationId={organizationId}
+          categories={categories}
+          vendorCountByCategory={vendorCountByCategory}
+          onChanged={() => { loadCategories(); loadAll(); }}
+        />
+      )}
     </div>
   );
 }
