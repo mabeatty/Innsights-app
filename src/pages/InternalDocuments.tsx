@@ -228,9 +228,8 @@ export default function InternalDocuments() {
                   <TableRow>
                     <TableHead>Document Name</TableHead>
                     {cat === "Franchise Documents" && <TableHead>Brand</TableHead>}
-                    <TableHead className="w-16">Link</TableHead>
                     <TableHead>Notes</TableHead>
-                    <TableHead className="w-24" />
+                    <TableHead className="w-32" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -246,21 +245,19 @@ export default function InternalDocuments() {
                         </button>
                       </TableCell>
                       {cat === "Franchise Documents" && <TableCell className="text-sm">{brandName(doc.brand_id)}</TableCell>}
-                      <TableCell>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <a href={doc.link} target="_blank" rel="noopener noreferrer">
-                              <Button variant="ghost" size="icon" className="h-8 w-8" title="Open / Download">
-                                <Download className="h-4 w-4 text-primary" />
-                              </Button>
-                            </a>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-md break-all">{doc.link}</TooltipContent>
-                        </Tooltip>
-                      </TableCell>
                       <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">{doc.notes ?? "—"}</TableCell>
                       <TableCell>
                         <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <a href={doc.link} target="_blank" rel="noopener noreferrer">
+                                <Button variant="ghost" size="icon" title="Open / Download">
+                                  <Download className="h-4 w-4 text-primary" />
+                                </Button>
+                              </a>
+                            </TooltipTrigger>
+                            <TooltipContent className="max-w-md break-all">{doc.link}</TooltipContent>
+                          </Tooltip>
                           <Button variant="ghost" size="icon" title="Edit" onClick={() => openEdit(doc)}><Pencil className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="icon" title="Delete" onClick={() => setDeleteDoc(doc)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
                         </div>
