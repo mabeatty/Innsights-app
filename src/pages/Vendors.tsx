@@ -457,15 +457,15 @@ export default function Vendors() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="h-9 py-2">Vendor Name</TableHead>
-              <TableHead className="h-9 py-2">Category</TableHead>
-              <TableHead className="h-9 py-2">Contact</TableHead>
-              <TableHead className="h-9 py-2">Phone</TableHead>
-              <TableHead className="h-9 py-2">Email</TableHead>
-              <TableHead className="h-9 py-2">Markets</TableHead>
+              <TableHead className="h-9 py-2 min-w-[160px]">Vendor Name</TableHead>
+              <TableHead className="h-9 py-2 min-w-[110px]">Category</TableHead>
+              <TableHead className="h-9 py-2 min-w-[130px]">Contact</TableHead>
+              <TableHead className="h-9 py-2 min-w-[150px] whitespace-nowrap">Phone</TableHead>
+              <TableHead className="h-9 py-2 min-w-[180px]">Email</TableHead>
+              <TableHead className="h-9 py-2 min-w-[120px]">Markets</TableHead>
               <TableHead className="h-9 py-2">Notes</TableHead>
-              <TableHead className="h-9 py-2">Rating</TableHead>
-              <TableHead className="h-9 py-2">W-9</TableHead>
+              <TableHead className="h-9 py-2 min-w-[90px]">Rating</TableHead>
+              <TableHead className="h-9 py-2 min-w-[110px]">W-9</TableHead>
               <TableHead className="h-9 py-2 w-[100px]" />
             </TableRow>
           </TableHeader>
@@ -480,7 +480,7 @@ export default function Vendors() {
                   <TableCell className="py-1.5 font-medium">{v.vendor_name}</TableCell>
                   <TableCell className="py-1.5"><Badge variant="secondary">{v.category}</Badge></TableCell>
                   <TableCell className="py-1.5">{v.contact_name || "—"}</TableCell>
-                  <TableCell className="py-1.5">{v.phone || "—"}</TableCell>
+                  <TableCell className="py-1.5 whitespace-nowrap">{v.phone || "—"}</TableCell>
                   <TableCell className="py-1.5">{v.email || "—"}</TableCell>
                   <TableCell className="py-1.5 max-w-[160px] truncate">{v.markets || "—"}</TableCell>
                   <TableCell className="py-1.5 max-w-[200px] truncate">
