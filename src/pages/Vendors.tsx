@@ -70,6 +70,7 @@ interface Vendor {
   markets: string | null;
   notes: string | null;
   performance_rating: number;
+  address: string | null;
 }
 
 interface ProjectOption {
@@ -83,6 +84,7 @@ const emptyForm = {
   contact_name: "",
   phone: "",
   email: "",
+  address: "",
   markets: "",
   notes: "",
   performance_rating: 0,
@@ -233,6 +235,7 @@ export default function Vendors() {
       contact_name: v.contact_name ?? "",
       phone: v.phone ?? "",
       email: v.email ?? "",
+      address: v.address ?? "",
       markets: v.markets ?? "",
       notes: v.notes ?? "",
       performance_rating: v.performance_rating,
@@ -252,6 +255,7 @@ export default function Vendors() {
       contact_name: form.contact_name.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
+      address: form.address.trim() || null,
       markets: form.markets.trim() || null,
       notes: form.notes.trim() || null,
       performance_rating: form.performance_rating,
@@ -321,6 +325,7 @@ export default function Vendors() {
         "Contact Name": v.contact_name ?? "",
         Phone: v.phone ?? "",
         Email: v.email ?? "",
+        Address: v.address ?? "",
         Markets: v.markets ?? "",
         Notes: v.notes ?? "",
         "Performance Rating": v.performance_rating || "",
@@ -330,7 +335,7 @@ export default function Vendors() {
       };
     });
     const headers = [
-      "Vendor Name", "Category", "Contact Name", "Phone", "Email",
+      "Vendor Name", "Category", "Contact Name", "Phone", "Email", "Address",
       "Markets", "Notes", "Performance Rating", "Associated Projects",
       "Date Added", "Last Updated",
     ];
@@ -448,6 +453,7 @@ export default function Vendors() {
               <TableHead className="h-9 py-2 min-w-[130px]">Contact</TableHead>
               <TableHead className="h-9 py-2 min-w-[150px] whitespace-nowrap">Phone</TableHead>
               <TableHead className="h-9 py-2 min-w-[180px]">Email</TableHead>
+              <TableHead className="h-9 py-2 min-w-[150px]">Address</TableHead>
               <TableHead className="h-9 py-2 min-w-[120px]">Markets</TableHead>
               <TableHead className="h-9 py-2">Notes</TableHead>
               <TableHead className="h-9 py-2 min-w-[90px]">Rating</TableHead>
@@ -457,9 +463,9 @@ export default function Vendors() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">Loading…</TableCell></TableRow>
             ) : filtered.length === 0 ? (
-              <TableRow><TableCell colSpan={10} className="text-center text-muted-foreground py-8">No vendors found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No vendors found.</TableCell></TableRow>
             ) : (
               filtered.map((v) => (
                 <TableRow key={v.id} className="group cursor-pointer" onClick={() => navigate(`/vendors/${v.id}`)}>
@@ -468,6 +474,14 @@ export default function Vendors() {
                   <TableCell className="py-1.5">{v.contact_name || "—"}</TableCell>
                   <TableCell className="py-1.5 whitespace-nowrap">{v.phone || "—"}</TableCell>
                   <TableCell className="py-1.5">{v.email || "—"}</TableCell>
+                  <TableCell className="py-1.5 max-w-[180px] truncate">
+                    {v.address ? (
+                      <Tooltip>
+                        <TooltipTrigger asChild><span className="truncate block">{v.address}</span></TooltipTrigger>
+                        <TooltipContent className="max-w-sm">{v.address}</TooltipContent>
+                      </Tooltip>
+                    ) : "—"}
+                  </TableCell>
                   <TableCell className="py-1.5 max-w-[160px] truncate">{v.markets || "—"}</TableCell>
                   <TableCell className="py-1.5 max-w-[200px] truncate">
                     {v.notes ? (
@@ -547,6 +561,14 @@ export default function Vendors() {
             <div className="space-y-2 col-span-2">
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Address</Label>
+              <Input
+                placeholder="e.g. 123 Main St, Columbus, OH 43215"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
             </div>
             <div className="space-y-2 col-span-2">
               <Label>Markets / Geographies Served</Label>

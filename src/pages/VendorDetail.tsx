@@ -17,7 +17,7 @@ const db = supabase as any;
 
 interface VendorInfo {
   id: string; org_id: string; vendor_name: string; category: string | null; contact_name: string | null;
-  phone: string | null; email: string | null; markets: string | null; notes: string | null; performance_rating: number | null;
+  phone: string | null; email: string | null; address: string | null; markets: string | null; notes: string | null; performance_rating: number | null;
 }
 interface Rec {
   id: string; grain: "line" | "gross"; item_name: string | null; category: string | null;
@@ -52,7 +52,7 @@ export default function VendorDetail() {
   const [editOpen, setEditOpen] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
   const [form, setForm] = useState({
-    vendor_name: "", category: "", contact_name: "", phone: "", email: "", markets: "", notes: "", performance_rating: 0,
+    vendor_name: "", category: "", contact_name: "", phone: "", email: "", address: "", markets: "", notes: "", performance_rating: 0,
   });
   const [saving, setSaving] = useState(false);
 
@@ -64,6 +64,7 @@ export default function VendorDetail() {
       contact_name: vendor.contact_name ?? "",
       phone: vendor.phone ?? "",
       email: vendor.email ?? "",
+      address: vendor.address ?? "",
       markets: vendor.markets ?? "",
       notes: vendor.notes ?? "",
       performance_rating: vendor.performance_rating ?? 0,
@@ -84,6 +85,7 @@ export default function VendorDetail() {
       contact_name: form.contact_name.trim() || null,
       phone: form.phone.trim() || null,
       email: form.email.trim() || null,
+      address: form.address.trim() || null,
       markets: form.markets.trim() || null,
       notes: form.notes.trim() || null,
       performance_rating: form.performance_rating,
@@ -180,6 +182,12 @@ export default function VendorDetail() {
             <Mail className="h-3.5 w-3.5 text-muted-foreground" />
             {vendor!.email ? <a href={`mailto:${vendor!.email}`} className="hover:underline">{vendor!.email}</a> : <span className="text-muted-foreground">—</span>}
           </div>
+          {vendor!.address && (
+            <div className="flex items-center gap-2 sm:col-span-3">
+              <MapPin className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span>{vendor!.address}</span>
+            </div>
+          )}
           {vendor!.markets && (
             <div className="flex items-center gap-2 sm:col-span-3">
               <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
@@ -277,6 +285,14 @@ export default function VendorDetail() {
             <div className="space-y-2 col-span-2">
               <Label>Email</Label>
               <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+            </div>
+            <div className="space-y-2 col-span-2">
+              <Label>Address</Label>
+              <Input
+                placeholder="e.g. 123 Main St, Columbus, OH 43215"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+              />
             </div>
             <div className="space-y-2 col-span-2">
               <Label>Markets / Geographies Served</Label>
