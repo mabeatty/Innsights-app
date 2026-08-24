@@ -132,7 +132,7 @@ export const ALL_DIVISIONS = [
 ];
 
 export const fmt = (v: number) =>
-  v.toLocaleString("en-US", {
+  (typeof v !== "number" || Number.isNaN(v) ? 0 : v).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 0,
@@ -140,7 +140,7 @@ export const fmt = (v: number) =>
   });
 
 export const fmtDecimal = (v: number) =>
-  v.toLocaleString("en-US", {
+  (typeof v !== "number" || Number.isNaN(v) ? 0 : v).toLocaleString("en-US", {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 2,

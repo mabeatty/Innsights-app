@@ -294,7 +294,7 @@ export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
                           <td className="px-3 py-1.5 text-right">{fmt(r.thisPeriod)}</td>
                           <td className="px-3 py-1.5 text-right">{fmt(r.materials)}</td>
                           <td className="px-3 py-1.5 text-right">{fmt(r.totalCompleted)}</td>
-                          <td className="px-3 py-1.5 text-right">{r.pctComplete?.toFixed(1)}%</td>
+                          <td className="px-3 py-1.5 text-right">{typeof r.pctComplete === "number" ? `${r.pctComplete.toFixed(1)}%` : "—"}</td>
                           <td className="px-3 py-1.5 text-right">{fmt(r.balance)}</td>
                           <td className="px-3 py-1.5 text-right">{fmt(r.retainage)}</td>
                         </tr>
