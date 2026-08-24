@@ -453,7 +453,7 @@ export default function Vendors() {
               <TableHead className="h-9 py-2 min-w-[130px]">Contact</TableHead>
               <TableHead className="h-9 py-2 min-w-[150px] whitespace-nowrap">Phone</TableHead>
               <TableHead className="h-9 py-2 min-w-[180px]">Email</TableHead>
-              <TableHead className="h-9 py-2 min-w-[150px]">Address</TableHead>
+              <TableHead className="h-9 py-2 min-w-[260px]">Address</TableHead>
               <TableHead className="h-9 py-2 min-w-[120px]">Markets</TableHead>
               <TableHead className="h-9 py-2">Notes</TableHead>
               <TableHead className="h-9 py-2 min-w-[90px]">Rating</TableHead>
@@ -468,20 +468,13 @@ export default function Vendors() {
               <TableRow><TableCell colSpan={11} className="text-center text-muted-foreground py-8">No vendors found.</TableCell></TableRow>
             ) : (
               filtered.map((v) => (
-                <TableRow key={v.id} className="group cursor-pointer" onClick={() => navigate(`/vendors/${v.id}`)}>
+                <TableRow key={v.id} className="group cursor-pointer align-top" onClick={() => navigate(`/vendors/${v.id}`)}>
                   <TableCell className="py-1.5 font-medium">{v.vendor_name}</TableCell>
                   <TableCell className="py-1.5"><Badge variant="secondary">{v.category}</Badge></TableCell>
                   <TableCell className="py-1.5">{v.contact_name || "—"}</TableCell>
                   <TableCell className="py-1.5 whitespace-nowrap">{v.phone || "—"}</TableCell>
                   <TableCell className="py-1.5">{v.email || "—"}</TableCell>
-                  <TableCell className="py-1.5 max-w-[180px] truncate">
-                    {v.address ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild><span className="truncate block">{v.address}</span></TooltipTrigger>
-                        <TooltipContent className="max-w-sm">{v.address}</TooltipContent>
-                      </Tooltip>
-                    ) : "—"}
-                  </TableCell>
+                  <TableCell className="py-1.5 max-w-[260px] whitespace-normal break-words">{v.address || "—"}</TableCell>
                   <TableCell className="py-1.5 max-w-[160px] truncate">{v.markets || "—"}</TableCell>
                   <TableCell className="py-1.5 max-w-[200px] truncate">
                     {v.notes ? (
