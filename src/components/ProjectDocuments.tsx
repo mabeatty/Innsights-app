@@ -15,11 +15,14 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronRight, Plus, Trash2, ExternalLink, Copy, Send } from "lucide-react";
+import { ChevronRight, Plus, Trash2, ExternalLink, Copy, Send, Pencil } from "lucide-react";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-const FOLDERS = ["Drawings", "Permits", "Contracts", "Other"] as const;
+const FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Other"] as const;
 type FolderName = (typeof FOLDERS)[number];
 
 interface DocRow {
@@ -50,6 +53,13 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
   const [newDocName, setNewDocName] = useState("");
   const [newDriveUrl, setNewDriveUrl] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Edit document state
+  const [editTarget, setEditTarget] = useState<DocRow | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editUrl, setEditUrl] = useState("");
+  const [editFolder, setEditFolder] = useState<FolderName>("Other");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   // Send dialog state
   const [sendDoc, setSendDoc] = useState<DocRow | null>(null);
@@ -115,6 +125,34 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
       await fetchDocs();
     }
     setAdding(false);
+  };
+
+  const openEditDialog = (doc: DocRow) => {
+    setEditTarget(doc);
+    setEditName(doc.document_name);
+    setEditUrl(doc.drive_url);
+    setEditFolder(doc.folder_name as FolderName);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editTarget || !editName.trim() || !editUrl.trim()) return;
+    setSavingEdit(true);
+    const { error } = await supabase
+      .from("project_documents")
+      .update({
+        document_name: editName.trim(),
+        drive_url: editUrl.trim(),
+        folder_name: editFolder,
+      })
+      .eq("id", editTarget.id);
+    if (error) {
+      toast.error(`Failed to save changes: ${error.message}`);
+    } else {
+      toast.success("Document updated.");
+      setEditTarget(null);
+      await fetchDocs();
+    }
+    setSavingEdit(false);
   };
 
   const confirmDelete = async () => {
@@ -242,6 +280,15 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7"
+                              title="Edit"
+                              onClick={() => openEditDialog(doc)}
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
                               title="Send"
                               onClick={() => openSendDialog(doc)}
                             >
@@ -296,6 +343,50 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
             <Button variant="outline" onClick={() => setAddFolder(null)}>Cancel</Button>
             <Button onClick={handleAdd} disabled={adding || !newDocName.trim() || !newDriveUrl.trim()}>
               {adding ? "Adding…" : "Add Document"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Document Dialog */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Document</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label>Document Name</Label>
+              <Input
+                placeholder="e.g. Floor Plan Rev 3"
+                value={editName}
+                onChange={(e) => setEditName(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Google Drive URL</Label>
+              <Input
+                placeholder="https://drive.google.com/..."
+                value={editUrl}
+                onChange={(e) => setEditUrl(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Category</Label>
+              <Select value={editFolder} onValueChange={(v) => setEditFolder(v as FolderName)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {FOLDERS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditTarget(null)}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={savingEdit || !editName.trim() || !editUrl.trim()}>
+              {savingEdit ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
