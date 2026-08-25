@@ -22,7 +22,7 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 
-const FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Other"] as const;
+const FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Corporate", "Other"] as const;
 type FolderName = (typeof FOLDERS)[number];
 
 interface DocRow {
