@@ -267,10 +267,10 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                 </>
               )}
 
-              {/* Draw Backup Folder (Google Drive) */}
+              {/* Supporting Documents (Google Drive) */}
               <Separator />
               <div className="space-y-2">
-                <div className="text-sm font-medium">Draw Backup</div>
+                <div className="text-sm font-medium">Supporting Documents</div>
                 {(invoice as any).drive_url ? (
                   <Button
                     variant="outline"
@@ -278,11 +278,11 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                     onClick={() => window.open((invoice as any).drive_url, "_blank", "noopener,noreferrer")}
                   >
                     <FolderOpen className="h-4 w-4" />
-                    Open Draw Backup Folder
+                    Open Supporting Documents
                     <ExternalLink className="h-3.5 w-3.5" />
                   </Button>
                 ) : (
-                  <div className="text-xs text-muted-foreground">No backup folder link provided.</div>
+                  <div className="text-xs text-muted-foreground">No supporting documents link provided.</div>
                 )}
               </div>
 

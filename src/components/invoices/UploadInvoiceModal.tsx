@@ -15,6 +15,7 @@ import { APPROVER_ROLES } from "./types";
 import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
 import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
+import DriveFolderPicker from "./DriveFolderPicker";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -86,6 +87,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [dueDateTouched, setDueDateTouched] = useState(false);
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
   const [transactionType, setTransactionType] = useState<string>("Vendor Invoice");
+  const [supportingDocsLink, setSupportingDocsLink] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([newLine()]);
 
@@ -103,7 +105,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setDueDate(undefined); setDueDateTouched(false);
-    setTransactionType("Vendor Invoice"); setNotes("");
+    setTransactionType("Vendor Invoice"); setSupportingDocsLink(""); setNotes("");
     setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
@@ -415,7 +417,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         submitted_by: user.id,
         submitted_by_email: user.email,
         notes: notes || null,
-        drive_url: pdfUrl,
+        drive_url: supportingDocsLink || null,
         pdf_url: pdfUrl,
         pdf_path: path,
         source: "manual",
@@ -593,6 +595,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                 {extracting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
               </div>
               <p className="text-[11px] text-muted-foreground">Excel AIA files (with 702/703 sheets) are parsed directly; PDFs use AI extraction.</p>
+            </div>
+            <div className="space-y-1.5 col-span-2">
+              <Label>Supporting Documents (Google Drive)</Label>
+              <DriveFolderPicker value={supportingDocsLink} onChange={setSupportingDocsLink} />
+              <p className="text-[11px] text-muted-foreground">Optional — link a folder for lien waivers, backup invoices, or other documents that support a pay application.</p>
             </div>
           </div>
 
