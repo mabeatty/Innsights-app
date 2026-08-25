@@ -1,7 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 
 // Categories mirror the folders shown in the Resources tab (ProjectDocuments).
-export const RESOURCE_FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Corporate", "Other"] as const;
+export const RESOURCE_FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Corporate", "Franchise Documents", "Other"] as const;
 export type ResourceFolder = (typeof RESOURCE_FOLDERS)[number];
 
 export interface PushToResourcesArgs {
