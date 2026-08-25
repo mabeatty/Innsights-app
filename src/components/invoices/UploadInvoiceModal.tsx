@@ -15,7 +15,6 @@ import { APPROVER_ROLES } from "./types";
 import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
 import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
-import DriveFolderPicker from "./DriveFolderPicker";
 import { format } from "date-fns";
 
 interface Project { id: string; name: string }
@@ -87,7 +86,6 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [dueDateTouched, setDueDateTouched] = useState(false);
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
   const [transactionType, setTransactionType] = useState<string>("Vendor Invoice");
-  const [documentLink, setDocumentLink] = useState("");
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([newLine()]);
 
@@ -105,7 +103,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     lineCounter = 0;
     setFile(null); setVendor(""); setInvoiceNumber(""); setInvoiceDate(undefined);
     setDueDate(undefined); setDueDateTouched(false);
-    setTransactionType("Vendor Invoice"); setDocumentLink(""); setNotes("");
+    setTransactionType("Vendor Invoice"); setNotes("");
     setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); setProjectId(defaultProjectId || "");
   } }, [open, defaultProjectId]);
 
@@ -417,7 +415,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         submitted_by: user.id,
         submitted_by_email: user.email,
         notes: notes || null,
-        drive_url: documentLink || null,
+        drive_url: pdfUrl,
         pdf_url: pdfUrl,
         pdf_path: path,
         source: "manual",
@@ -476,7 +474,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
           net_amount: li.amount - retAmt,
           status: "Pending",
           notes: notes || null,
-          document_url: documentLink || pdfUrl,
+          document_url: pdfUrl,
         };
       });
       const { error: txnErr } = await supabase.from("budget_transactions").insert(txnRows);
@@ -526,24 +524,6 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          <div className="space-y-1.5">
-            <Label>PDF or Excel *</Label>
-            <div className="flex items-center gap-2">
-              <label className="flex-1 flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/50 text-sm">
-                <Upload className="h-4 w-4" />
-                <span className="truncate">{file ? file.name : "Choose PDF or Excel file…"}</span>
-                <input
-                  type="file"
-                  accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  className="hidden"
-                  onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
-                />
-              </label>
-              {extracting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
-            </div>
-            <p className="text-[11px] text-muted-foreground">Excel AIA files (with 702/703 sheets) are parsed directly; PDFs use AI extraction.</p>
-          </div>
-
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="flex items-center">Vendor Name * {extracted.vendor && <AIBadge />}</Label>
@@ -597,9 +577,22 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Draw Backup Folder (Google Drive)</Label>
-              <DriveFolderPicker value={documentLink} onChange={setDocumentLink} />
+            <div className="space-y-1.5 col-span-2">
+              <Label>Upload invoice and related documents *</Label>
+              <div className="flex items-center gap-2">
+                <label className="flex-1 flex items-center gap-2 border border-dashed rounded-md px-3 py-2 cursor-pointer hover:bg-muted/50 text-sm">
+                  <Upload className="h-4 w-4" />
+                  <span className="truncate">{file ? file.name : "Choose PDF or Excel file…"}</span>
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    className="hidden"
+                    onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+                  />
+                </label>
+                {extracting && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+              </div>
+              <p className="text-[11px] text-muted-foreground">Excel AIA files (with 702/703 sheets) are parsed directly; PDFs use AI extraction.</p>
             </div>
           </div>
 
