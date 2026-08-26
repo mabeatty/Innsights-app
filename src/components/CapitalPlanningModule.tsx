@@ -2,8 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useCapitalData } from "./capital-planning/useCapitalData";
 import PreDevelopmentBudgetSubPage from "./capital-planning/PreDevelopmentBudgetSubPage";
-import EquitySubPage from "./capital-planning/EquitySubPage";
-import DebtSubPage from "./capital-planning/DebtSubPage";
+import CapitalSubPage from "./capital-planning/CapitalSubPage";
 import CashFlowSubPage from "./capital-planning/CashFlowSubPage";
 import FinancialModelSubPage from "./capital-planning/FinancialModelSubPage";
 import { cn } from "@/lib/utils";
@@ -15,8 +14,7 @@ interface Props {
 const SUB_PAGES = [
   { key: "predev", label: "Pre-Development Budget" },
   { key: "cashflow", label: "Cash Planning" },
-  { key: "equity", label: "Equity" },
-  { key: "debt", label: "Debt" },
+  { key: "capital", label: "Capital" },
   { key: "model", label: "Financial Model" },
 ] as const;
 
@@ -64,15 +62,8 @@ export default function CapitalPlanningModule({ projectId }: Props) {
       {activePage === "predev" && (
         <PreDevelopmentBudgetSubPage projectId={projectId} />
       )}
-      {activePage === "equity" && (
-        <EquitySubPage
-          projectId={projectId}
-          investorPositions={data.investorPositions}
-          reloadPositions={data.reload}
-        />
-      )}
-      {activePage === "debt" && (
-        <DebtSubPage
+      {activePage === "capital" && (
+        <CapitalSubPage
           budgetTotal={data.budgetTotal}
           debtTranches={data.debtTranches}
           addDebt={data.addDebt}
