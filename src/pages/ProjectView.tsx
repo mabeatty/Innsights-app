@@ -210,20 +210,14 @@ export default function ProjectView() {
           <TabsTrigger value="executive-summary" className="gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" /> Summary
           </TabsTrigger>
-          <TabsTrigger value="project-accounting" className="gap-1.5">
+          <TabsTrigger value="accounting" className="gap-1.5">
             <Receipt className="h-3.5 w-3.5" /> Accounting
-          </TabsTrigger>
-          <TabsTrigger value="contracts" className="gap-1.5">
-            <FileSignature className="h-3.5 w-3.5" /> Contracts
-          </TabsTrigger>
-          <TabsTrigger value="capital" className="gap-1.5">
-            <Landmark className="h-3.5 w-3.5" /> Capital Planning
-          </TabsTrigger>
-          <TabsTrigger value="schedule" className="gap-1.5">
-            <CalendarDays className="h-3.5 w-3.5" /> Schedule
           </TabsTrigger>
           <TabsTrigger value="procurement" className="gap-1.5">
             <ClipboardList className="h-3.5 w-3.5" /> Procurement
+          </TabsTrigger>
+          <TabsTrigger value="schedule" className="gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" /> Schedule
           </TabsTrigger>
           <TabsTrigger value="reports" className="gap-1.5">
             <NotebookPen className="h-3.5 w-3.5" /> Reports
@@ -241,13 +235,34 @@ export default function ProjectView() {
           <BudgetModule projectId={id!} projectName={project.name} projectInfo={projectInfo} activeTab="executive-summary" />
         </TabsContent>
 
-        <TabsContent value="project-accounting">
-          <AlertBanner alerts={complianceAlerts} onDismiss={dismissAlert} />
-          <BudgetModule projectId={id!} projectName={project.name} projectInfo={projectInfo} activeTab="project-accounting" />
-        </TabsContent>
+        <TabsContent value="accounting">
+          <Tabs defaultValue="project-accounting">
+            <TabsList>
+              <TabsTrigger value="project-accounting" className="gap-1.5">
+                <Receipt className="h-3.5 w-3.5" /> Project Accounting
+              </TabsTrigger>
+              <TabsTrigger value="contracts" className="gap-1.5">
+                <FileSignature className="h-3.5 w-3.5" /> Contracts
+              </TabsTrigger>
+              <TabsTrigger value="capital" className="gap-1.5">
+                <Landmark className="h-3.5 w-3.5" /> Cash Planning
+              </TabsTrigger>
+            </TabsList>
 
-        <TabsContent value="contracts">
-          <ContractsModule projectId={id!} projectName={project.name} />
+            <TabsContent value="project-accounting">
+              <AlertBanner alerts={complianceAlerts} onDismiss={dismissAlert} />
+              <BudgetModule projectId={id!} projectName={project.name} projectInfo={projectInfo} activeTab="project-accounting" />
+            </TabsContent>
+
+            <TabsContent value="contracts">
+              <ContractsModule projectId={id!} projectName={project.name} />
+            </TabsContent>
+
+            <TabsContent value="capital">
+              <AlertBanner alerts={capitalAlerts} onDismiss={dismissAlert} />
+              <CapitalPlanningModule projectId={id!} />
+            </TabsContent>
+          </Tabs>
         </TabsContent>
 
         <TabsContent value="documents">
@@ -262,12 +277,6 @@ export default function ProjectView() {
         <TabsContent value="procurement">
           <ProcurementModule projectId={id!} projectName={project.name} brandId={project.brand_id} />
         </TabsContent>
-
-        <TabsContent value="capital">
-          <AlertBanner alerts={capitalAlerts} onDismiss={dismissAlert} />
-          <CapitalPlanningModule projectId={id!} />
-        </TabsContent>
-
 
         <TabsContent value="tasks">
           <TasksModule projectId={id!} clickupListId={project.clickup_list_id} organizationId={organizationId} />
