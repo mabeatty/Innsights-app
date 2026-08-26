@@ -66,6 +66,10 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
   const [formNotes, setFormNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Schedule impact: which critical-path tasks this CO shifts, and by how many days.
+  const [criticalPathTasks, setCriticalPathTasks] = useState<{ id: string; task_name: string }[]>([]);
+  const [scheduleImpacts, setScheduleImpacts] = useState<{ task_id: string; days: number }[]>([]);
+
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("change_orders")
@@ -81,12 +85,14 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
 
   useEffect(() => {
     (async () => {
-      const [cRes, vRes] = await Promise.all([
+      const [cRes, vRes, tRes] = await Promise.all([
         supabase.from("contracts").select("*").eq("project_id", projectId).order("contract_number"),
         supabase.from("vendors").select("id, name").eq("project_id", projectId).order("name"),
+        supabase.from("critical_path_tasks").select("id, task_name").eq("project_id", projectId).order("sort_order"),
       ]);
       if (!cRes.error) setContracts((cRes.data ?? []) as Contract[]);
       if (!vRes.error) setVendors((vRes.data ?? []) as { id: string; name: string }[]);
+      if (!tRes.error) setCriticalPathTasks((tRes.data ?? []) as { id: string; task_name: string }[]);
     })();
   }, [projectId]);
 
@@ -130,6 +136,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
     setFormStatus("Proposed");
     setFormDocUrl("");
     setFormNotes("");
+    setScheduleImpacts([]);
   };
 
   const openEdit = (co: ChangeOrder) => {
@@ -142,6 +149,14 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
     setFormStatus(co.status);
     setFormDocUrl(co.document_url ?? "");
     setFormNotes(co.notes ?? "");
+    setScheduleImpacts([]);
+    supabase
+      .from("change_order_schedule_impacts")
+      .select("critical_path_task_id, impact_days")
+      .eq("change_order_id", co.id)
+      .then(({ data }) => {
+        if (data) setScheduleImpacts(data.map(d => ({ task_id: d.critical_path_task_id, days: d.impact_days })));
+      });
     setDialogOpen(true);
   };
 
@@ -155,6 +170,37 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
       .eq("id", budgetRow.id);
     if (error) toast.error("Failed to update budget.");
     else onBudgetReload();
+  };
+
+  // Save (upsert) the CO's schedule-impact rows, and — only when the CO is
+  // Approved — apply each day-shift to its critical-path task (cascading to
+  // critical successors via the DB function). Impacts are tracked per-row as
+  // `applied` so approving twice doesn't double-shift the schedule.
+  const saveAndApplyScheduleImpacts = async (changeOrderId: string, nowApproved: boolean) => {
+    const rows = scheduleImpacts.filter(si => si.task_id && si.days !== 0);
+
+    // Replace existing impact rows for this CO with the current form state.
+    await supabase.from("change_order_schedule_impacts").delete().eq("change_order_id", changeOrderId);
+    if (rows.length === 0) return;
+
+    const { data: inserted, error } = await supabase
+      .from("change_order_schedule_impacts")
+      .insert(rows.map(r => ({ change_order_id: changeOrderId, critical_path_task_id: r.task_id, impact_days: r.days })))
+      .select();
+    if (error) { toast.error("Failed to save schedule impact."); return; }
+
+    if (nowApproved) {
+      for (const row of inserted ?? []) {
+        const { error: rpcErr } = await supabase.rpc("apply_schedule_impact", {
+          p_task_id: row.critical_path_task_id,
+          p_days: row.impact_days,
+        });
+        if (!rpcErr) {
+          await supabase.from("change_order_schedule_impacts").update({ applied: true, applied_at: new Date().toISOString() }).eq("id", row.id);
+        }
+      }
+      toast.success("Critical path updated with this change order's schedule impact.");
+    }
   };
 
   const handleSave = async () => {
@@ -198,6 +244,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
           })
           .eq("id", editingId);
         if (error) throw error;
+        await saveAndApplyScheduleImpacts(editingId, formStatus === "Approved" && oldCO.status !== "Approved");
         toast.success("Change order updated.");
       } else {
         // New change order
@@ -205,7 +252,7 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
           await applyBudgetAdjustment(formDivision, formAmount);
         }
 
-        const { error } = await supabase
+        const { data: newCO, error } = await supabase
           .from("change_orders")
           .insert({
             project_id: projectId,
@@ -219,8 +266,11 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
             status: formStatus,
             document_url: formDocUrl || null,
             notes: formNotes || null,
-          });
+          })
+          .select()
+          .single();
         if (error) throw error;
+        await saveAndApplyScheduleImpacts(newCO.id, formStatus === "Approved");
         toast.success("Change order added.");
       }
 
@@ -418,6 +468,43 @@ export default function ChangeOrdersTab({ projectId, budgetRows, onBudgetReload 
                 <Input className="h-8 pl-7 text-xs" placeholder="Paste Google Drive link..." value={formDocUrl} onChange={e => setFormDocUrl(e.target.value)} />
               </div>
             </div>
+
+            {criticalPathTasks.length > 0 && (
+              <div className="space-y-1.5 rounded-md border p-3">
+                <Label className="text-xs">Schedule Impact (optional)</Label>
+                <p className="text-xs text-muted-foreground">
+                  If this CO extends or pulls in the schedule, pick the affected task(s) and how many days. Applied automatically when the CO is Approved.
+                </p>
+                {scheduleImpacts.map((si, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <Select value={si.task_id} onValueChange={(v) => setScheduleImpacts(prev => prev.map((r, i) => i === idx ? { ...r, task_id: v } : r))}>
+                      <SelectTrigger className="h-8 text-xs flex-1"><SelectValue placeholder="Select task" /></SelectTrigger>
+                      <SelectContent>
+                        {criticalPathTasks.map(t => <SelectItem key={t.id} value={t.id}>{t.task_name}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                    <Input
+                      type="number"
+                      className="h-8 w-24 text-xs"
+                      placeholder="Days"
+                      value={si.days || ""}
+                      onChange={(e) => setScheduleImpacts(prev => prev.map((r, i) => i === idx ? { ...r, days: Number(e.target.value) || 0 } : r))}
+                    />
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => setScheduleImpacts(prev => prev.filter((_, i) => i !== idx))}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setScheduleImpacts(prev => [...prev, { task_id: "", days: 0 }])}
+                >
+                  + Add affected task
+                </Button>
+              </div>
+            )}
 
             <div className="space-y-1">
               <Label className="text-xs">Notes</Label>

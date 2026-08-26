@@ -11,8 +11,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Plus, Pencil, Trash2, ExternalLink, Truck } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Pencil, Trash2, ExternalLink, Truck, AlertTriangle } from "lucide-react";
+import { format, differenceInCalendarDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -47,6 +47,15 @@ interface VendorDelivery {
   status: DeliveryStatus;
   agreement_url: string | null;
   notes: string | null;
+  critical_path_task_id: string | null;
+}
+
+interface CriticalPathTaskOption {
+  id: string;
+  task_name: string;
+  start_date: string | null;
+  end_date: string | null;
+  is_critical: boolean;
 }
 
 const statusPillClasses = (status: string) =>
@@ -62,9 +71,30 @@ const statusPillClasses = (status: string) =>
 const fmtDate = (d: string | null) => (d ? format(new Date(`${d}T00:00:00`), "MM/dd/yy") : "—");
 const fmtCost = (n: number | null) => (n == null ? "—" : `$${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
 
+/**
+ * A delivery conflicts with its linked critical-path task when the delivery
+ * (or pickup, whichever is later — a rental needs both) lands after the task
+ * needs it done, i.e. after the task's end_date. This is the concrete signal
+ * the person asked for: "the building isn't ready to accept the furniture"
+ * shows up here as delivery_date > task.end_date.
+ */
+function deliveryConflict(row: VendorDelivery, task: CriticalPathTaskOption | undefined): string | null {
+  if (!task || !task.end_date) return null;
+  const taskEnd = new Date(`${task.end_date}T00:00:00`);
+  const relevantDate = row.pickup_date || row.delivery_date;
+  if (!relevantDate) return null;
+  const deliveryDate = new Date(`${relevantDate}T00:00:00`);
+  if (deliveryDate > taskEnd) {
+    const days = differenceInCalendarDays(deliveryDate, taskEnd);
+    return `${row.pickup_date ? "Pickup" : "Delivery"} is ${days} day${days === 1 ? "" : "s"} after "${task.task_name}" needs to be ready (${fmtDate(task.end_date)}).`;
+  }
+  return null;
+}
+
 export default function VendorDeliveriesModule({ projectId }: Props) {
   const [rows, setRows] = useState<VendorDelivery[]>([]);
   const [vendors, setVendors] = useState<VendorOption[]>([]);
+  const [tasks, setTasks] = useState<CriticalPathTaskOption[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -86,10 +116,11 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
   const [formStatus, setFormStatus] = useState<DeliveryStatus>("Requested");
   const [formAgreementUrl, setFormAgreementUrl] = useState("");
   const [formNotes, setFormNotes] = useState("");
+  const [formCriticalPathTaskId, setFormCriticalPathTaskId] = useState<string>("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [rowsRes, vendorsRes] = await Promise.all([
+    const [rowsRes, vendorsRes, tasksRes] = await Promise.all([
       supabase
         .from("vendor_deliveries")
         .select("*")
@@ -97,10 +128,12 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
         .order("delivery_date", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: false }),
       supabase.from("global_vendors").select("id, vendor_name").order("vendor_name", { ascending: true }),
+      supabase.from("critical_path_tasks").select("id, task_name, start_date, end_date, is_critical").eq("project_id", projectId).order("sort_order"),
     ]);
     if (rowsRes.error) toast.error("Failed to load deliveries.");
     else setRows((rowsRes.data ?? []) as VendorDelivery[]);
     if (!vendorsRes.error) setVendors((vendorsRes.data ?? []) as VendorOption[]);
+    if (!tasksRes.error) setTasks((tasksRes.data ?? []) as CriticalPathTaskOption[]);
     setLoading(false);
   }, [projectId]);
 
@@ -121,6 +154,7 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
     setFormStatus("Requested");
     setFormAgreementUrl("");
     setFormNotes("");
+    setFormCriticalPathTaskId("");
   };
 
   const openAddDialog = () => {
@@ -143,6 +177,7 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
     setFormStatus(row.status);
     setFormAgreementUrl(row.agreement_url ?? "");
     setFormNotes(row.notes ?? "");
+    setFormCriticalPathTaskId(row.critical_path_task_id ?? "");
     setDialogOpen(true);
   };
 
@@ -173,6 +208,7 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
       status: formStatus,
       agreement_url: formAgreementUrl.trim() || null,
       notes: formNotes.trim() || null,
+      critical_path_task_id: formCriticalPathTaskId || null,
     };
 
     const { error } = editingId
@@ -236,11 +272,24 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
             {!loading && rows.length === 0 && (
               <tr><td colSpan={11} className="px-3 py-6 text-center text-muted-foreground">No deliveries or rentals tracked yet.</td></tr>
             )}
-            {!loading && rows.map((row) => (
-              <tr key={row.id} className="border-t">
+            {!loading && rows.map((row) => {
+              const task = tasks.find((t) => t.id === row.critical_path_task_id);
+              const conflict = deliveryConflict(row, task);
+              return (
+              <tr key={row.id} className={cn("border-t", conflict && "bg-red-50/50 dark:bg-red-950/10")}>
                 <td className="px-3 py-2">{row.vendor_name}</td>
                 <td className="px-3 py-2">{row.delivery_type}</td>
-                <td className="px-3 py-2 max-w-[240px] truncate" title={row.item_description}>{row.item_description}</td>
+                <td className="px-3 py-2 max-w-[240px]">
+                  <div className="flex items-center gap-1.5">
+                    {conflict && (
+                      <span title={conflict}>
+                        <AlertTriangle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+                      </span>
+                    )}
+                    <span className="truncate" title={row.item_description}>{row.item_description}</span>
+                  </div>
+                  {task && <div className="text-[11px] text-muted-foreground truncate">→ {task.task_name}</div>}
+                </td>
                 <td className="px-3 py-2">{row.unit_number || "—"}</td>
                 <td className="px-3 py-2">{fmtDate(row.requested_date)}</td>
                 <td className="px-3 py-2">{fmtDate(row.delivery_date)}</td>
@@ -265,7 +314,8 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
                   </div>
                 </td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -357,6 +407,24 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
             <div className="space-y-1.5">
               <Label>Pickup Date</Label>
               <DatePickerInput value={formPickupDate} onChange={setFormPickupDate} />
+            </div>
+
+            <div className="space-y-1.5 col-span-2">
+              <Label>Supports Critical Path Task (optional)</Label>
+              <Select value={formCriticalPathTaskId || "none"} onValueChange={(v) => setFormCriticalPathTaskId(v === "none" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="Not linked to a schedule task" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked</SelectItem>
+                  {tasks.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.task_name}{t.end_date ? ` (needed by ${fmtDate(t.end_date)})` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                If this delivery or rental is needed for a specific critical path task, link it here — Innsights will flag it if the delivery date lands after the task's required window.
+              </p>
             </div>
 
             <div className="space-y-1.5 col-span-2">
