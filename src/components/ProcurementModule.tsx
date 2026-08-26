@@ -1,8 +1,9 @@
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Gavel, ClipboardList, Building2 } from "lucide-react";
+import { Gavel, ClipboardList, Building2, Truck } from "lucide-react";
 import TakeoffModule from "@/components/TakeoffModule";
 import RoomMatrixModule from "@/components/RoomMatrixModule";
 import VendorQuotesModule from "@/components/VendorQuotesModule";
+import VendorDeliveriesModule from "@/components/VendorDeliveriesModule";
 
 interface ProcurementModuleProps {
   projectId: string;
@@ -23,6 +24,9 @@ export default function ProcurementModule({ projectId, projectName, brandId }: P
         <TabsTrigger value="takeoff" className="gap-1.5">
           <ClipboardList className="h-3.5 w-3.5" /> FF&E Takeoff
         </TabsTrigger>
+        <TabsTrigger value="deliveries" className="gap-1.5">
+          <Truck className="h-3.5 w-3.5" /> Deliveries & Rentals
+        </TabsTrigger>
       </TabsList>
       <TabsContent value="bidding">
         <VendorQuotesModule projectId={projectId} />
@@ -32,6 +36,9 @@ export default function ProcurementModule({ projectId, projectName, brandId }: P
       </TabsContent>
       <TabsContent value="takeoff">
         <TakeoffModule projectId={projectId} projectName={projectName} brandId={brandId} />
+      </TabsContent>
+      <TabsContent value="deliveries">
+        <VendorDeliveriesModule projectId={projectId} />
       </TabsContent>
     </Tabs>
   );
