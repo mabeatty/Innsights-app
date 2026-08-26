@@ -9,12 +9,13 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { Plus, Upload, Pencil, Trash2, ArrowRightLeft, FileText, ExternalLink } from "lucide-react";
+import { Plus, Upload, Pencil, Trash2, ArrowRightLeft, FileText, ExternalLink, LayoutGrid, Table2 } from "lucide-react";
 import { format, differenceInCalendarDays } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCriticalPath } from "./useCriticalPath";
 import GanttUploadDialog from "./GanttUploadDialog";
+import CriticalPathGantt from "./CriticalPathGantt";
 import { TASK_STATUSES, type CriticalPathTask, type TaskStatus } from "./criticalPathTypes";
 
 interface Props {
@@ -36,6 +37,7 @@ const statusPillClasses = (status: TaskStatus) =>
 export default function CriticalPathModule({ projectId }: Props) {
   const { tasks, uploads, loading, addTask, updateTask, deleteTask, shiftTask, refetch } = useCriticalPath(projectId);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [view, setView] = useState<"gantt" | "table">("gantt");
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -150,6 +152,24 @@ export default function CriticalPathModule({ projectId }: Props) {
           )}
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-md border p-0.5">
+            <Button
+              variant={view === "gantt" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 gap-1.5 px-2"
+              onClick={() => setView("gantt")}
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> Gantt
+            </Button>
+            <Button
+              variant={view === "table" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 gap-1.5 px-2"
+              onClick={() => setView("table")}
+            >
+              <Table2 className="h-3.5 w-3.5" /> Table
+            </Button>
+          </div>
           <Button variant="outline" size="sm" className="gap-1.5" onClick={openAddDialog}>
             <Plus className="h-3.5 w-3.5" /> Add Task
           </Button>
@@ -159,6 +179,14 @@ export default function CriticalPathModule({ projectId }: Props) {
         </div>
       </div>
 
+      {view === "gantt" && !loading && (
+        <CriticalPathGantt tasks={tasks} onTaskClick={openEditDialog} />
+      )}
+      {view === "gantt" && loading && (
+        <p className="text-sm text-muted-foreground py-4">Loading…</p>
+      )}
+
+      {view === "table" && (
       <div className="rounded-lg border overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -218,6 +246,7 @@ export default function CriticalPathModule({ projectId }: Props) {
           </tbody>
         </table>
       </div>
+      )}
 
       <GanttUploadDialog projectId={projectId} open={uploadOpen} onOpenChange={setUploadOpen} onImported={refetch} />
 
