@@ -205,7 +205,7 @@ export default function VendorDeliveriesModule({ projectId }: Props) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold flex items-center gap-1.5">
-          <Truck className="h-4 w-4" /> Vendor Deliveries & Rentals
+          <Truck className="h-4 w-4" /> Logistics
         </h3>
         <Button size="sm" onClick={openAddDialog} className="gap-1.5">
           <Plus className="h-3.5 w-3.5" /> Add Delivery
