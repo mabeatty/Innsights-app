@@ -42,8 +42,8 @@ export interface ChangeOrderScheduleImpact {
 export const TASK_STATUSES: TaskStatus[] = ["Not Started", "In Progress", "Complete", "At Risk", "Delayed"];
 
 export const TASK_STATUS_COLORS: Record<TaskStatus, string> = {
-  "Not Started": "hsl(var(--muted-foreground))",
-  "In Progress": "hsl(var(--chart-1))",
+  "Not Started": "hsl(215 16% 47%)",
+  "In Progress": "hsl(217 91% 60%)",
   "Complete": "hsl(142 71% 45%)",
   "At Risk": "hsl(38 92% 50%)",
   "Delayed": "hsl(0 84% 60%)",
