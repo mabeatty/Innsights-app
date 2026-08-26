@@ -11,25 +11,21 @@ import { APPROVER_ROLES, ApproverRole } from "./types";
 
 const UNASSIGNED = "__unassigned__";
 
-// Treasury is a global per-user profile flag (profiles.is_treasury). Only
-// Project Manager and Project Lead are assigned per project here.
-const PROJECT_ROLES = APPROVER_ROLES.filter((r) => r.key !== "treasury");
-
 interface Props {
   projectId: string;
 }
 
 /**
  * "Invoice Approvers" section for Project Info. Two dropdowns (Project Manager,
- * Project Lead), each listing org members, saved to project_approvers. The
- * Treasury approver is set globally via the user-profile checkbox.
+ * Project Lead), each listing org members, saved to project_approvers. These
+ * are the only two approvers in the chain — a transaction/invoice needs both
+ * to sign off before it becomes a formal AIA transaction.
  */
 export function ProjectApprovers({ projectId }: Props) {
   const { accessLevel } = useAuth();
   const { members } = useTeamMembers();
   const [assignments, setAssignments] = useState<Record<ApproverRole, string>>({
     project_manager: "",
-    treasury: "",
     project_lead: "",
   });
   const [loaded, setLoaded] = useState(false);
@@ -44,9 +40,11 @@ export function ProjectApprovers({ projectId }: Props) {
         .select("role, approver_id")
         .eq("project_id", projectId);
 
-      const next: Record<ApproverRole, string> = { project_manager: "", treasury: "", project_lead: "" };
+      const next: Record<ApproverRole, string> = { project_manager: "", project_lead: "" };
       (rows ?? []).forEach((r) => {
-        next[r.role as ApproverRole] = r.approver_id ?? "";
+        if (r.role === "project_manager" || r.role === "project_lead") {
+          next[r.role as ApproverRole] = r.approver_id ?? "";
+        }
       });
 
       setAssignments(next);
@@ -57,7 +55,7 @@ export function ProjectApprovers({ projectId }: Props) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const rows = PROJECT_ROLES.map((r) => ({
+      const rows = APPROVER_ROLES.map((r) => ({
         project_id: projectId,
         role: r.key,
         approver_id: assignments[r.key] || null,
@@ -66,6 +64,10 @@ export function ProjectApprovers({ projectId }: Props) {
         .from("project_approvers")
         .upsert(rows, { onConflict: "project_id,role" });
       if (error) throw error;
+      // Clear out any legacy Treasury row for this project so it can't
+      // silently keep gating an approval — Treasury is no longer part of
+      // the chain.
+      await supabase.from("project_approvers").delete().eq("project_id", projectId).eq("role", "treasury");
       toast.success("Invoice approvers saved.");
     } catch (e: any) {
       toast.error(e?.message || "Failed to save approvers.");
@@ -80,11 +82,11 @@ export function ProjectApprovers({ projectId }: Props) {
     <section className="space-y-4">
       <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Invoice Approvers</h3>
       <p className="text-xs text-muted-foreground -mt-2">
-        Invoices for this project route to the Project Manager and Project Lead below, plus the global
-        Treasury approver (set via each user's profile).
+        Invoices for this project route to the Project Manager and Project Lead below — both review and
+        approve before a transaction becomes formal for the AIA.
       </p>
       <div className="grid gap-4 sm:grid-cols-2">
-        {PROJECT_ROLES.map((role) => (
+        {APPROVER_ROLES.map((role) => (
           <div key={role.key} className="space-y-1.5">
             <Label>{role.label}</Label>
             <Select
@@ -114,3 +116,4 @@ export function ProjectApprovers({ projectId }: Props) {
     </section>
   );
 }
+

@@ -31,11 +31,10 @@ export const APPROVER_EMAIL = "marc.alex.beatty@gmail.com";
 // Cost Type options for the Upload Invoice modal (spec).
 export const COST_TYPES = ["Hard Cost", "Soft Cost", "FF&E", "OS&E", "Other"] as const;
 
-// The three approval-chain roles, in display order.
-export type ApproverRole = "project_manager" | "treasury" | "project_lead";
+// The two approval-chain roles, in display order.
+export type ApproverRole = "project_manager" | "project_lead";
 export const APPROVER_ROLES: { key: ApproverRole; label: string }[] = [
   { key: "project_manager", label: "Project Manager" },
-  { key: "treasury", label: "Treasury" },
   { key: "project_lead", label: "Project Lead" },
 ];
 

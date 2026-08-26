@@ -389,14 +389,13 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       const { data: signed } = await supabase.storage.from("invoices").createSignedUrl(path, 60 * 60 * 24 * 30);
       const pdfUrl = signed?.signedUrl ?? null;
 
-      // Resolve approvers: PM/Lead per project, Treasury from the global profile flag.
-      const [{ data: approverRows }, { data: treasuryRows }] = await Promise.all([
-        supabase.from("project_approvers").select("role, approver_id").eq("project_id", projectId),
-        supabase.from("profiles").select("user_id").eq("is_treasury", true).limit(1),
-      ]);
+      // Resolve approvers: PM and Lead, both set per project.
+      const { data: approverRows } = await supabase
+        .from("project_approvers")
+        .select("role, approver_id")
+        .eq("project_id", projectId);
       const approverMap: Record<string, string | null> = {};
       (approverRows ?? []).forEach((r) => { approverMap[r.role] = r.approver_id; });
-      approverMap.treasury = treasuryRows?.[0]?.user_id ?? null;
       const hasApprovers = APPROVER_ROLES.some((r) => approverMap[r.key]);
       const status = hasApprovers ? "In Approval" : "Pending Review";
 
