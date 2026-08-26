@@ -312,9 +312,14 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       // is empty and matching is deferred until the user picks one.
       const { categories, resolve: resolveDivision } = await buildBudgetMatcher(projectId);
 
-      const { data } = await supabase.functions.invoke("extract-invoice-claude", {
+      const { data, error: invokeError } = await supabase.functions.invoke("extract-invoice-claude", {
         body: { pdfBase64: b64, mimeType: "application/pdf", categories },
       });
+      if (invokeError) {
+        console.warn("[invoice] AI extraction invoke error:", invokeError.message);
+        toast.error(`AI extraction failed: ${invokeError.message}`);
+        return;
+      }
       if (data?.ok && data.fields) {
         const fields = data.fields;
         const flagged: Record<string, boolean> = {};
@@ -355,14 +360,16 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         }
         setExtracted(flagged);
       } else {
-        // Extraction failed for some reason — don't block the upload.
+        // Extraction failed for some reason — don't block the upload, but
+        // show the real reason so this is diagnosable instead of a silent
+        // "nothing happened."
         console.warn("[invoice] AI extraction unavailable:", data?.error);
-        toast.message("AI extraction unavailable — please fill in fields manually");
+        toast.error(data?.error ? `AI extraction failed: ${data.error}` : "AI extraction unavailable — please fill in fields manually");
       }
     } catch (e: any) {
       // Network/unexpected failure: still let the user continue manually.
       console.warn("[invoice] AI extraction error:", e?.message);
-      toast.message("AI extraction unavailable — please fill in fields manually");
+      toast.error(e?.message ? `AI extraction failed: ${e.message}` : "AI extraction unavailable — please fill in fields manually");
     } finally {
       setExtracting(false);
     }
