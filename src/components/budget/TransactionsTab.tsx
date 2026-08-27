@@ -584,6 +584,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
         <th className={cn("px-3 py-2", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("type") : undefined}><div className="flex items-center gap-1">Type {sortable && sortIcon("type")}</div></th>
         <th className={cn("px-3 py-2", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("date") : undefined}><div className="flex items-center gap-1">Date {sortable && sortIcon("date")}</div></th>
         <th className={cn("px-3 py-2", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("payee") : undefined}><div className="flex items-center gap-1">Payee {sortable && sortIcon("payee")}</div></th>
+        <th className="px-3 py-2">Division</th>
         <th className={cn("px-3 py-2 text-right", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("amount") : undefined}><div className="flex items-center justify-end gap-1">Amount {sortable && sortIcon("amount")}</div></th>
         <th className={cn("px-3 py-2 text-right", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("retainage") : undefined}><div className="flex items-center justify-end gap-1">Retainage {sortable && sortIcon("retainage")}</div></th>
         <th className={cn("px-3 py-2 text-right", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("net") : undefined}><div className="flex items-center justify-end gap-1">Net Amount {sortable && sortIcon("net")}</div></th>
@@ -607,6 +608,19 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     const sortedItems = [...g.items].sort(
       (a, b) => getCategoryNumber(a.division_number) - getCategoryNumber(b.division_number)
     );
+    // Division display: single division shows its name directly; a group
+    // spanning multiple divisions (e.g. a GC draw rolled into one line item
+    // per the established convention) shows a count with the full list on
+    // hover, since the row itself is too narrow to list every division.
+    const uniqueDivisions = Array.from(
+      new Map(sortedItems.map(i => [i.division_number, i.division_name])).entries()
+    );
+    const divisionDisplay = uniqueDivisions.length === 0
+      ? "—"
+      : uniqueDivisions.length === 1
+        ? uniqueDivisions[0][1] || uniqueDivisions[0][0]
+        : `${uniqueDivisions.length} divisions`;
+    const divisionTitle = uniqueDivisions.map(([num, name]) => `${num} — ${name}`).join("\n");
     return (
       <Fragment key={g.groupId}>
         <tr className="border-t hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => hasMultiple && toggleExpand(g.groupId)}>
@@ -626,6 +640,9 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
               />
               <span className="truncate">{g.payee}{hasMultiple && <span className="ml-1.5 text-xs text-muted-foreground">({g.items.length} lines)</span>}</span>
             </span>
+          </td>
+          <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[140px]" title={divisionTitle}>
+            {divisionDisplay}
           </td>
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalAmount)}</td>
           <td className="px-3 py-2 text-right">{fmtDecimal(g.totalRetainage)}</td>
@@ -702,10 +719,12 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
         {isExpanded && sortedItems.map(item => (
           <tr key={item.id} className="bg-muted/20 border-t border-dashed">
             <td className="px-3 py-1.5" />
-            <td className="px-3 py-1.5 text-xs text-muted-foreground" colSpan={2}>
-              {item.division_number} — {item.division_name}
-            </td>
+            <td className="px-3 py-1.5" />
+            <td className="px-3 py-1.5" />
             <td className="px-3 py-1.5 text-xs text-muted-foreground truncate">{item.description}</td>
+            <td className="px-3 py-1.5 text-xs text-muted-foreground truncate max-w-[140px]" title={`${item.division_number} — ${item.division_name}`}>
+              {item.division_name || item.division_number}
+            </td>
             <td className="px-3 py-1.5 text-right text-xs">{fmtDecimal(Number(item.amount))}</td>
             <td className="px-3 py-1.5 text-right text-xs">{fmtDecimal(Number(item.retainage_amount))}</td>
             <td className="px-3 py-1.5 text-right text-xs">{fmtDecimal(Number(item.net_amount))}</td>
