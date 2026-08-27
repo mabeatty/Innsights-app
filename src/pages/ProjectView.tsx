@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature } from "lucide-react";
+import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfoSummary } from "@/components/ProjectInfoSummary";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -33,6 +33,7 @@ import BudgetModule from "@/components/BudgetModule";
 import ScheduleModule from "@/components/ScheduleModule";
 import CapitalPlanningModule from "@/components/CapitalPlanningModule";
 import ProcurementModule from "@/components/ProcurementModule";
+import FieldAdminModule from "@/components/field-admin/FieldAdminModule";
 import AssistantWidget from "@/components/AssistantWidget";
 import ReportsModule from "@/components/ReportsModule";
 import TasksModule from "@/components/TasksModule";
@@ -216,6 +217,9 @@ export default function ProjectView() {
           <TabsTrigger value="procurement" className="gap-1.5">
             <ClipboardList className="h-3.5 w-3.5" /> Procurement
           </TabsTrigger>
+          <TabsTrigger value="field-admin" className="gap-1.5">
+            <ClipboardCheck className="h-3.5 w-3.5" /> Field Admin
+          </TabsTrigger>
           <TabsTrigger value="schedule" className="gap-1.5">
             <CalendarDays className="h-3.5 w-3.5" /> Schedule
           </TabsTrigger>
@@ -276,6 +280,10 @@ export default function ProjectView() {
 
         <TabsContent value="procurement">
           <ProcurementModule projectId={id!} projectName={project.name} brandId={project.brand_id} />
+        </TabsContent>
+
+        <TabsContent value="field-admin">
+          <FieldAdminModule projectId={id!} />
         </TabsContent>
 
         <TabsContent value="tasks">
