@@ -17,9 +17,10 @@ interface Props {
   adjustmentsForQuote: (quoteId: string) => Adjustment[];
   leveledForQuote: (quote: VendorQuote) => number;
   refetch: () => void;
+  showPipColumn?: boolean;
 }
 
-export default function ListView({ projectId, bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote, refetch }: Props) {
+export default function ListView({ projectId, bidItems, quotesForItem, adjustmentsForQuote, leveledForQuote, refetch, showPipColumn }: Props) {
   const [openSegments, setOpenSegments] = useState<Set<string>>(new Set(SEGMENTS));
   const [expandedItem, setExpandedItem] = useState<string | null>(null);
   const [bidDialog, setBidDialog] = useState<{ open: boolean; edit?: BidItem | null; segment?: string }>({ open: false });
@@ -38,6 +39,14 @@ export default function ListView({ projectId, bidItems, quotesForItem, adjustmen
     const { error } = await supabase.from(table).delete().eq("id", deleteTarget.id);
     if (error) toast.error(error.message); else { toast.success("Deleted."); refetch(); }
     setDeleteTarget(null);
+  };
+
+  // Cycles Not reviewed -> Yes -> No -> Not reviewed on click, so the common
+  // case (marking an item) doesn't require opening the full edit dialog.
+  const handleTogglePip = async (bi: BidItem) => {
+    const next = bi.included_in_pip === null ? true : bi.included_in_pip === true ? false : null;
+    const { error } = await supabase.from("vendor_bid_items").update({ included_in_pip: next }).eq("id", bi.id);
+    if (error) toast.error(error.message); else refetch();
   };
 
   const statusColor = (s: string) => {
@@ -68,12 +77,15 @@ export default function ListView({ projectId, bidItems, quotesForItem, adjustmen
                   <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
                     <thead className="bg-muted/30">
                       <tr>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "30%" }}>Item / Trade</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "12%" }}>Vendors</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Lowest (Leveled)</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Highest (Leveled)</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "16%" }}>Awarded</th>
-                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "10%" }}>Status</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: showPipColumn ? "26%" : "30%" }}>Item / Trade</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "10%" }}>Vendors</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "13%" }}>Lowest (Leveled)</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "13%" }}>Highest (Leveled)</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "14%" }}>Awarded</th>
+                        <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "9%" }}>Status</th>
+                        {showPipColumn && (
+                          <th className="text-left px-4 py-2 font-medium text-muted-foreground" style={{ width: "11%" }}>In PIP?</th>
+                        )}
                         <th className="px-2 py-2" style={{ width: "4%" }}></th>
                       </tr>
                     </thead>
@@ -87,15 +99,32 @@ export default function ListView({ projectId, bidItems, quotesForItem, adjustmen
                         const isExpanded = expandedItem === bi.id;
                         return (
                           <tr key={bi.id} className="border-t">
-                            <td colSpan={7} className="p-0">
+                            <td colSpan={showPipColumn ? 8 : 7} className="p-0">
                               <div>
                                 <div className="flex items-center cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => setExpandedItem(isExpanded ? null : bi.id)}>
-                                  <td className="px-4 py-2.5" style={{ width: "30%" }}><span className="font-medium">{bi.item_name}</span></td>
-                                  <td className="px-4 py-2.5" style={{ width: "12%" }}>{vqs.length}</td>
-                                  <td className="px-4 py-2.5" style={{ width: "14%" }}>{fmt(lowest)}</td>
-                                  <td className="px-4 py-2.5" style={{ width: "14%" }}>{fmt(highest)}</td>
-                                  <td className="px-4 py-2.5" style={{ width: "16%" }}>{awarded ? awarded.vendor_name : "—"}</td>
-                                  <td className="px-4 py-2.5" style={{ width: "10%" }}><Badge variant={statusColor(bi.status)}>{bi.status}</Badge></td>
+                                  <td className="px-4 py-2.5" style={{ width: showPipColumn ? "26%" : "30%" }}><span className="font-medium">{bi.item_name}</span></td>
+                                  <td className="px-4 py-2.5" style={{ width: "10%" }}>{vqs.length}</td>
+                                  <td className="px-4 py-2.5" style={{ width: "13%" }}>{fmt(lowest)}</td>
+                                  <td className="px-4 py-2.5" style={{ width: "13%" }}>{fmt(highest)}</td>
+                                  <td className="px-4 py-2.5" style={{ width: "14%" }}>{awarded ? awarded.vendor_name : "—"}</td>
+                                  <td className="px-4 py-2.5" style={{ width: "9%" }}><Badge variant={statusColor(bi.status)}>{bi.status}</Badge></td>
+                                  {showPipColumn && (
+                                    <td className="px-4 py-2.5" style={{ width: "11%" }} onClick={(e) => e.stopPropagation()}>
+                                      <button
+                                        onClick={() => handleTogglePip(bi)}
+                                        title="Click to change"
+                                        className={
+                                          bi.included_in_pip === true
+                                            ? "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400 hover:opacity-80"
+                                            : bi.included_in_pip === false
+                                              ? "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400 hover:opacity-80"
+                                              : "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-muted text-muted-foreground hover:opacity-80"
+                                        }
+                                      >
+                                        {bi.included_in_pip === true ? "Yes" : bi.included_in_pip === false ? "No" : "Not reviewed"}
+                                      </button>
+                                    </td>
+                                  )}
                                   <td className="px-2 py-2.5" style={{ width: "4%" }}>
                                     <DropdownMenu>
                                       <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -195,6 +224,7 @@ export default function ListView({ projectId, bidItems, quotesForItem, adjustmen
         projectId={projectId}
         editItem={bidDialog.edit}
         onSaved={refetch}
+        showPipColumn={showPipColumn}
       />
       {quoteDialog.bidItemId && (
         <VendorQuoteDialog

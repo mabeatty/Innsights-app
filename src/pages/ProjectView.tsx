@@ -279,7 +279,7 @@ export default function ProjectView() {
         </TabsContent>
 
         <TabsContent value="procurement">
-          <ProcurementModule projectId={id!} projectName={project.name} brandId={project.brand_id} />
+          <ProcurementModule projectId={id!} projectName={project.name} brandId={project.brand_id} projectType={project.project_type} />
         </TabsContent>
 
         <TabsContent value="field-admin">

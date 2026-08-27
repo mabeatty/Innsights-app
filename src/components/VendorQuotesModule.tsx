@@ -9,11 +9,13 @@ type View = "list" | "comparison" | "award";
 
 interface Props {
   projectId: string;
+  projectType?: string;
 }
 
-export default function VendorQuotesModule({ projectId }: Props) {
+export default function VendorQuotesModule({ projectId, projectType }: Props) {
   const [view, setView] = useState<View>("list");
   const { bidItems, loading, refetch, quotesForItem, adjustmentsForQuote, leveledForQuote } = useVendorQuotesData(projectId);
+  const showPipColumn = projectType === "Asset Management";
 
   if (loading) return <p className="text-sm text-muted-foreground py-4">Loading vendor quotes…</p>;
 
@@ -27,7 +29,7 @@ export default function VendorQuotesModule({ projectId }: Props) {
         ))}
       </div>
 
-      {view === "list" && <ListView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} refetch={refetch} />}
+      {view === "list" && <ListView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} refetch={refetch} showPipColumn={showPipColumn} />}
       {view === "comparison" && <ComparisonView projectId={projectId} bidItems={bidItems} quotesForItem={quotesForItem} adjustmentsForQuote={adjustmentsForQuote} leveledForQuote={leveledForQuote} />}
       {view === "award" && <AwardSummaryView bidItems={bidItems} quotesForItem={quotesForItem} leveledForQuote={leveledForQuote} />}
     </div>

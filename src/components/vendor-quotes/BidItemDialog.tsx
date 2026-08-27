@@ -14,12 +14,18 @@ interface Props {
   projectId: string;
   editItem?: BidItem | null;
   onSaved: () => void;
+  showPipColumn?: boolean;
 }
 
-export default function BidItemDialog({ open, onOpenChange, projectId, editItem, onSaved }: Props) {
+const PIP_UNSET = "__unset__";
+const pipToValue = (v: boolean | null | undefined) => (v === true ? "yes" : v === false ? "no" : PIP_UNSET);
+const valueToPip = (v: string) => (v === "yes" ? true : v === "no" ? false : null);
+
+export default function BidItemDialog({ open, onOpenChange, projectId, editItem, onSaved, showPipColumn }: Props) {
   const [name, setName] = useState(editItem?.item_name ?? "");
   const [segment, setSegment] = useState(editItem?.segment ?? SEGMENTS[0]);
   const [status, setStatus] = useState<BidItemStatus>((editItem?.status as BidItemStatus) ?? "Open");
+  const [includedInPip, setIncludedInPip] = useState<string>(pipToValue(editItem?.included_in_pip));
   const [saving, setSaving] = useState(false);
 
   const isEdit = !!editItem;
@@ -27,11 +33,16 @@ export default function BidItemDialog({ open, onOpenChange, projectId, editItem,
   const handleSave = async () => {
     if (!name.trim()) { toast.error("Item name is required."); return; }
     setSaving(true);
+    const pipValue = showPipColumn ? valueToPip(includedInPip) : undefined;
     if (isEdit) {
-      const { error } = await supabase.from("vendor_bid_items").update({ item_name: name, segment, status }).eq("id", editItem.id);
+      const payload: Record<string, any> = { item_name: name, segment, status };
+      if (pipValue !== undefined) payload.included_in_pip = pipValue;
+      const { error } = await supabase.from("vendor_bid_items").update(payload).eq("id", editItem.id);
       if (error) toast.error(error.message); else { toast.success("Bid item updated."); onOpenChange(false); onSaved(); }
     } else {
-      const { error } = await supabase.from("vendor_bid_items").insert({ project_id: projectId, item_name: name, segment, status });
+      const payload: Record<string, any> = { project_id: projectId, item_name: name, segment, status };
+      if (pipValue !== undefined) payload.included_in_pip = pipValue;
+      const { error } = await supabase.from("vendor_bid_items").insert(payload);
       if (error) toast.error(error.message); else { toast.success("Bid item created."); onOpenChange(false); onSaved(); }
     }
     setSaving(false);
@@ -39,7 +50,12 @@ export default function BidItemDialog({ open, onOpenChange, projectId, editItem,
 
   // Reset when opening
   const handleOpenChange = (v: boolean) => {
-    if (v) { setName(editItem?.item_name ?? ""); setSegment(editItem?.segment ?? SEGMENTS[0]); setStatus((editItem?.status as BidItemStatus) ?? "Open"); }
+    if (v) {
+      setName(editItem?.item_name ?? "");
+      setSegment(editItem?.segment ?? SEGMENTS[0]);
+      setStatus((editItem?.status as BidItemStatus) ?? "Open");
+      setIncludedInPip(pipToValue(editItem?.included_in_pip));
+    }
     onOpenChange(v);
   };
 
@@ -67,6 +83,19 @@ export default function BidItemDialog({ open, onOpenChange, projectId, editItem,
               </SelectContent>
             </Select>
           </div>
+          {showPipColumn && (
+            <div className="space-y-1.5">
+              <Label>Included in PIP?</Label>
+              <Select value={includedInPip} onValueChange={setIncludedInPip}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PIP_UNSET}>Not reviewed</SelectItem>
+                  <SelectItem value="yes">Yes</SelectItem>
+                  <SelectItem value="no">No</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>

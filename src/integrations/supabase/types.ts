@@ -527,9 +527,9 @@ export type Database = {
         Relationships: [{ foreignKeyName: "takeoff_versions_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }]
       }
       vendor_bid_items: {
-        Row: { created_at: string; id: string; item_name: string; project_id: string; segment: string; status: string }
-        Insert: { created_at?: string; id?: string; item_name: string; project_id: string; segment: string; status?: string }
-        Update: { created_at?: string; id?: string; item_name?: string; project_id?: string; segment?: string; status?: string }
+        Row: { created_at: string; id: string; included_in_pip: boolean | null; item_name: string; project_id: string; segment: string; status: string }
+        Insert: { created_at?: string; id?: string; included_in_pip?: boolean | null; item_name: string; project_id: string; segment: string; status?: string }
+        Update: { created_at?: string; id?: string; included_in_pip?: boolean | null; item_name?: string; project_id?: string; segment?: string; status?: string }
         Relationships: [{ foreignKeyName: "vendor_bid_items_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }]
       }
       vendor_deliveries: {

@@ -9,9 +9,10 @@ interface ProcurementModuleProps {
   projectId: string;
   projectName: string;
   brandId: string;
+  projectType?: string;
 }
 
-export default function ProcurementModule({ projectId, projectName, brandId }: ProcurementModuleProps) {
+export default function ProcurementModule({ projectId, projectName, brandId, projectType }: ProcurementModuleProps) {
   return (
     <Tabs defaultValue="bidding" className="mt-4">
       <TabsList>
@@ -29,7 +30,7 @@ export default function ProcurementModule({ projectId, projectName, brandId }: P
         </TabsTrigger>
       </TabsList>
       <TabsContent value="bidding">
-        <VendorQuotesModule projectId={projectId} />
+        <VendorQuotesModule projectId={projectId} projectType={projectType} />
       </TabsContent>
       <TabsContent value="deliveries">
         <VendorDeliveriesModule projectId={projectId} />

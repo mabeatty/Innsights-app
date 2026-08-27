@@ -19,6 +19,7 @@ export interface BidItem {
   segment: string;
   item_name: string;
   status: BidItemStatus;
+  included_in_pip: boolean | null;
   created_at: string;
 }
 
