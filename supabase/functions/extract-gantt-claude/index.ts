@@ -1,26 +1,43 @@
 // Extract a draft critical-path task list from a contractor-provided Gantt
 // chart PDF.
 //
-// Strategy: Gantt charts are visual documents — task bars, dates, and
-// critical-path highlighting (commonly shown in red) are drawn graphically,
-// not encoded as text. Unlike extract-invoice-claude, we always send the
-// PDF to Claude as a document for visual reading rather than attempting
-// text-layer extraction first.
+// Strategy: many schedule exports (e.g. from scheduling tools like Moment
+// Construction, MS Project, Smartsheet) include a clean text table (Title /
+// Start / Duration) alongside the visual bars — in that case a text-layer
+// extraction is far more reliable than reading bar positions off the chart.
+// Some Gantt PDFs are purely graphical with no usable text layer. So: try
+// text extraction first; only fall back to visual reading if the text layer
+// is too sparse to be a real data table.
 //
 // Returns { ok: true, tasks: [{ task_name, trade, start_date, end_date,
 // duration_days, is_critical, predecessor_task_name }] }. This is a DRAFT
-// for the person to review and edit before it's saved — extraction from a
-// visual chart is inherently approximate (especially bar-edge date
-// precision), so the result is never written directly to the database.
+// for the person to review and edit before it's saved — extraction is
+// approximate (especially for visual-only charts), so the result is never
+// written directly to the database.
 //
 // Requires the Supabase secret ANTHROPIC_API_KEY. Optionally ANTHROPIC_MODEL.
+
+import { extractText, getDocumentProxy } from "https://esm.sh/unpdf@0.12.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `You are reading a construction Gantt chart (schedule) PDF provided by a general contractor. Extract every task/activity row shown in the chart.
+const SYSTEM_PROMPT_TEXT = `You are reading the text extracted from a construction schedule PDF. This PDF contains a data table (columns like Title/Task, Start date, and Duration/Workdays) alongside a visual Gantt chart — you're being given the table's text, which is the reliable source; ignore any stray/duplicated text fragments from the chart labels that don't fit the table structure.
+
+For each task row, determine:
+- task_name: the task/activity name exactly as listed
+- trade: the trade or discipline if identifiable from the task name (e.g. "Electrical", "Drywall", "FF&E"), otherwise null
+- start_date: in YYYY-MM-DD format, converted from whatever date format is shown
+- duration_days: the workdays/duration value for that row, as a plain number
+- end_date: calculate as start_date + duration_days (calendar days is fine as an approximation if the source uses workdays)
+- is_critical: set true for every task — this text table format doesn't visually distinguish a critical path, so treat the full sequence as the critical path. Set the top-level "critical_path_indicated" to false.
+- predecessor_task_name: the task_name of the row immediately before this one in the list, since these schedule exports are typically already in dependency order (each task begins at or after the prior one ends). Use null for the very first task.
+
+List tasks in the same order they appear in the source. Return only a JSON object: { "critical_path_indicated": false, "tasks": [{ task_name, trade, start_date, end_date, duration_days, is_critical, predecessor_task_name }] }. No preamble or markdown.`;
+
+const SYSTEM_PROMPT_VISUAL = `You are reading a construction Gantt chart (schedule) PDF provided by a general contractor. Extract every task/activity row shown in the chart.
 
 For each task, determine:
 - task_name: the activity name exactly as labeled
@@ -55,6 +72,31 @@ Deno.serve(async (req) => {
       return json({ ok: false, error: "Missing pdfBase64." });
     }
 
+    const bytes = Uint8Array.from(atob(pdfBase64), (c) => c.charCodeAt(0));
+
+    let rawText = "";
+    try {
+      const pdf = await getDocumentProxy(bytes);
+      const { text } = await extractText(pdf, { mergePages: true });
+      rawText = (typeof text === "string" ? text : (text as string[]).join("\n")).trim();
+    } catch (e) {
+      console.warn("[extract-gantt-claude] text extraction failed:", (e as Error).message);
+    }
+
+    // A real schedule table has many rows of "Task Name ... Date ... Nd
+    // days"-shaped text; a short/near-empty text layer means this PDF is
+    // effectively just the chart graphic, so fall back to visual reading.
+    const usedTextMode = rawText.length >= 200;
+    const userContent = usedTextMode
+      ? [{ type: "text", text: `Text extracted from the schedule PDF:\n\n${rawText}` }]
+      : [
+          {
+            type: "document",
+            source: { type: "base64", media_type: mimeType || "application/pdf", data: pdfBase64 },
+          },
+          { type: "text", text: "Extract the critical path task list as instructed and return only the JSON object." },
+        ];
+
     const resp = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -65,17 +107,11 @@ Deno.serve(async (req) => {
       body: JSON.stringify({
         model,
         max_tokens: 4000,
-        system: SYSTEM_PROMPT,
+        system: usedTextMode ? SYSTEM_PROMPT_TEXT : SYSTEM_PROMPT_VISUAL,
         messages: [
           {
             role: "user",
-            content: [
-              {
-                type: "document",
-                source: { type: "base64", media_type: mimeType || "application/pdf", data: pdfBase64 },
-              },
-              { type: "text", text: "Extract the critical path task list as instructed and return only the JSON object." },
-            ],
+            content: userContent,
           },
         ],
       }),
