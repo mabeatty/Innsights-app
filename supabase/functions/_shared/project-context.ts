@@ -9,11 +9,12 @@ export const fmt = (n: number | null | undefined) =>
   n == null ? "—" : `$${Number(n).toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 
 export async function buildProjectContext(supabase: any, projectId: string): Promise<string> {
-  const [{ data: project }, { data: info }, { data: budget }, { data: reports }] = await Promise.all([
+  const [{ data: project }, { data: info }, { data: budget }, { data: reports }, { data: scheduleTasks }] = await Promise.all([
     supabase.from("projects").select("name, hotel_name, project_type, status").eq("id", projectId).single(),
     supabase.from("project_info").select("property_name, city, state, total_room_count, general_contractor, architect, target_opening_date").eq("project_id", projectId).maybeSingle(),
     supabase.from("project_budget").select("division_number, division_name, cost_type, scheduled_value").eq("project_id", projectId).order("division_number"),
-    supabase.from("weekly_reports").select("date_range_start, date_range_end, content").eq("project_id", projectId).order("date_range_start", { ascending: false }).limit(3),
+    supabase.from("weekly_reports").select("id, date_range_start, date_range_end, content").eq("project_id", projectId).order("date_range_start", { ascending: false }).limit(5),
+    supabase.from("critical_path_tasks").select("task_name, trade, predecessor_task_id, start_date, end_date, duration_days, is_critical, status, id").eq("project_id", projectId).order("sort_order"),
   ]);
 
   const parts: string[] = [];
@@ -63,10 +64,73 @@ export async function buildProjectContext(supabase: any, projectId: string): Pro
   }
 
   if (reports && reports.length > 0) {
-    parts.push(
-      "\nRECENT WEEKLY REPORTS:\n" +
-      reports.map((r: any) => `- ${r.date_range_start} to ${r.date_range_end}: ${r.content ? r.content.slice(0, 300) : "(no written content — see attached PDF)"}`).join("\n")
+    const reportIds = reports.map((r: any) => r.id);
+    const [{ data: attachments }, { data: comments }] = await Promise.all([
+      supabase.from("weekly_report_attachments").select("report_id, file_name, drive_url").in("report_id", reportIds),
+      supabase.from("weekly_report_comments").select("report_id, content, created_at").in("report_id", reportIds).order("created_at", { ascending: true }),
+    ]);
+    const attByReport = new Map<string, any[]>();
+    (attachments ?? []).forEach((a: any) => {
+      if (!attByReport.has(a.report_id)) attByReport.set(a.report_id, []);
+      attByReport.get(a.report_id)!.push(a);
+    });
+    const commentsByReport = new Map<string, any[]>();
+    (comments ?? []).forEach((c: any) => {
+      if (!commentsByReport.has(c.report_id)) commentsByReport.set(c.report_id, []);
+      commentsByReport.get(c.report_id)!.push(c);
+    });
+
+    // NOTE: weekly_reports.content is just a category label (e.g. "GC Weekly
+    // Report", "OAC Call Recap") set when the report is created, not the
+    // actual report body — the substance lives in the attached PDF/Drive doc,
+    // which isn't text-extracted here. So this section can surface which
+    // report exists, its attached file(s)/link(s), and any discussion
+    // comments, but cannot answer questions about what's actually written
+    // inside the report PDF itself. Say so plainly if asked something that
+    // requires the PDF's content specifically.
+    const reportLines = reports.map((r: any) => {
+      const atts = attByReport.get(r.id) ?? [];
+      const cmts = commentsByReport.get(r.id) ?? [];
+      let line = `- ${r.date_range_start} to ${r.date_range_end} [${r.content || "Weekly Report"}]`;
+      if (atts.length > 0) {
+        line += `\n  Attached: ${atts.map((a: any) => a.file_name || a.drive_url || "file").join(", ")} (PDF content not readable here — open the file to review)`;
+      } else {
+        line += `\n  No file attached.`;
+      }
+      if (cmts.length > 0) {
+        line += `\n  Comments:\n${cmts.map((c: any) => `    - ${c.content}`).join("\n")}`;
+      }
+      return line;
+    });
+    parts.push("\nRECENT WEEKLY REPORTS (report body text is not available — only metadata, attachment names/links, and comments):\n" + reportLines.join("\n"));
+  }
+
+  // Critical path schedule: every task with its dates, status, and whether
+  // it's on the critical path. Placed right after weekly reports since a
+  // common question is cross-referencing reported field progress against
+  // where the schedule says a task should be — e.g. "is a task the weekly
+  // report calls delayed also behind its own schedule dates."
+  if (scheduleTasks && scheduleTasks.length > 0) {
+    const today = new Date().toISOString().slice(0, 10);
+    const idToName = new Map<string, string>();
+    scheduleTasks.forEach((t: any) => idToName.set(t.id, t.task_name));
+    const overdueNotComplete = scheduleTasks.filter(
+      (t: any) => t.end_date && t.end_date < today && t.status !== "Complete"
     );
+    parts.push(
+      `\nSCHEDULE / CRITICAL PATH (${scheduleTasks.length} tasks, today is ${today}):\n` +
+      scheduleTasks.map((t: any) =>
+        `- ${t.task_name}${t.trade ? ` [${t.trade}]` : ""}: ${t.start_date ?? "no start"} → ${t.end_date ?? "no end"}` +
+        `${t.duration_days ? ` (${t.duration_days}d)` : ""}, status: ${t.status}${t.is_critical ? ", ON CRITICAL PATH" : ""}` +
+        `${t.predecessor_task_id ? ` — follows "${idToName.get(t.predecessor_task_id) ?? "unknown"}"` : ""}`
+      ).join("\n")
+    );
+    if (overdueNotComplete.length > 0) {
+      parts.push(
+        `\nFLAGGED — tasks whose scheduled end date has passed but aren't marked Complete (potential timeline risk):\n` +
+        overdueNotComplete.map((t: any) => `- ${t.task_name}: was due ${t.end_date}, still "${t.status}"${t.is_critical ? " (CRITICAL PATH)" : ""}`).join("\n")
+      );
+    }
   }
 
   // Bidding: every bid item, each vendor's quote, scope adjustments, leveled
@@ -133,6 +197,25 @@ export async function buildProjectContext(supabase: any, projectId: string): Pro
       }
     }
     parts.push(bidLines.join("\n"));
+  }
+
+  // Field Admin: open (unresolved) permits, submittals, shop drawings, and
+  // RFIs — relevant to timeline risk since an unapproved shop drawing or an
+  // open RFI can be exactly why a schedule task is stalled.
+  const [{ data: openPermits }, { data: openSubmittals }, { data: openDrawings }, { data: openRfis }] = await Promise.all([
+    supabase.from("field_permits").select("permit_name, status, inspection_status").eq("project_id", projectId).eq("is_open", true),
+    supabase.from("field_submittals").select("submittal_name, status, due_date").eq("project_id", projectId).eq("is_open", true),
+    supabase.from("field_shop_drawings").select("drawing_name, trade, status, due_date").eq("project_id", projectId).eq("is_open", true),
+    supabase.from("field_rfis").select("rfi_number, subject, status, submitted_date").eq("project_id", projectId).eq("is_open", true),
+  ]);
+
+  const fieldAdminLines: string[] = [];
+  if (openPermits?.length) fieldAdminLines.push(`Open Permits (${openPermits.length}):\n` + openPermits.map((p: any) => `- ${p.permit_name}: ${p.status}${p.inspection_status ? `, inspection ${p.inspection_status}` : ""}`).join("\n"));
+  if (openSubmittals?.length) fieldAdminLines.push(`Open Submittals (${openSubmittals.length}):\n` + openSubmittals.map((s: any) => `- ${s.submittal_name}: ${s.status}${s.due_date ? `, due ${s.due_date}` : ""}`).join("\n"));
+  if (openDrawings?.length) fieldAdminLines.push(`Open Shop Drawings (${openDrawings.length}):\n` + openDrawings.map((d: any) => `- ${d.drawing_name}${d.trade ? ` [${d.trade}]` : ""}: ${d.status}${d.due_date ? `, due ${d.due_date}` : ""}`).join("\n"));
+  if (openRfis?.length) fieldAdminLines.push(`Open RFIs (${openRfis.length}):\n` + openRfis.map((r: any) => `- ${r.rfi_number ? `#${r.rfi_number} ` : ""}${r.subject}: ${r.status}${r.submitted_date ? `, submitted ${r.submitted_date}` : ""}`).join("\n"));
+  if (fieldAdminLines.length > 0) {
+    parts.push(`\nFIELD ADMIN — OPEN ITEMS:\n` + fieldAdminLines.join("\n\n"));
   }
 
   // Contracts: what's actually been executed/awarded, by type.
