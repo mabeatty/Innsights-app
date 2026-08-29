@@ -73,10 +73,16 @@ Deno.serve(async (req) => {
     };
 
     // Only PDFs are handled today — other file types (images, docx) would
-    // need their own read path, not attempted here.
-    const looksLikePdf = (att.file_name || "").toLowerCase().endsWith(".pdf");
+    // need their own read path, not attempted here. For direct uploads the
+    // stored file_name is reliable. For Drive links it can be a placeholder
+    // like "Drive file (1wRG4CFt…)" if the person pasted a raw link rather
+    // than using the picker — so Drive-linked files are checked against
+    // Drive's own reported MIME type/name instead of trusting file_name.
+    let looksLikePdf = (att.file_name || "").toLowerCase().endsWith(".pdf");
+    let realDriveFileName: string | null = null;
 
     let pdfBytes: Uint8Array | null = null;
+    let driveAccessToken: string | null = null;
 
     if (att.storage_path) {
       const { data: fileBlob, error: dlErr } = await supabase.storage.from("project-reports").download(att.storage_path);
@@ -112,8 +118,30 @@ Deno.serve(async (req) => {
         return await markFailed(`Failed to refresh Google Drive access token: ${errText.slice(0, 300)}`);
       }
       const tokenData = await tokenResp.json();
-      const accessToken = tokenData.access_token;
+      driveAccessToken = tokenData.access_token;
 
+      // Ask Drive for the file's real name and MIME type — the stored
+      // file_name can be a generic placeholder ("Drive file (1wRG4CFt…)")
+      // if the link was pasted in rather than picked, so it isn't a
+      // trustworthy way to tell whether this is actually a PDF.
+      const metaResp = await fetch(`https://www.googleapis.com/drive/v3/files/${att.drive_file_id}?fields=name,mimeType`, {
+        headers: { Authorization: `Bearer ${driveAccessToken}` },
+      });
+      if (metaResp.ok) {
+        const meta = await metaResp.json();
+        realDriveFileName = meta.name ?? null;
+        looksLikePdf = meta.mimeType === "application/pdf" || (meta.name || "").toLowerCase().endsWith(".pdf");
+        // Backfill the real filename if we only had a placeholder before —
+        // fixes the display everywhere else this attachment shows up too.
+        if (realDriveFileName && /^Drive file( \(|$)/.test(att.file_name || "")) {
+          await supabase.from("weekly_report_attachments").update({ file_name: realDriveFileName }).eq("id", attachmentId);
+        }
+      } else {
+        const errText = await metaResp.text();
+        return await markFailed(`Failed to read file metadata from Drive: ${metaResp.status} ${errText.slice(0, 200)}`);
+      }
+
+      const accessToken = driveAccessToken;
       const driveResp = await fetch(`https://www.googleapis.com/drive/v3/files/${att.drive_file_id}?alt=media`, {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
@@ -127,7 +155,7 @@ Deno.serve(async (req) => {
     }
 
     if (!looksLikePdf) {
-      return await markFailed(`Only PDF attachments can be read right now ("${att.file_name}" is not a .pdf).`, "unsupported");
+      return await markFailed(`Only PDF attachments can be read right now ("${realDriveFileName || att.file_name}" is not a .pdf).`, "unsupported");
     }
 
     let rawText = "";
