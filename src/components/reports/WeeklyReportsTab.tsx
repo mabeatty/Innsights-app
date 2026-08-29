@@ -13,7 +13,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, FileText, Send, Download, X, ExternalLink, Link2, ImageIcon, Loader2 } from "lucide-react";
+import { Plus, Pencil, Trash2, MessageSquare, ChevronDown, ChevronUp, ChevronRight, ChevronLeft, FileText, Send, Download, X, ExternalLink, Link2, ImageIcon, Loader2, Sparkles, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { format, startOfWeek, endOfWeek } from "date-fns";
 import JSZip from "jszip";
@@ -26,6 +26,9 @@ interface Attachment {
   drive_file_id: string | null;
   file_name: string;
   file_size: number;
+  extracted_text?: string | null;
+  extraction_status?: string;
+  extraction_error?: string | null;
 }
 
 interface Report {
@@ -113,6 +116,8 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
   // Delete
   const [deleteReport, setDeleteReport] = useState<Report | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [extractingIds, setExtractingIds] = useState<Set<string>>(new Set());
+  const [summaryDialogAtt, setSummaryDialogAtt] = useState<Attachment | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   // Expanded report
@@ -155,7 +160,7 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
     // Fetch comments counts and attachments in parallel
     const [commentsResult, attachmentsResult] = await Promise.all([
       supabase.from("weekly_report_comments").select("report_id").in("report_id", reportIds),
-      supabase.from("weekly_report_attachments").select("id, report_id, storage_path, drive_url, drive_file_id, file_name, file_size").in("report_id", reportIds),
+      supabase.from("weekly_report_attachments").select("id, report_id, storage_path, drive_url, drive_file_id, file_name, file_size, extracted_text, extraction_status, extraction_error").in("report_id", reportIds),
     ]);
 
     const commentCounts = new Map<string, number>();
@@ -170,6 +175,8 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
       attachmentsByReport.get(rid)!.push({
         id: a.id, storage_path: a.storage_path, drive_url: (a as any).drive_url,
         drive_file_id: (a as any).drive_file_id, file_name: a.file_name, file_size: a.file_size,
+        extracted_text: (a as any).extracted_text, extraction_status: (a as any).extraction_status,
+        extraction_error: (a as any).extraction_error,
       });
     });
 
@@ -494,6 +501,26 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
     URL.revokeObjectURL(url);
   };
 
+  const extractAttachment = async (att: Attachment) => {
+    setExtractingIds((prev) => new Set(prev).add(att.id));
+    try {
+      const { data, error } = await supabase.functions.invoke("extract-weekly-report-text", {
+        body: { attachmentId: att.id },
+      });
+      if (error) throw error;
+      if (!data?.ok) {
+        toast.error(data?.error || "Extraction failed.");
+      } else {
+        toast.success("Report content extracted — the assistant can now use it.");
+      }
+      await fetchReports();
+    } catch (err: any) {
+      toast.error(err?.message || "Extraction failed.");
+    } finally {
+      setExtractingIds((prev) => { const next = new Set(prev); next.delete(att.id); return next; });
+    }
+  };
+
   const openLightbox = async (r: Report) => {
     const album = albumsByReport.get(r.id);
     if (!album) return;
@@ -628,16 +655,49 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
                             <span className="text-xs text-muted-foreground shrink-0">No file</span>
                           )}
                           {r.attachments.map((att) => (
-                            <Button
-                              key={att.id}
-                              size="sm"
-                              variant="link"
-                              className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
-                              onClick={() => downloadAttachment(att)}
-                            >
-                              {att.drive_url ? <ExternalLink className="h-3 w-3" /> : <Download className="h-3 w-3" />}
-                              View Report
-                            </Button>
+                            <div key={att.id} className="flex items-center gap-1 shrink-0">
+                              <Button
+                                size="sm"
+                                variant="link"
+                                className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
+                                onClick={() => downloadAttachment(att)}
+                              >
+                                {att.drive_url ? <ExternalLink className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+                                View Report
+                              </Button>
+                              {att.extraction_status === "done" ? (
+                                <Button
+                                  size="sm"
+                                  variant="link"
+                                  className="h-auto py-0 px-1 gap-1 shrink-0 text-xs text-primary"
+                                  title="View extracted summary"
+                                  onClick={() => setSummaryDialogAtt(att)}
+                                >
+                                  <Sparkles className="h-3 w-3" /> Summary
+                                </Button>
+                              ) : att.extraction_status === "unsupported" ? (
+                                <span className="text-xs text-muted-foreground flex items-center gap-1" title={att.extraction_error ?? undefined}>
+                                  <AlertTriangle className="h-3 w-3" /> Can't extract
+                                </span>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="link"
+                                  className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
+                                  title={att.extraction_status === "failed" ? `Extraction failed: ${att.extraction_error ?? ""} — click to retry` : "Extract content for the AI assistant"}
+                                  disabled={extractingIds.has(att.id)}
+                                  onClick={() => extractAttachment(att)}
+                                >
+                                  {extractingIds.has(att.id) ? (
+                                    <><Loader2 className="h-3 w-3 animate-spin" /> Extracting…</>
+                                  ) : att.extraction_status === "failed" ? (
+                                    <><AlertTriangle className="h-3 w-3 text-destructive" /> Retry Extract</>
+                                  ) : (
+                                    <><Sparkles className="h-3 w-3" /> Extract</>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
                           ))}
 
                           {(() => {
@@ -851,6 +911,22 @@ export default function WeeklyReportsTab({ projectId, projectName, canEdit }: We
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Extracted Summary Dialog */}
+      <Dialog open={!!summaryDialogAtt} onOpenChange={(o) => !o && setSummaryDialogAtt(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-1.5"><Sparkles className="h-4 w-4 text-primary" /> {summaryDialogAtt?.file_name}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm whitespace-pre-wrap">{summaryDialogAtt?.extracted_text}</p>
+          <p className="text-xs text-muted-foreground">
+            This summary is what the AI project assistant sees for this report — not the full document text.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSummaryDialogAtt(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Photo Lightbox */}
       {lightboxReport && lightboxPhotos.length > 0 && (

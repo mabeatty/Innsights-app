@@ -66,7 +66,7 @@ export async function buildProjectContext(supabase: any, projectId: string): Pro
   if (reports && reports.length > 0) {
     const reportIds = reports.map((r: any) => r.id);
     const [{ data: attachments }, { data: comments }] = await Promise.all([
-      supabase.from("weekly_report_attachments").select("report_id, file_name, drive_url").in("report_id", reportIds),
+      supabase.from("weekly_report_attachments").select("report_id, file_name, drive_url, extracted_text, extraction_status").in("report_id", reportIds),
       supabase.from("weekly_report_comments").select("report_id, content, created_at").in("report_id", reportIds).order("created_at", { ascending: true }),
     ]);
     const attByReport = new Map<string, any[]>();
@@ -80,20 +80,30 @@ export async function buildProjectContext(supabase: any, projectId: string): Pro
       commentsByReport.get(c.report_id)!.push(c);
     });
 
-    // NOTE: weekly_reports.content is just a category label (e.g. "GC Weekly
-    // Report", "OAC Call Recap") set when the report is created, not the
-    // actual report body — the substance lives in the attached PDF/Drive doc,
-    // which isn't text-extracted here. So this section can surface which
-    // report exists, its attached file(s)/link(s), and any discussion
-    // comments, but cannot answer questions about what's actually written
-    // inside the report PDF itself. Say so plainly if asked something that
-    // requires the PDF's content specifically.
+    // weekly_reports.content is just a category label ("GC Weekly Report",
+    // "OAC Call Recap"), not the report body. The real substance, when
+    // available, is in each attachment's extracted_text — populated by the
+    // extract-weekly-report-text edge function (PDF text extraction +
+    // Claude summarization), triggered manually per attachment from the
+    // Weekly Reports tab. Not every attachment has been extracted, and
+    // Drive-linked attachments require Google Drive API credentials that
+    // may not be configured — so this can genuinely be unavailable, and
+    // that's stated plainly per-attachment rather than glossed over.
     const reportLines = reports.map((r: any) => {
       const atts = attByReport.get(r.id) ?? [];
       const cmts = commentsByReport.get(r.id) ?? [];
       let line = `- ${r.date_range_start} to ${r.date_range_end} [${r.content || "Weekly Report"}]`;
       if (atts.length > 0) {
-        line += `\n  Attached: ${atts.map((a: any) => a.file_name || a.drive_url || "file").join(", ")} (PDF content not readable here — open the file to review)`;
+        for (const a of atts) {
+          line += `\n  Attached: ${a.file_name || a.drive_url || "file"}`;
+          if (a.extraction_status === "done" && a.extracted_text) {
+            line += `\n  EXTRACTED CONTENT:\n${a.extracted_text.split("\n").map((l: string) => `    ${l}`).join("\n")}`;
+          } else if (a.extraction_status === "unsupported" || a.extraction_status === "failed") {
+            line += ` (content could not be extracted for this attachment)`;
+          } else {
+            line += ` (content not yet extracted — not readable here unless someone runs extraction on it)`;
+          }
+        }
       } else {
         line += `\n  No file attached.`;
       }
@@ -102,7 +112,7 @@ export async function buildProjectContext(supabase: any, projectId: string): Pro
       }
       return line;
     });
-    parts.push("\nRECENT WEEKLY REPORTS (report body text is not available — only metadata, attachment names/links, and comments):\n" + reportLines.join("\n"));
+    parts.push("\nRECENT WEEKLY REPORTS:\n" + reportLines.join("\n"));
   }
 
   // Critical path schedule: every task with its dates, status, and whether

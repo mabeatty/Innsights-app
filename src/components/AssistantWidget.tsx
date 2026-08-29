@@ -117,9 +117,9 @@ export default function AssistantWidget({ projectId }: Props) {
                 <p className="text-sm font-medium">Ask about this project</p>
                 <p className="text-xs">
                   I can see the budget, FF&E takeoff, bidding (vendor quotes, adjustments, leveling reports),
-                  contracts, the critical path schedule, open permits/submittals/RFIs, and recent weekly reports.
-                  Try "how does this week's report compare to the schedule — anything at risk?" or
-                  "help me refine the Shower Glass bid leveling report."
+                  contracts, the critical path schedule, open permits/submittals/RFIs, and weekly reports whose
+                  content has been extracted (use the Extract button on a report's attachment in the Weekly
+                  Reports tab). Try "how does this week's report compare to the schedule — anything at risk?"
                 </p>
               </div>
             ) : (

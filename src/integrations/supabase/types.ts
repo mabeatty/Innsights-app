@@ -595,9 +595,9 @@ export type Database = {
         Relationships: [{ foreignKeyName: "weekly_photo_links_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }]
       }
       weekly_report_attachments: {
-        Row: { created_at: string; drive_file_id: string | null; drive_url: string | null; file_name: string; file_size: number; id: string; project_id: string; report_id: string; storage_path: string | null; uploaded_by: string }
-        Insert: { created_at?: string; drive_file_id?: string | null; drive_url?: string | null; file_name?: string; file_size?: number; id?: string; project_id: string; report_id: string; storage_path?: string | null; uploaded_by: string }
-        Update: { created_at?: string; drive_file_id?: string | null; drive_url?: string | null; file_name?: string; file_size?: number; id?: string; project_id?: string; report_id?: string; storage_path?: string | null; uploaded_by?: string }
+        Row: { created_at: string; drive_file_id: string | null; drive_url: string | null; extracted_at: string | null; extracted_text: string | null; extraction_error: string | null; extraction_status: string; file_name: string; file_size: number; id: string; project_id: string; report_id: string; storage_path: string | null; uploaded_by: string }
+        Insert: { created_at?: string; drive_file_id?: string | null; drive_url?: string | null; extracted_at?: string | null; extracted_text?: string | null; extraction_error?: string | null; extraction_status?: string; file_name?: string; file_size?: number; id?: string; project_id: string; report_id: string; storage_path?: string | null; uploaded_by: string }
+        Update: { created_at?: string; drive_file_id?: string | null; drive_url?: string | null; extracted_at?: string | null; extracted_text?: string | null; extraction_error?: string | null; extraction_status?: string; file_name?: string; file_size?: number; id?: string; project_id?: string; report_id?: string; storage_path?: string | null; uploaded_by?: string }
         Relationships: [
           { foreignKeyName: "weekly_report_attachments_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] },
           { foreignKeyName: "weekly_report_attachments_report_id_fkey"; columns: ["report_id"]; isOneToOne: false; referencedRelation: "weekly_reports"; referencedColumns: ["id"] },
