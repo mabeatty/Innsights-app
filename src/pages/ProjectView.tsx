@@ -21,7 +21,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature, ClipboardCheck } from "lucide-react";
+import { MoreVertical, Info, FolderOpen, CalendarDays, ClipboardList, Landmark, ArrowLeft, Receipt, BarChart3, NotebookPen, ListTodo, FileSignature, ClipboardCheck, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectInfoSummary } from "@/components/ProjectInfoSummary";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -34,6 +34,7 @@ import ScheduleModule from "@/components/ScheduleModule";
 import CapitalPlanningModule from "@/components/CapitalPlanningModule";
 import ProcurementModule from "@/components/ProcurementModule";
 import FieldAdminModule from "@/components/field-admin/FieldAdminModule";
+import APAgingTab from "@/components/budget/APAgingTab";
 import AssistantWidget from "@/components/AssistantWidget";
 import ReportsModule from "@/components/ReportsModule";
 import TasksModule from "@/components/TasksModule";
@@ -251,6 +252,9 @@ export default function ProjectView() {
               <TabsTrigger value="capital" className="gap-1.5">
                 <Landmark className="h-3.5 w-3.5" /> Cash Planning
               </TabsTrigger>
+              <TabsTrigger value="ap-aging" className="gap-1.5">
+                <Clock className="h-3.5 w-3.5" /> AP Aging
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="project-accounting">
@@ -265,6 +269,10 @@ export default function ProjectView() {
             <TabsContent value="capital">
               <AlertBanner alerts={capitalAlerts} onDismiss={dismissAlert} />
               <CapitalPlanningModule projectId={id!} />
+            </TabsContent>
+
+            <TabsContent value="ap-aging">
+              <APAgingTab projectId={id!} />
             </TabsContent>
           </Tabs>
         </TabsContent>
