@@ -128,7 +128,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: usedTextMode ? SYSTEM_PROMPT_TEXT : SYSTEM_PROMPT_VISUAL,
         messages: [
           {
@@ -146,6 +146,10 @@ Deno.serve(async (req) => {
     }
 
     const data = await resp.json();
+    if (data?.stop_reason === "max_tokens") {
+      console.error("[extract-gantt-claude] response truncated at max_tokens");
+      return json({ ok: false, error: "The schedule has too many tasks for the response to complete — try splitting the upload, or contact support to raise the limit." });
+    }
     const text: string = (data?.content ?? [])
       .filter((b: any) => b?.type === "text")
       .map((b: any) => b.text)
