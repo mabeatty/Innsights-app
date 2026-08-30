@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
 
     const { data: att, error: fetchErr } = await supabase
       .from("weekly_report_attachments")
-      .select("id, storage_path, drive_file_id, drive_url, file_name")
+      .select("id, project_id, storage_path, drive_file_id, drive_url, file_name")
       .eq("id", attachmentId)
       .single();
     if (fetchErr || !att) return json({ ok: false, error: "Attachment not found." }, 404);
@@ -225,6 +225,18 @@ Deno.serve(async (req) => {
       .from("weekly_report_attachments")
       .update({ extracted_text: formatted, extraction_status: "done", extraction_error: null, extracted_at: new Date().toISOString() })
       .eq("id", attachmentId);
+
+    // Fire-and-forget: refresh this project's automated risk list now that
+    // there's new report content to consider. Failure here shouldn't fail
+    // the extraction itself — the nightly batch run is the backstop.
+    if (att.project_id) {
+      const functionsUrl = `${supabaseUrl}/functions/v1/detect-project-risks`;
+      fetch(functionsUrl, {
+        method: "POST",
+        headers: { "content-type": "application/json", Authorization: `Bearer ${serviceRoleKey}` },
+        body: JSON.stringify({ projectId: att.project_id }),
+      }).catch((e) => console.warn("[extract-weekly-report-text] risk detection trigger failed:", e.message));
+    }
 
     return json({ ok: true, summary: formatted });
   } catch (e) {

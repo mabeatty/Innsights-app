@@ -407,6 +407,12 @@ export type Database = {
         Update: { architect?: string | null; city?: string | null; created_at?: string; entity_name?: string | null; general_contractor?: string | null; id?: string; interior_designer?: string | null; owner_email?: string | null; owner_name?: string | null; project_id?: string; project_status?: string | null; project_type?: string | null; property_name?: string | null; state?: string | null; street_address?: string | null; target_opening_date?: string | null; total_room_count?: number | null; updated_at?: string; zip_code?: string | null }
         Relationships: [{ foreignKeyName: "project_info_project_id_fkey"; columns: ["project_id"]; isOneToOne: true; referencedRelation: "projects"; referencedColumns: ["id"] }]
       }
+      project_risks: {
+        Row: { created_at: string; description: string; first_detected_at: string; id: string; last_confirmed_at: string; project_id: string; related_entity: string | null; resolved_at: string | null; risk_type: string; severity: string; status: string; title: string; updated_at: string }
+        Insert: { created_at?: string; description?: string; first_detected_at?: string; id?: string; last_confirmed_at?: string; project_id: string; related_entity?: string | null; resolved_at?: string | null; risk_type: string; severity?: string; status?: string; title?: string; updated_at?: string }
+        Update: { created_at?: string; description?: string; first_detected_at?: string; id?: string; last_confirmed_at?: string; project_id?: string; related_entity?: string | null; resolved_at?: string | null; risk_type?: string; severity?: string; status?: string; title?: string; updated_at?: string }
+        Relationships: [{ foreignKeyName: "project_risks_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }]
+      }
       project_public_area_items: {
         Row: { adjusted_quantity: number | null; id: string; item_id: string; last_modified: string | null; notes: string | null; project_id: string; public_area_type_id: string; quantity_required: number; takeoff_version_id: string | null }
         Insert: { adjusted_quantity?: number | null; id?: string; item_id: string; last_modified?: string | null; notes?: string | null; project_id: string; public_area_type_id: string; quantity_required?: number; takeoff_version_id?: string | null }
