@@ -53,7 +53,7 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
   const { isPartner } = useAuth();
   const [plaidAccountId, setPlaidAccountId] = useState<string | null>(null);
   const [roomCount, setRoomCount] = useState<number | null>(null);
-  const { rows: apRows, refetch: refetchAPAging } = useAPAging(projectId);
+  const { approvedRows: apRows, refetch: refetchAPAging } = useAPAging(projectId);
   const [apExpanded, setApExpanded] = useState(false);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 

@@ -8,6 +8,10 @@ export interface AgingRow {
   invoiceDate: string | null;
   dueDate: string | null;
   amount: number;
+  // false = still working through the PM -> Lead approval chain (no
+  // budget_transactions row exists yet, since invoices aren't pushed into
+  // the schedule of values until approved). true = approved and unpaid.
+  isApproved: boolean;
 }
 
 // Positive = days overdue (due date has passed), negative = days until due.
@@ -42,56 +46,77 @@ export function agingBucketFor(days: number): (typeof AGING_BUCKETS)[number]["la
   return b?.label ?? "Current";
 }
 
-// Every approved-but-unpaid transaction for a project, grouped by invoice.
-// Single source of truth shared by the Summary tab's Cash & Payables preview
-// and the full AP Aging sub-tab, so the two can't drift the way the invoice
-// extraction context builders did before being unified.
+// Every unpaid invoice for a project — both invoices still working through
+// approval, and approved invoices not yet paid — grouped so the two can be
+// shown as separate batches (unapproved first). Single source of truth
+// shared by the Summary tab's Cash & Payables preview and the full AP Aging
+// sub-tab, so the two can't drift the way the invoice extraction context
+// builders did before being unified.
 export function useAPAging(projectId: string) {
   const [rows, setRows] = useState<AgingRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
     setLoading(true);
-    const { data: txns, error } = await supabase
-      .from("budget_transactions")
-      .select("invoice_id, payee, amount")
-      .eq("project_id", projectId)
-      .eq("status", "Approved");
-    if (error || !txns) { setLoading(false); return; }
 
-    const invoiceIds = Array.from(new Set(txns.map((t: any) => t.invoice_id).filter(Boolean)));
+    // Approved-and-unpaid: keyed off budget_transactions, since that's what's
+    // actually still owed once retainage/adjustments are applied — an
+    // invoice's own .amount can differ if only part of it was approved.
+    const [{ data: txns }, { data: unapprovedInvoices }] = await Promise.all([
+      supabase
+        .from("budget_transactions")
+        .select("invoice_id, payee, amount")
+        .eq("project_id", projectId)
+        .eq("status", "Approved"),
+      supabase
+        .from("invoices")
+        .select("id, vendor_name, invoice_number, invoice_date, due_date, amount")
+        .eq("project_id", projectId)
+        .neq("status", "Approved"),
+    ]);
+
+    const invoiceIds = Array.from(new Set((txns ?? []).map((t: any) => t.invoice_id).filter(Boolean)));
     const amountByInvoice = new Map<string, number>();
-    txns.forEach((t: any) => {
+    (txns ?? []).forEach((t: any) => {
       if (!t.invoice_id) return;
       amountByInvoice.set(t.invoice_id, (amountByInvoice.get(t.invoice_id) ?? 0) + Number(t.amount));
     });
 
-    if (invoiceIds.length === 0) { setRows([]); setLoading(false); return; }
+    const approvedInvoices = invoiceIds.length > 0
+      ? (await supabase.from("invoices").select("id, vendor_name, invoice_number, invoice_date, due_date").in("id", invoiceIds)).data
+      : [];
 
-    const { data: invoices } = await supabase
-      .from("invoices")
-      .select("id, vendor_name, invoice_number, invoice_date, due_date")
-      .in("id", invoiceIds);
-
-    const built: AgingRow[] = (invoices ?? []).map((inv: any) => ({
+    const approvedRows: AgingRow[] = (approvedInvoices ?? []).map((inv: any) => ({
       invoiceId: inv.id,
       vendorName: inv.vendor_name || "—",
       invoiceNumber: inv.invoice_number,
       invoiceDate: inv.invoice_date,
       dueDate: inv.due_date,
-      // Use the linked-transaction total (matches what's actually still owed
-      // in the schedule of values), not invoices.amount, since the two can
-      // differ if only part of an invoice was approved.
-      amount: amountByInvoice.get(inv.id) ?? Number(inv.amount ?? 0),
+      amount: amountByInvoice.get(inv.id) ?? 0,
+      isApproved: true,
     }));
 
-    built.sort((a, b) => {
+    const unapprovedRows: AgingRow[] = (unapprovedInvoices ?? []).map((inv: any) => ({
+      invoiceId: inv.id,
+      vendorName: inv.vendor_name || "—",
+      invoiceNumber: inv.invoice_number,
+      invoiceDate: inv.invoice_date,
+      dueDate: inv.due_date,
+      amount: Number(inv.amount ?? 0),
+      isApproved: false,
+    }));
+
+    const sortByDate = (a: AgingRow, b: AgingRow) => {
       const da = a.dueDate ?? a.invoiceDate ?? "";
       const db = b.dueDate ?? b.invoiceDate ?? "";
       return da.localeCompare(db);
-    });
+    };
+    unapprovedRows.sort(sortByDate);
+    approvedRows.sort(sortByDate);
 
-    setRows(built);
+    // Unapproved batch first, per direction given — these need action before
+    // they can even become a payable.
+    setRows([...unapprovedRows, ...approvedRows]);
     setLoading(false);
   }, [projectId]);
 
@@ -100,13 +125,17 @@ export function useAPAging(projectId: string) {
   const bucketTotals = useMemo(() => {
     const totals: Record<string, number> = { "Current": 0, "1-30": 0, "31-60": 0, "61-90": 0, "90+": 0 };
     for (const r of rows) {
+      if (!r.isApproved) continue; // aging buckets are for approved-unpaid only; unapproved isn't "aging" yet
       const days = r.dueDate ? daysPastDue(r.dueDate) : r.invoiceDate ? daysAgo(r.invoiceDate) : 0;
       totals[agingBucketFor(days)] += r.amount;
     }
     return totals;
   }, [rows]);
 
-  const grandTotal = useMemo(() => rows.reduce((s, r) => s + r.amount, 0), [rows]);
+  const approvedRows = useMemo(() => rows.filter((r) => r.isApproved), [rows]);
+  const unapprovedRows = useMemo(() => rows.filter((r) => !r.isApproved), [rows]);
+  const grandTotal = useMemo(() => approvedRows.reduce((s, r) => s + r.amount, 0), [approvedRows]);
+  const unapprovedTotal = useMemo(() => unapprovedRows.reduce((s, r) => s + r.amount, 0), [unapprovedRows]);
 
-  return { rows, loading, refetch: load, bucketTotals, grandTotal };
+  return { rows, approvedRows, unapprovedRows, loading, refetch: load, bucketTotals, grandTotal, unapprovedTotal };
 }
