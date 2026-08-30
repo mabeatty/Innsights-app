@@ -216,8 +216,6 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
 
   return (
     <div className="space-y-6 pt-4">
-      <ProjectRisksCard projectId={projectId} />
-
       {/* Top metric row */}
       <div className={`grid grid-cols-2 gap-3 ${isPartner ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
         {summaryCards.map((c) => (
@@ -368,6 +366,8 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
           </CardContent>
         </Card>
       </div>
+
+      <ProjectRisksCard projectId={projectId} />
     </div>
   );
 }
