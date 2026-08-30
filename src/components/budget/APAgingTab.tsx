@@ -11,6 +11,7 @@ interface Props {
 export default function APAgingTab({ projectId }: Props) {
   const { rows, loading, refetch, bucketTotals, grandTotal } = useAPAging(projectId);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const missingDueDateCount = rows.filter((r) => !r.dueDate).length;
 
   if (loading) return <p className="text-sm text-muted-foreground py-4">Loading AP aging…</p>;
 
@@ -21,6 +22,11 @@ export default function APAgingTab({ projectId }: Props) {
         <p className="text-xs text-muted-foreground mt-0.5">
           Every approved-but-unpaid transaction on this project. Click a row to open the same detail view as the Invoices page.
         </p>
+        {missingDueDateCount > 0 && (
+          <p className="text-xs text-amber-600 dark:text-amber-500 mt-1">
+            {missingDueDateCount} invoice{missingDueDateCount === 1 ? "" : "s"} missing a due date — aging for these is estimated from invoice date only.
+          </p>
+        )}
       </div>
 
       {/* Bucket summary */}
@@ -64,7 +70,13 @@ export default function APAgingTab({ projectId }: Props) {
                   <td className="px-3 py-2 font-medium">{r.vendorName}</td>
                   <td className="px-3 py-2 text-muted-foreground">{r.invoiceNumber || "—"}</td>
                   <td className="px-3 py-2 text-muted-foreground">{fmtShortDate(r.invoiceDate)}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{fmtShortDate(r.dueDate)}</td>
+                  <td className="px-3 py-2">
+                    {r.dueDate ? (
+                      <span className="text-muted-foreground">{fmtShortDate(r.dueDate)}</span>
+                    ) : (
+                      <span className="text-amber-600 dark:text-amber-500" title="No due date set — aging is estimated from invoice date">Not set</span>
+                    )}
+                  </td>
                   <td className={cn("px-3 py-2 whitespace-nowrap", overdue ? "text-destructive font-medium" : "text-muted-foreground")}>{agingLabel}</td>
                   <td className="px-3 py-2 text-right">{fmtDecimal(r.amount)}</td>
                 </tr>

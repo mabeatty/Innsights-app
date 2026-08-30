@@ -270,7 +270,13 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                             <td className="py-1.5">{inv.vendorName}</td>
                             <td className="py-1.5 text-right">{fmtDecimal(inv.amount)}</td>
                             <td className="py-1.5 text-right text-muted-foreground">{apFmtShortDate(inv.invoiceDate)}</td>
-                            <td className="py-1.5 text-right text-muted-foreground">{apFmtShortDate(inv.dueDate)}</td>
+                            <td className="py-1.5 text-right">
+                              {inv.dueDate ? (
+                                <span className="text-muted-foreground">{apFmtShortDate(inv.dueDate)}</span>
+                              ) : (
+                                <span className="text-amber-600 dark:text-amber-500" title="No due date set">Not set</span>
+                              )}
+                            </td>
                             <td className={`py-1.5 text-right whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                               {statusLabel}
                             </td>

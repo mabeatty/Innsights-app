@@ -85,6 +85,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [invoiceDate, setInvoiceDate] = useState<Date | undefined>(undefined);
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [dueDateTouched, setDueDateTouched] = useState(false);
+  const [dueDateSource, setDueDateSource] = useState<"none" | "checking" | "contract" | "not-found">("none");
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
   const [transactionType, setTransactionType] = useState<string>("Vendor Invoice");
   const [supportingDocsLink, setSupportingDocsLink] = useState("");
@@ -127,9 +128,15 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   // Suggest a due date from the matching contract's payment terms (vendor name +
   // project match). Only fills the field if the user hasn't manually set/cleared
   // it themselves, so this never silently overrides an explicit entry.
+  // dueDateSource tracks the outcome so the UI can show it plainly instead of
+  // this either silently succeeding or silently doing nothing.
   useEffect(() => {
-    if (!open || dueDateTouched || !invoiceDate || !vendor.trim() || !projectId) return;
+    if (!open || dueDateTouched || !invoiceDate || !vendor.trim() || !projectId) {
+      setDueDateSource("none");
+      return;
+    }
     let cancelled = false;
+    setDueDateSource("checking");
     (async () => {
       const { data: vendors } = await supabase
         .from("vendors")
@@ -137,7 +144,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         .eq("project_id", projectId)
         .ilike("name", `%${vendor.trim()}%`);
       const vendorIds = (vendors ?? []).map((v: any) => v.id);
-      if (vendorIds.length === 0) return;
+      if (vendorIds.length === 0) { if (!cancelled) setDueDateSource("not-found"); return; }
       const { data: matchingContracts } = await supabase
         .from("contracts")
         .select("payment_terms_days")
@@ -152,6 +159,9 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         const d = new Date(invoiceDate);
         d.setDate(d.getDate() + Number(terms));
         setDueDate(d);
+        setDueDateSource("contract");
+      } else {
+        setDueDateSource("not-found");
       }
     })();
     return () => { cancelled = true; };
@@ -553,6 +563,15 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
                 heightClass="h-10"
                 textClass="text-sm"
               />
+              {dueDateSource === "checking" && (
+                <p className="text-[11px] text-muted-foreground">Checking for contract payment terms…</p>
+              )}
+              {dueDateSource === "contract" && (
+                <p className="text-[11px] text-primary flex items-center gap-1"><Sparkles className="h-3 w-3" /> Suggested from this vendor's contract terms — review and adjust if needed.</p>
+              )}
+              {dueDateSource === "not-found" && (
+                <p className="text-[11px] text-muted-foreground">No contract with payment terms found for this vendor — set the due date manually.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Project *</Label>
