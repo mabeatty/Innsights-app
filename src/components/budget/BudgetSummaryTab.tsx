@@ -4,6 +4,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { BudgetRow, BudgetTransaction, fmtDecimal } from "./types";
 import ProjectRisksCard from "./ProjectRisksCard";
+import { useAPAging, daysPastDue as apDaysPastDue, daysAgo as apDaysAgo, fmtShortDate as apFmtShortDate } from "./useAPAging";
+import InvoiceDetailDialog from "../invoices/InvoiceDetailDialog";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface Props {
   budgetRows: BudgetRow[];
@@ -50,7 +53,9 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
   const { isPartner } = useAuth();
   const [plaidAccountId, setPlaidAccountId] = useState<string | null>(null);
   const [roomCount, setRoomCount] = useState<number | null>(null);
-  const [invoiceMap, setInvoiceMap] = useState<Record<string, { invoice_date: string | null; due_date: string | null }>>({});
+  const { rows: apRows, refetch: refetchAPAging } = useAPAging(projectId);
+  const [apExpanded, setApExpanded] = useState(false);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPartner) return;
@@ -137,47 +142,7 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
     [transactions]
   );
 
-  useEffect(() => {
-    const ids = Array.from(new Set(unpaidTxns.map((t) => t.invoice_id).filter((id): id is string => !!id)));
-    if (ids.length === 0) { setInvoiceMap({}); return; }
-    supabase
-      .from("invoices")
-      .select("id, invoice_date, due_date")
-      .in("id", ids)
-      .then(({ data }) => {
-        const m: Record<string, { invoice_date: string | null; due_date: string | null }> = {};
-        (data ?? []).forEach((r: any) => { m[r.id] = { invoice_date: r.invoice_date, due_date: r.due_date }; });
-        setInvoiceMap(m);
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [unpaidTxns.map((t) => t.invoice_id).join(",")]);
-
   const totalAP = useMemo(() => unpaidTxns.reduce((s, t) => s + Number(t.amount), 0), [unpaidTxns]);
-  const unpaidInvoices = useMemo(() => {
-    const grouped = new Map<string, { payee: string; date: string; invoiceDate: string | null; dueDate: string | null; amount: number }>();
-    for (const t of unpaidTxns) {
-      const key = t.draw_id ? `draw:${t.draw_id}:${t.payee}` : `txn:${t.id}`;
-      const linked = t.invoice_id ? invoiceMap[t.invoice_id] : undefined;
-      const existing = grouped.get(key);
-      if (existing) {
-        existing.amount += Number(t.amount);
-        if (new Date(t.date) < new Date(existing.date)) existing.date = t.date;
-        // Prefer an actual invoice_date/due_date over the transaction date if we don't have one yet.
-        if (!existing.invoiceDate && linked?.invoice_date) existing.invoiceDate = linked.invoice_date;
-        if (!existing.dueDate && linked?.due_date) existing.dueDate = linked.due_date;
-      } else {
-        grouped.set(key, {
-          payee: t.payee,
-          date: t.date,
-          invoiceDate: linked?.invoice_date ?? null,
-          dueDate: linked?.due_date ?? null,
-          amount: Number(t.amount),
-        });
-      }
-    }
-    return Array.from(grouped.values()).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [unpaidTxns, invoiceMap]);
-  const oldestUnpaid = useMemo(() => unpaidInvoices.slice(0, 5), [unpaidInvoices]);
 
   const summaryCards = [
     { label: "Project Cost", value: fmtDecimal(projectCost) },
@@ -271,7 +236,7 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                   </p>
                 </div>
               </div>
-              {oldestUnpaid.length > 0 && (
+              {apRows.length > 0 && (
                 <div className="border-t pt-3">
                   <table className="w-full text-sm">
                     <thead>
@@ -284,22 +249,28 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                       </tr>
                     </thead>
                     <tbody>
-                      {oldestUnpaid.map((inv, i) => {
+                      {(apExpanded ? apRows : apRows.slice(0, 5)).map((inv) => {
                         // Prefer the due date to judge timeliness; fall back to the
-                        // 30-day-since-transaction heuristic when no due date is on file.
-                        const overdueByDueDate = inv.dueDate ? daysPastDue(inv.dueDate) : null;
-                        const isOverdue = overdueByDueDate !== null ? overdueByDueDate > 0 : daysAgo(inv.date) > 30;
+                        // 30-day-since-invoice heuristic when no due date is on file.
+                        const overdueByDueDate = inv.dueDate ? apDaysPastDue(inv.dueDate) : null;
+                        const isOverdue = overdueByDueDate !== null ? overdueByDueDate > 0 : (inv.invoiceDate ? apDaysAgo(inv.invoiceDate) > 30 : false);
                         const statusLabel = inv.dueDate
                           ? overdueByDueDate! > 0
                             ? `${overdueByDueDate} days overdue`
                             : `Due in ${Math.abs(overdueByDueDate!)} days`
-                          : `${daysAgo(inv.date)} days old`;
+                          : inv.invoiceDate
+                          ? `${apDaysAgo(inv.invoiceDate)} days old`
+                          : "—";
                         return (
-                          <tr key={`${inv.payee}-${inv.date}-${i}`} className="border-t">
-                            <td className="py-1.5">{inv.payee}</td>
+                          <tr
+                            key={inv.invoiceId}
+                            className="border-t cursor-pointer hover:bg-muted/30 transition-colors"
+                            onClick={() => setSelectedInvoiceId(inv.invoiceId)}
+                          >
+                            <td className="py-1.5">{inv.vendorName}</td>
                             <td className="py-1.5 text-right">{fmtDecimal(inv.amount)}</td>
-                            <td className="py-1.5 text-right text-muted-foreground">{fmtShortDate(inv.invoiceDate ?? inv.date)}</td>
-                            <td className="py-1.5 text-right text-muted-foreground">{fmtShortDate(inv.dueDate)}</td>
+                            <td className="py-1.5 text-right text-muted-foreground">{apFmtShortDate(inv.invoiceDate)}</td>
+                            <td className="py-1.5 text-right text-muted-foreground">{apFmtShortDate(inv.dueDate)}</td>
                             <td className={`py-1.5 text-right whitespace-nowrap ${isOverdue ? "text-destructive font-medium" : "text-muted-foreground"}`}>
                               {statusLabel}
                             </td>
@@ -308,14 +279,21 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
                       })}
                     </tbody>
                   </table>
-                  {unpaidInvoices.length > oldestUnpaid.length && (
-                    <p className="text-xs text-muted-foreground mt-2">
-                      +{unpaidInvoices.length - oldestUnpaid.length} more unpaid invoice{unpaidInvoices.length - oldestUnpaid.length === 1 ? "" : "s"}
-                    </p>
+                  {apRows.length > 5 && (
+                    <button
+                      className="text-xs text-primary hover:underline mt-2 flex items-center gap-1"
+                      onClick={() => setApExpanded((e) => !e)}
+                    >
+                      {apExpanded ? (
+                        <>Show less <ChevronUp className="h-3 w-3" /></>
+                      ) : (
+                        <>+{apRows.length - 5} more unpaid invoice{apRows.length - 5 === 1 ? "" : "s"} <ChevronDown className="h-3 w-3" /></>
+                      )}
+                    </button>
                   )}
                 </div>
               )}
-              {oldestUnpaid.length === 0 && (
+              {apRows.length === 0 && (
                 <p className="text-xs text-muted-foreground border-t pt-3">No approved, unpaid invoices.</p>
               )}
             </CardContent>
@@ -368,6 +346,12 @@ export default function BudgetSummaryTab({ budgetRows, transactions, materialsSt
       </div>
 
       <ProjectRisksCard projectId={projectId} />
+
+      <InvoiceDetailDialog
+        invoiceId={selectedInvoiceId}
+        onClose={() => setSelectedInvoiceId(null)}
+        onChange={refetchAPAging}
+      />
     </div>
   );
 }
