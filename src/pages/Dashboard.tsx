@@ -87,7 +87,7 @@ export default function Dashboard() {
       const [{ data: projData }, { data: infoData }, { data: phaseData }, budgetData, txnData] = await Promise.all([
         supabase
           .from("projects")
-          .select("id, name, updated_at, project_type, brands(name)")
+          .select("id, name, updated_at, project_type, brands!projects_brand_id_fkey(name)")
           .order("updated_at", { ascending: false }),
         supabase
           .from("project_info")

@@ -108,7 +108,7 @@ export default function TakeoffView() {
     if (!id) return;
     const { data } = await supabase
       .from("projects")
-      .select("id, name, hotel_name, brand_id, status, project_type, brands(name)")
+      .select("id, name, hotel_name, brand_id, status, project_type, brands!projects_brand_id_fkey(name)")
       .eq("id", id)
       .single();
     if (!data) return;

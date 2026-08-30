@@ -96,7 +96,7 @@ export function AppSidebar() {
     if (!user) return;
     supabase
       .from("projects")
-      .select("id, name, project_type, brands(name)")
+      .select("id, name, project_type, brands!projects_brand_id_fkey(name)")
       .order("created_at", { ascending: false })
       .then(({ data }) => {
         let allProjects = (data as unknown as SidebarProject[]) ?? [];
