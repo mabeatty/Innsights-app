@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { FolderPlus, ChevronRight, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { useAlerts } from "@/hooks/useAlerts";
+import { toast } from "sonner";
 
 
 
@@ -82,6 +83,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     async function load() {
+      try {
       const [{ data: projData }, { data: infoData }, { data: phaseData }, budgetData, txnData] = await Promise.all([
         supabase
           .from("projects")
@@ -148,7 +150,12 @@ export default function Dashboard() {
       }
 
       setProjects(rows);
-      setLoading(false);
+      } catch (err: any) {
+        console.error("[Dashboard] failed to load projects:", err);
+        toast.error(err?.message ? `Failed to load dashboard: ${err.message}` : "Failed to load dashboard.");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, [isConsultant, consultantProjectIds]);

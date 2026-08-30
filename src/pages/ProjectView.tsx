@@ -90,12 +90,22 @@ export default function ProjectView() {
   /* ── Fetch project ── */
   const fetchData = useCallback(async () => {
     if (!id) return;
-    const [{ data }, { data: matrixRows }, { data: infoRow }] = await Promise.all([
-      supabase.from("projects").select("id, name, hotel_name, brand_id, secondary_brand_id, status, project_type, clickup_list_id, brands!projects_brand_id_fkey(name), secondary_brand:brands!projects_secondary_brand_id_fkey(name)").eq("id", id).single(),
+    const [{ data, error }, { data: matrixRows }, { data: infoRow }] = await Promise.all([
+      supabase
+        .from("projects")
+        .select("id, name, hotel_name, brand_id, secondary_brand_id, status, project_type, clickup_list_id, brand:brands!projects_brand_id_fkey(name), secondary_brand:brands!projects_secondary_brand_id_fkey(name)")
+        .eq("id", id)
+        .maybeSingle(),
       supabase.from("room_matrix_entries").select("quantity").eq("project_id", id),
       supabase.from("project_info").select("entity_name").eq("project_id", id).maybeSingle(),
     ]);
-    setProject(data as unknown as Project);
+    if (error) {
+      console.error("[ProjectView] failed to load project:", error);
+      toast.error(`Failed to load project: ${error.message}`);
+      setLoading(false);
+      return;
+    }
+    setProject(data ? ({ ...data, brands: (data as any).brand } as unknown as Project) : null);
     if (matrixRows && matrixRows.length > 0) {
       setRoomMatrixCount(matrixRows.reduce((sum, r) => sum + (r.quantity ?? 0), 0));
     }
