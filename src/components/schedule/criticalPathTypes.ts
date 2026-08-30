@@ -89,20 +89,25 @@ export function buildWorkflowColorMap(tasks: { workflow_group: string | null }[]
 }
 
 /**
- * The actual bar color for one task: critical-path always wins (solid red,
- * unchanged behavior); otherwise a shade of its workflow_group's hue if it
- * has one, varied by task index within that group so sub-tasks are
- * distinguishable but obviously related; otherwise falls back to the
- * original status-based color for ungrouped tasks (e.g. manually-entered
- * tasks with no workflow_group set, or schedules with no real grouping
- * structure to extract).
+ * The actual bar FILL color for one task: always a shade of its
+ * workflow_group's hue if it has one (varied by task index within the group
+ * so sub-tasks are distinguishable but obviously related), otherwise falls
+ * back to the original status-based color for ungrouped tasks (e.g.
+ * manually-entered tasks with no workflow_group set, or schedules with no
+ * real grouping structure to extract).
+ *
+ * is_critical is not used for coloring at all. This Gantt only ever shows
+ * a project's critical path (per how the feature is scoped) — every task on
+ * it is critical by definition, so a red highlight or border for
+ * "is_critical" would either mark every single bar (when a schedule has no
+ * finer per-task critical distinction) or arbitrarily mark some tasks over
+ * others in a way that isn't meaningful here. There is nothing to elevate.
  */
 export function workflowTaskColor(
-  task: { workflow_group: string | null; status: TaskStatus; is_critical: boolean },
+  task: { workflow_group: string | null; status: TaskStatus },
   indexWithinGroup: number,
   groupColorMap: Map<string, string>,
 ): string {
-  if (task.is_critical) return "#DC2626"; // unchanged critical-path red, kept in sync with CriticalPathGantt's CRITICAL_COLOR
   const baseColor = task.workflow_group ? groupColorMap.get(task.workflow_group) : null;
   if (!baseColor) return TASK_STATUS_COLORS[task.status] || TASK_STATUS_COLORS["Not Started"];
   const hueMatch = baseColor.match(/hsl\((\d+)/);

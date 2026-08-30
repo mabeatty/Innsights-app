@@ -19,8 +19,6 @@ const MAX_ZOOM = 200;
 const DEFAULT_ZOOM = 90;
 const ZOOM_STEP = 20;
 
-const CRITICAL_COLOR = "#DC2626"; // red-600
-
 export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
   const [monthColWidth, setMonthColWidth] = useState(DEFAULT_ZOOM);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -215,7 +213,6 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
                       style={{ width: LABEL_WIDTH, position: "sticky", left: 0, zIndex: 10 }}
                       title={t.task_name}
                     >
-                      {t.is_critical && <span className="inline-block h-1.5 w-1.5 rounded-full bg-red-500 shrink-0" />}
                       <span className="truncate">{t.task_name}</span>
                     </div>
                     <div className="relative" style={{ width: TIMELINE_WIDTH }}>
@@ -243,7 +240,7 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
                           <TooltipContent side="top" className="text-xs space-y-0.5">
                             <p className="font-semibold">{t.task_name}</p>
                             <p>{format(new Date(`${t.start_date}T00:00:00`), "MMM d, yyyy")} – {format(new Date(`${t.end_date}T00:00:00`), "MMM d, yyyy")}</p>
-                            <p>Status: {t.status}{t.is_critical ? " · Critical Path" : ""}</p>
+                            <p>Status: {t.status}</p>
                             {t.workflow_group && <p>Workflow: {t.workflow_group}</p>}
                             {t.trade && <p>Trade: {t.trade}</p>}
                           </TooltipContent>
@@ -276,7 +273,6 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
       </div>
 
       <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground flex-wrap">
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: CRITICAL_COLOR }} /> Critical path</span>
         {Array.from(groupColorMap.entries()).map(([group, color]) => (
           <span key={group} className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} /> {group}</span>
         ))}
