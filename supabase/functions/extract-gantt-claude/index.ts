@@ -89,6 +89,22 @@ Deno.serve(async (req) => {
       console.warn("[extract-gantt-claude] text extraction failed:", (e as Error).message);
     }
 
+    // Some schedule PDFs (e.g. those with embedded chart/graphic elements)
+    // produce garbage/mojibake text alongside the real table when text-layer
+    // extracted — long runs of non-printable or private-use-area characters
+    // with no real content. That noise doesn't help Claude and can crowd out
+    // or confuse it, so strip it rather than pass it straight through.
+    rawText = rawText
+      .split("\n")
+      .filter((line) => {
+        const printable = line.replace(/[^\x20-\x7E]/g, "").length;
+        // Keep a line if most of its characters are normal printable ASCII;
+        // drop lines that are mostly garbage glyphs.
+        return line.trim().length === 0 || printable / line.length > 0.6;
+      })
+      .join("\n")
+      .trim();
+
     // A real schedule table has many rows of "Task Name ... Date ... Nd
     // days"-shaped text; a short/near-empty text layer means this PDF is
     // effectively just the chart graphic, so fall back to visual reading.
@@ -148,7 +164,8 @@ Deno.serve(async (req) => {
     }
 
     if (!result || !Array.isArray(result.tasks)) {
-      return json({ ok: false, error: "Could not parse extraction result." });
+      console.error("[extract-gantt-claude] failed to parse model output:", cleaned.slice(0, 500));
+      return json({ ok: false, error: `Could not parse extraction result. Model returned: ${cleaned.slice(0, 300) || "(empty response)"}` });
     }
     return json({ ok: true, tasks: result.tasks, critical_path_indicated: result.critical_path_indicated ?? true });
   } catch (err) {
