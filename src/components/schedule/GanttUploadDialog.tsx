@@ -55,6 +55,7 @@ export default function GanttUploadDialog({ projectId, open, onOpenChange, onImp
         setDrafts(
           data.tasks.map((t: any) => ({
             task_name: t.task_name ?? "",
+            workflow_group: t.workflow_group ?? "",
             trade: t.trade ?? "",
             start_date: t.start_date ?? null,
             end_date: t.end_date ?? null,
@@ -90,7 +91,7 @@ export default function GanttUploadDialog({ projectId, open, onOpenChange, onImp
   const addBlankDraft = () => {
     setDrafts((prev) => [
       ...prev,
-      { task_name: "", trade: "", start_date: null, end_date: null, duration_days: null, is_critical: true, predecessor_task_name: null },
+      { task_name: "", workflow_group: "", trade: "", start_date: null, end_date: null, duration_days: null, is_critical: true, predecessor_task_name: null },
     ]);
   };
 
@@ -133,6 +134,7 @@ export default function GanttUploadDialog({ projectId, open, onOpenChange, onImp
             project_id: projectId,
             gantt_upload_id: ganttUploadId,
             task_name: d.task_name.trim(),
+            workflow_group: d.workflow_group?.trim() || null,
             trade: d.trade?.trim() || null,
             start_date: d.start_date,
             end_date: d.end_date,
@@ -226,7 +228,8 @@ export default function GanttUploadDialog({ projectId, open, onOpenChange, onImp
               <table className="w-full text-xs">
                 <thead className="bg-muted/50 text-muted-foreground">
                   <tr>
-                    <th className="px-2 py-1.5 text-left font-medium min-w-[180px]">Task</th>
+                    <th className="px-2 py-1.5 text-left font-medium min-w-[160px]">Task</th>
+                    <th className="px-2 py-1.5 text-left font-medium min-w-[120px]">Workflow Group</th>
                     <th className="px-2 py-1.5 text-left font-medium min-w-[100px]">Trade</th>
                     <th className="px-2 py-1.5 text-left font-medium">Start</th>
                     <th className="px-2 py-1.5 text-left font-medium">End</th>
@@ -240,6 +243,9 @@ export default function GanttUploadDialog({ projectId, open, onOpenChange, onImp
                     <tr key={idx} className="border-t">
                       <td className="px-2 py-1">
                         <Input className="h-7 text-xs" value={d.task_name} onChange={(e) => updateDraft(idx, { task_name: e.target.value })} />
+                      </td>
+                      <td className="px-2 py-1">
+                        <Input className="h-7 text-xs" value={d.workflow_group ?? ""} onChange={(e) => updateDraft(idx, { workflow_group: e.target.value })} placeholder="e.g. Sitework" />
                       </td>
                       <td className="px-2 py-1">
                         <Input className="h-7 text-xs" value={d.trade ?? ""} onChange={(e) => updateDraft(idx, { trade: e.target.value })} />

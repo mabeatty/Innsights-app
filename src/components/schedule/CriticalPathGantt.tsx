@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { TASK_STATUS_COLORS, type CriticalPathTask } from "./criticalPathTypes";
+import { TASK_STATUS_COLORS, buildWorkflowColorMap, workflowTaskColor, type CriticalPathTask } from "./criticalPathTypes";
 
 interface Props {
   tasks: CriticalPathTask[];
@@ -84,6 +84,23 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
     const map = new Map<string, number>();
     tasks.forEach((t, i) => map.set(t.id, i));
     return map;
+  }, [tasks]);
+
+  // One consistent hue per workflow_group for this project (see
+  // buildWorkflowColorMap — derived from the contractor's own schedule
+  // grouping, not a fixed taxonomy), plus each task's position within its
+  // group so sub-tasks get varied-but-related shades of the parent hue.
+  const groupColorMap = useMemo(() => buildWorkflowColorMap(tasks), [tasks]);
+  const groupRunningIndex = useMemo(() => {
+    const counters = new Map<string, number>();
+    const indices = new Map<string, number>();
+    tasks.forEach((t) => {
+      const key = t.workflow_group ?? "__none__";
+      const idx = counters.get(key) ?? 0;
+      indices.set(t.id, idx);
+      counters.set(key, idx + 1);
+    });
+    return indices;
   }, [tasks]);
 
   useEffect(() => {
@@ -186,7 +203,7 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
 
               {tasks.map((t, idx) => {
                 const hasDates = t.start_date && t.end_date;
-                const barColor = t.is_critical ? CRITICAL_COLOR : (TASK_STATUS_COLORS[t.status] || TASK_STATUS_COLORS["Not Started"]);
+                const barColor = workflowTaskColor(t, groupRunningIndex.get(t.id) ?? 0, groupColorMap);
                 const barStartPx = hasDates ? getXpx(t.start_date!) : 0;
                 const barEndPx = hasDates ? getXpx(t.end_date!) : 0;
                 const barWidthPx = Math.max(barEndPx - barStartPx, 4);
@@ -227,6 +244,7 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
                             <p className="font-semibold">{t.task_name}</p>
                             <p>{format(new Date(`${t.start_date}T00:00:00`), "MMM d, yyyy")} – {format(new Date(`${t.end_date}T00:00:00`), "MMM d, yyyy")}</p>
                             <p>Status: {t.status}{t.is_critical ? " · Critical Path" : ""}</p>
+                            {t.workflow_group && <p>Workflow: {t.workflow_group}</p>}
                             {t.trade && <p>Trade: {t.trade}</p>}
                           </TooltipContent>
                         </Tooltip>
@@ -257,10 +275,17 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
         </div>
       </div>
 
-      <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground">
+      <div className="flex items-center gap-4 mt-2 text-[11px] text-muted-foreground flex-wrap">
         <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: CRITICAL_COLOR }} /> Critical path</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLORS["In Progress"] }} /> In progress</span>
-        <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLORS["Complete"] }} /> Complete</span>
+        {Array.from(groupColorMap.entries()).map(([group, color]) => (
+          <span key={group} className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} /> {group}</span>
+        ))}
+        {groupColorMap.size === 0 && (
+          <>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLORS["In Progress"] }} /> In progress</span>
+            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLORS["Complete"] }} /> Complete</span>
+          </>
+        )}
         <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 bg-destructive" /> Today</span>
         <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 border-t border-dashed border-muted-foreground" /> Dependency</span>
       </div>

@@ -28,26 +28,32 @@ const SYSTEM_PROMPT_TEXT = `You are reading the text extracted from a constructi
 
 For each task row, determine:
 - task_name: the task/activity name exactly as listed
-- trade: the trade or discipline if identifiable from the task name (e.g. "Electrical", "Drywall", "FF&E"), otherwise null
+- workflow_group: the parent grouping this task belongs to, EXACTLY as the contractor's own schedule shows it — a bold/summary row's label (e.g. "Sitework", "MEP Rough-In"), a section header, or a clearly implied parent from indentation level. Use the contractor's own wording verbatim; do not invent, standardize, or rename groups, and do not force tasks into any predefined category list. If the schedule genuinely shows no grouping structure at all (a completely flat list with no section headers or indentation), set this to null for every task rather than guessing one.
+- trade: the trade or discipline if identifiable from the task name (e.g. "Electrical", "Drywall", "FF&E"), otherwise null. This is a finer classification than workflow_group and may differ from it.
 - start_date: in YYYY-MM-DD format, converted from whatever date format is shown
 - duration_days: the workdays/duration value for that row, as a plain number
 - end_date: calculate as start_date + duration_days (calendar days is fine as an approximation if the source uses workdays)
 - is_critical: set true for every task — this text table format doesn't visually distinguish a critical path, so treat the full sequence as the critical path. Set the top-level "critical_path_indicated" to false.
 - predecessor_task_name: the task_name of the row immediately before this one in the list, since these schedule exports are typically already in dependency order (each task begins at or after the prior one ends). Use null for the very first task.
 
-List tasks in the same order they appear in the source. Return only a JSON object: { "critical_path_indicated": false, "tasks": [{ task_name, trade, start_date, end_date, duration_days, is_critical, predecessor_task_name }] }. No preamble or markdown.`;
+Note: if a row is itself a summary/section header (e.g. "Sitework" spanning the full duration of its sub-tasks, with no real individual work described), it is likely a rollup row, not a real task — you can still extract it if it looks like a genuine schedule line, but do not force every summary row into the output if it's purely a container with no actual duration/work of its own.
+
+List tasks in the same order they appear in the source. Return only a JSON object: { "critical_path_indicated": false, "tasks": [{ task_name, workflow_group, trade, start_date, end_date, duration_days, is_critical, predecessor_task_name }] }. No preamble or markdown.`;
 
 const SYSTEM_PROMPT_VISUAL = `You are reading a construction Gantt chart (schedule) PDF provided by a general contractor. Extract every task/activity row shown in the chart.
 
 For each task, determine:
 - task_name: the activity name exactly as labeled
-- trade: the trade or discipline if identifiable from the row grouping or task name (e.g. "Electrical", "Drywall", "FF&E"), otherwise null
+- workflow_group: the parent grouping this task belongs to, EXACTLY as the contractor's own chart shows it — a bold/summary bar's label (e.g. "Sitework", "MEP Rough-In"), a section header, a colored band grouping, or a clearly implied parent from indentation/outline level. Use the contractor's own wording verbatim; do not invent, standardize, or rename groups, and do not force tasks into any predefined category list. If the chart genuinely shows no grouping structure at all (a flat list with no section headers, indentation, or grouped color bands), set this to null for every task rather than guessing one.
+- trade: the trade or discipline if identifiable from the row grouping or task name (e.g. "Electrical", "Drywall", "FF&E"), otherwise null. This is a finer classification than workflow_group and may differ from it.
 - start_date and end_date in YYYY-MM-DD format, read from the bar's position against the chart's date axis. If you cannot determine an exact date, make your best estimate from the axis gridlines and note the uncertainty is expected — do not fabricate a date with false precision, but do provide your best reading.
 - duration_days: the task's duration in calendar days, if shown or calculable from the bar width
 - is_critical: true if this task is drawn as part of the critical path — typically shown in red, a distinct color/pattern from other bars, or explicitly labeled "critical path". If the chart does not visually distinguish a critical path, set is_critical to true for all tasks (assume the whole chart represents the critical sequence) and note this in a top-level "critical_path_indicated" boolean.
 - predecessor_task_name: the task_name of the row immediately preceding this one in the dependency chain, if a dependency line/arrow is visible connecting them, or if sequential ordering in the chart clearly implies it. Otherwise null.
 
-List tasks in chronological/chart order. Return only a JSON object: { "critical_path_indicated": boolean, "tasks": [{ task_name, trade, start_date, end_date, duration_days, is_critical, predecessor_task_name }] }. No preamble or markdown.`;
+Note: if a bar is itself a summary/section rollup (e.g. "Sitework" spanning the full duration of its sub-tasks below it, with no real individual work described), it is likely a container row, not a real task — you can still extract it if it looks like a genuine schedule line, but do not force every summary bar into the output if it's purely a container with no actual work of its own.
+
+List tasks in chronological/chart order. Return only a JSON object: { "critical_path_indicated": boolean, "tasks": [{ task_name, workflow_group, trade, start_date, end_date, duration_days, is_critical, predecessor_task_name }] }. No preamble or markdown.`;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {

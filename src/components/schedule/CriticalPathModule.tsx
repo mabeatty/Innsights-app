@@ -50,6 +50,7 @@ export default function CriticalPathModule({ projectId }: Props) {
   // Form state
   const [formName, setFormName] = useState("");
   const [formTrade, setFormTrade] = useState("");
+  const [formWorkflowGroup, setFormWorkflowGroup] = useState("");
   const [formStart, setFormStart] = useState("");
   const [formEnd, setFormEnd] = useState("");
   const [formDuration, setFormDuration] = useState<number | "">("");
@@ -62,6 +63,7 @@ export default function CriticalPathModule({ projectId }: Props) {
     setEditingId(null);
     setFormName("");
     setFormTrade("");
+    setFormWorkflowGroup("");
     setFormStart("");
     setFormEnd("");
     setFormDuration("");
@@ -80,6 +82,7 @@ export default function CriticalPathModule({ projectId }: Props) {
     setEditingId(t.id);
     setFormName(t.task_name);
     setFormTrade(t.trade ?? "");
+    setFormWorkflowGroup(t.workflow_group ?? "");
     setFormStart(t.start_date ?? "");
     setFormEnd(t.end_date ?? "");
     setFormDuration(t.duration_days ?? "");
@@ -98,6 +101,7 @@ export default function CriticalPathModule({ projectId }: Props) {
     setSaving(true);
     const payload = {
       task_name: formName.trim(),
+      workflow_group: formWorkflowGroup.trim() || null,
       trade: formTrade.trim() || null,
       start_date: formStart || null,
       end_date: formEnd || null,
@@ -260,6 +264,11 @@ export default function CriticalPathModule({ projectId }: Props) {
             <div className="space-y-1.5 col-span-2">
               <Label>Task Name</Label>
               <Input value={formName} onChange={(e) => setFormName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Workflow Group</Label>
+              <Input value={formWorkflowGroup} onChange={(e) => setFormWorkflowGroup(e.target.value)} placeholder="e.g. Sitework" />
+              <p className="text-[11px] text-muted-foreground">Matches the contractor's own schedule grouping — drives this task's color.</p>
             </div>
             <div className="space-y-1.5">
               <Label>Trade</Label>
