@@ -62,6 +62,7 @@ interface Props {
   projectId: string;
   projectName?: string;
   brandId: string;
+  secondaryBrandId?: string | null;
 }
 
 interface AggregatedItem {
@@ -75,8 +76,9 @@ interface AggregatedItem {
 
 const categoryOrder = ["Furniture", "Softgoods", "Lighting", "Artwork & Window Treatments", "Bathroom", "Equipment"];
 
-export default function TakeoffModule({ projectId, projectName, brandId }: Props) {
+export default function TakeoffModule({ projectId, projectName, brandId, secondaryBrandId }: Props) {
   const { user } = useAuth();
+  const brandIds = secondaryBrandId ? [brandId, secondaryBrandId] : [brandId];
 
   // Setup state
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
@@ -135,9 +137,9 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
   useEffect(() => {
     if (setupLoaded || !brandId) return;
     Promise.all([
-      supabase.from("room_types").select("*").eq("brand_id", brandId),
-      supabase.from("bathroom_types").select("*").eq("brand_id", brandId),
-      supabase.from("public_area_types").select("*").eq("brand_id", brandId),
+      supabase.from("room_types").select("*").in("brand_id", brandIds),
+      supabase.from("bathroom_types").select("*").in("brand_id", brandIds),
+      supabase.from("public_area_types").select("*").in("brand_id", brandIds),
       supabase.from("room_matrix_entries").select("*").eq("project_id", projectId),
     ]).then(([rtRes, btRes, paRes, matrixRes]) => {
       setRoomTypes(rtRes.data ?? []);
@@ -153,7 +155,7 @@ export default function TakeoffModule({ projectId, projectName, brandId }: Props
       })));
       setSetupLoaded(true);
     });
-  }, [brandId, projectId, setupLoaded]);
+  }, [brandIds, projectId, setupLoaded]);
 
   /* ── Room type + bathroom type name lookups for read-only display ── */
   const roomTypeName = (id: string) => roomTypes.find((rt) => rt.id === id)?.name ?? "Unknown";

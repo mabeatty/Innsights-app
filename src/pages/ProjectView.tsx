@@ -45,9 +45,11 @@ interface Project {
   name: string;
   hotel_name: string;
   brand_id: string;
+  secondary_brand_id: string | null;
   status: "Draft" | "Complete";
   project_type: "Development" | "Asset Management";
   brands: { name: string } | null;
+  secondary_brand: { name: string } | null;
   clickup_list_id: string | null;
 }
 
@@ -58,6 +60,11 @@ export default function ProjectView() {
   const { getProjectAlerts, dismissAlert } = useAlerts();
   const navigate = useNavigate();
   const [project, setProject] = useState<Project | null>(null);
+  const combinedBrandName = project
+    ? project.secondary_brand?.name
+      ? `${project.brands?.name ?? "—"} / ${project.secondary_brand.name}`
+      : (project.brands?.name ?? "")
+    : "";
   const [loading, setLoading] = useState(true);
   const [projectInfo, setProjectInfo] = useState<any>(null);
   const [roomMatrixCount, setRoomMatrixCount] = useState<number | null>(null);
@@ -68,6 +75,8 @@ export default function ProjectView() {
   const [editHotelName, setEditHotelName] = useState("");
   const [editProjectType, setEditProjectType] = useState<"Development" | "Asset Management">("Development");
   const [editStatus, setEditStatus] = useState<"Draft" | "Complete">("Draft");
+  const [editSecondaryBrandId, setEditSecondaryBrandId] = useState<string>("");
+  const [availableBrands, setAvailableBrands] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   // Delete dialog state
@@ -82,7 +91,7 @@ export default function ProjectView() {
   const fetchData = useCallback(async () => {
     if (!id) return;
     const [{ data }, { data: matrixRows }, { data: infoRow }] = await Promise.all([
-      supabase.from("projects").select("id, name, hotel_name, brand_id, status, project_type, clickup_list_id, brands(name)").eq("id", id).single(),
+      supabase.from("projects").select("id, name, hotel_name, brand_id, secondary_brand_id, status, project_type, clickup_list_id, brands!projects_brand_id_fkey(name), secondary_brand:brands!projects_secondary_brand_id_fkey(name)").eq("id", id).single(),
       supabase.from("room_matrix_entries").select("quantity").eq("project_id", id),
       supabase.from("project_info").select("entity_name").eq("project_id", id).maybeSingle(),
     ]);
@@ -95,6 +104,9 @@ export default function ProjectView() {
   }, [id]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    supabase.from("brands").select("id, name").then(({ data }) => setAvailableBrands(data ?? []));
+  }, []);
 
   /* ── Edit Project ── */
   const openEditDialog = () => {
@@ -103,6 +115,7 @@ export default function ProjectView() {
     setEditHotelName(project.hotel_name);
     setEditProjectType(project.project_type);
     setEditStatus(project.status);
+    setEditSecondaryBrandId(project.secondary_brand_id ?? "");
     setEditOpen(true);
   };
 
@@ -117,6 +130,7 @@ export default function ProjectView() {
       hotel_name: editHotelName,
       project_type: editProjectType,
       status: editStatus,
+      secondary_brand_id: editSecondaryBrandId || null,
     }).eq("id", project.id);
     if (error) toast.error(error.message);
     else { toast.success("Project updated."); setEditOpen(false); await fetchData(); }
@@ -197,7 +211,7 @@ export default function ProjectView() {
         <div className="rounded-lg border p-4 bg-card">
           <ProjectInfoForm
             projectId={id!}
-            brandName={project.brands?.name ?? ""}
+            brandName={combinedBrandName}
             roomMatrixCount={roomMatrixCount}
             onInfoChange={setProjectInfo}
           />
@@ -287,7 +301,17 @@ export default function ProjectView() {
         </TabsContent>
 
         <TabsContent value="procurement">
-          <ProcurementModule projectId={id!} projectName={project.name} brandId={project.brand_id} projectType={project.project_type} />
+          <ProcurementModule
+            projectId={id!}
+            projectName={project.name}
+            brandId={project.brand_id}
+            secondaryBrandId={project.secondary_brand_id}
+            brandNames={{
+              [project.brand_id]: project.brands?.name ?? "Primary",
+              ...(project.secondary_brand_id ? { [project.secondary_brand_id]: project.secondary_brand?.name ?? "Secondary" } : {}),
+            }}
+            projectType={project.project_type}
+          />
         </TabsContent>
 
         <TabsContent value="field-admin">
@@ -303,7 +327,7 @@ export default function ProjectView() {
             projectId={id!}
             projectName={project.name}
             entityName={entityName || project.hotel_name}
-            brandName={project.brands?.name ?? ""}
+            brandName={combinedBrandName}
             projectType={project.project_type}
           />
         </TabsContent>
@@ -328,6 +352,19 @@ export default function ProjectView() {
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Brand</Label>
               <p className="text-sm py-2 px-3 rounded-md bg-muted">{project.brands?.name ?? "—"}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Secondary Brand</Label>
+              <p className="text-xs text-muted-foreground -mt-1">For dual-brand projects with two separate room blocks.</p>
+              <Select value={editSecondaryBrandId || "__none__"} onValueChange={(v) => setEditSecondaryBrandId(v === "__none__" ? "" : v)}>
+                <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">None — single brand</SelectItem>
+                  {availableBrands.filter((b) => b.id !== project.brand_id).map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Project Type</Label>

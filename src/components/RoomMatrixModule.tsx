@@ -11,8 +11,8 @@ import {
 import { Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 
-interface RoomType { id: string; name: string; }
-interface BathroomType { id: string; name: string; }
+interface RoomType { id: string; name: string; brand_id: string; }
+interface BathroomType { id: string; name: string; brand_id: string; }
 interface Floor { id: string; name: string; display_order: number; }
 
 interface MatrixEntry {
@@ -28,6 +28,12 @@ interface MatrixEntry {
 interface Props {
   projectId: string;
   brandId: string;
+  // Set for dual-brand projects (two separate room blocks sharing one
+  // construction project) — when present, room/bathroom types are fetched
+  // for both brands so each block's rows can pick from the right brand's
+  // room types, not just the primary brand's.
+  secondaryBrandId?: string | null;
+  brandNames?: Record<string, string>;
 }
 
 /**
@@ -40,7 +46,7 @@ interface Props {
  * (EditRoomMatrixDialog below) that mirrors the same room-type-by-floor
  * layout but with editable quantity cells.
  */
-export default function RoomMatrixModule({ projectId, brandId }: Props) {
+export default function RoomMatrixModule({ projectId, brandId, secondaryBrandId, brandNames }: Props) {
   const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
   const [bathroomTypes, setBathroomTypes] = useState<BathroomType[]>([]);
   const [floors, setFloors] = useState<Floor[]>([]);
@@ -48,11 +54,16 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
   const [loaded, setLoaded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
 
+  const brandIds = useMemo(
+    () => (secondaryBrandId ? [brandId, secondaryBrandId] : [brandId]),
+    [brandId, secondaryBrandId],
+  );
+
   const load = useCallback(async () => {
     if (!brandId) return;
     const [rtRes, btRes, floorRes, entryRes] = await Promise.all([
-      supabase.from("room_types").select("*").eq("brand_id", brandId),
-      supabase.from("bathroom_types").select("*").eq("brand_id", brandId),
+      supabase.from("room_types").select("*").in("brand_id", brandIds),
+      supabase.from("bathroom_types").select("*").in("brand_id", brandIds),
       supabase.from("project_floors").select("*").eq("project_id", projectId).order("display_order"),
       supabase.from("room_matrix_entries").select("*").eq("project_id", projectId),
     ]);
@@ -71,11 +82,20 @@ export default function RoomMatrixModule({ projectId, brandId }: Props) {
       }))
     );
     setLoaded(true);
-  }, [brandId, projectId]);
+  }, [brandIds, projectId]);
 
   useEffect(() => { load(); }, [load]);
 
-  const roomTypeName = (id: string) => roomTypes.find((rt) => rt.id === id)?.name ?? "Unknown";
+  // When a room type name is ambiguous across the two brands (or always, if
+  // dual-brand, to keep it unambiguous which block each row belongs to),
+  // append the brand name so the picker/table is clear.
+  const roomTypeLabel = (rt: RoomType) =>
+    secondaryBrandId && brandNames?.[rt.brand_id] ? `${rt.name} (${brandNames[rt.brand_id]})` : rt.name;
+
+  const roomTypeName = (id: string) => {
+    const rt = roomTypes.find((rt) => rt.id === id);
+    return rt ? roomTypeLabel(rt) : "Unknown";
+  };
   const bathroomTypeName = (id: string | null) => (id ? bathroomTypes.find((bt) => bt.id === id)?.name ?? "Unknown" : "Not set");
 
   const combos = useMemo(() => {
@@ -405,7 +425,7 @@ function EditRoomMatrixDialog({ open, onOpenChange, projectId, roomTypes, bathro
                       <Select value={c.roomTypeId} onValueChange={(v) => updateCombo(c.key, { roomTypeId: v })}>
                         <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Room Type" /></SelectTrigger>
                         <SelectContent>
-                          {roomTypes.map((rt) => <SelectItem key={rt.id} value={rt.id}>{rt.name}</SelectItem>)}
+                          {roomTypes.map((rt) => <SelectItem key={rt.id} value={rt.id}>{roomTypeLabel(rt)}</SelectItem>)}
                         </SelectContent>
                       </Select>
                     </td>

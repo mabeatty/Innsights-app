@@ -9,10 +9,12 @@ interface ProcurementModuleProps {
   projectId: string;
   projectName: string;
   brandId: string;
+  secondaryBrandId?: string | null;
+  brandNames?: Record<string, string>;
   projectType?: string;
 }
 
-export default function ProcurementModule({ projectId, projectName, brandId, projectType }: ProcurementModuleProps) {
+export default function ProcurementModule({ projectId, projectName, brandId, secondaryBrandId, brandNames, projectType }: ProcurementModuleProps) {
   return (
     <Tabs defaultValue="bidding" className="mt-4">
       <TabsList>
@@ -36,10 +38,10 @@ export default function ProcurementModule({ projectId, projectName, brandId, pro
         <VendorDeliveriesModule projectId={projectId} />
       </TabsContent>
       <TabsContent value="room-matrix">
-        <RoomMatrixModule projectId={projectId} brandId={brandId} />
+        <RoomMatrixModule projectId={projectId} brandId={brandId} secondaryBrandId={secondaryBrandId} brandNames={brandNames} />
       </TabsContent>
       <TabsContent value="takeoff">
-        <TakeoffModule projectId={projectId} projectName={projectName} brandId={brandId} />
+        <TakeoffModule projectId={projectId} projectName={projectName} brandId={brandId} secondaryBrandId={secondaryBrandId} />
       </TabsContent>
     </Tabs>
   );

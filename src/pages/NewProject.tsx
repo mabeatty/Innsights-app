@@ -25,6 +25,7 @@ export default function NewProject() {
   const navigate = useNavigate();
   const [projectName, setProjectName] = useState("");
   const [brandId, setBrandId] = useState("");
+  const [secondaryBrandId, setSecondaryBrandId] = useState<string>("");
   const [projectType, setProjectType] = useState<ProjectType | "">("");
   const [status, setStatus] = useState("");
   const [brands, setBrands] = useState<Brand[]>([]);
@@ -56,7 +57,7 @@ export default function NewProject() {
     try {
       const { data: project, error } = await supabase
         .from("projects")
-        .insert({ name: projectName, hotel_name: projectName, brand_id: brandId, user_id: user.id, project_type: projectType, organization_id: orgMember.organization_id })
+        .insert({ name: projectName, hotel_name: projectName, brand_id: brandId, secondary_brand_id: secondaryBrandId || null, user_id: user.id, project_type: projectType, organization_id: orgMember.organization_id })
         .select()
         .single();
       if (error || !project) throw error;
@@ -97,6 +98,21 @@ export default function NewProject() {
             </SelectTrigger>
             <SelectContent>
               {brands.map((b) => (
+                <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1.5">
+          <Label>Secondary Brand (optional)</Label>
+          <p className="text-xs text-muted-foreground -mt-1">For dual-brand projects with two separate room blocks.</p>
+          <Select value={secondaryBrandId || "__none__"} onValueChange={(v) => setSecondaryBrandId(v === "__none__" ? "" : v)}>
+            <SelectTrigger>
+              <SelectValue placeholder="None" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">None — single brand</SelectItem>
+              {brands.filter((b) => b.id !== brandId).map((b) => (
                 <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
               ))}
             </SelectContent>
