@@ -40,6 +40,11 @@ interface DetectedRisk {
   title: string;
   description: string;
   related_entity: string | null;
+  // Comparable severity metric so a later run can tell "still about the
+  // same" from "meaningfully worse" for a manually-resolved risk — overrun
+  // percent (0-100) for Budget, days late for Schedule. null for
+  // Compliance/Report (no natural single number to compare).
+  metric: number | null;
 }
 
 Deno.serve(async (req) => {
@@ -66,7 +71,7 @@ Deno.serve(async (req) => {
       projectIds = (allProjects ?? []).map((p: any) => p.id);
     }
 
-    const results: Record<string, { detected: number; resolved: number }> = {};
+    const results: Record<string, { detected: number; resolved: number; reopened: number }> = {};
 
     for (const projectId of projectIds) {
       const detected: DetectedRisk[] = [];
@@ -93,6 +98,7 @@ Deno.serve(async (req) => {
             title: `${b.division_name} (Division ${b.division_number}) is ${fmt(overrunAmt)} over budget`,
             description: `Transactions to date total ${fmt(actual)} against a scheduled value of ${fmt(scheduled)} — ${(overrunPct * 100).toFixed(0)}% over.`,
             related_entity: `division:${b.division_number}`,
+            metric: overrunPct * 100,
           });
         }
       }
@@ -112,6 +118,7 @@ Deno.serve(async (req) => {
             title: `"${t.task_name}" is ${daysLate} day${daysLate === 1 ? "" : "s"} past its scheduled end date`,
             description: `Scheduled to finish ${t.end_date}, still marked "${t.status}".${t.is_critical ? " This task is on the critical path." : ""}`,
             related_entity: `task:${t.id}`,
+            metric: daysLate,
           });
         }
       }
@@ -141,41 +148,87 @@ Deno.serve(async (req) => {
               title: `Weekly report (${report?.date_range_start ?? "recent"}) flagged a risk`,
               description: riskLine.replace(/^Risks flagged:\s*/i, ""),
               related_entity: `report:${a.report_id}`,
+              metric: null,
             });
           }
         }
       }
 
-      // ── Reconcile against existing open risks ──
-      const { data: existingOpen } = await supabase
+      // ── Reconcile against existing risks ──
+      // Active (open/acknowledged) risks: matched and refreshed as before, or
+      // newly inserted. No longer detected -> auto-resolved.
+      const { data: existingActive } = await supabase
         .from("project_risks")
         .select("id, related_entity, risk_type")
         .eq("project_id", projectId)
-        .eq("status", "open");
+        .in("status", ["open", "acknowledged"]);
+
+      // Manually-resolved risks: the person deliberately dismissed these.
+      // Only reopen if the situation got meaningfully worse than it was at
+      // the moment they resolved it — otherwise leave them alone entirely,
+      // including not touching last_confirmed_at, so a resolved risk stays
+      // quietly resolved rather than showing churn.
+      const { data: manuallyResolved } = await supabase
+        .from("project_risks")
+        .select("id, related_entity, risk_type, resolved_metric")
+        .eq("project_id", projectId)
+        .eq("status", "resolved")
+        .eq("resolution_type", "manual");
+
+      // "Meaningfully worse" thresholds — deliberately simple, tunable
+      // constants rather than a fraction of the original value, so a risk
+      // resolved at a small metric doesn't get reopened by a tiny absolute
+      // change: +10 percentage points of budget overrun, or +7 more days late.
+      const isMeaningfullyWorse = (riskType: DetectedRisk["risk_type"], oldMetric: number | null, newMetric: number | null) => {
+        if (oldMetric == null || newMetric == null) return false;
+        if (riskType === "Budget") return newMetric - oldMetric >= 10;
+        if (riskType === "Schedule") return newMetric - oldMetric >= 7;
+        return false;
+      };
 
       const stillPresentIds = new Set<string>();
+      const reopenedIds = new Set<string>();
       let insertedCount = 0;
+
       for (const d of detected) {
-        const match = (existingOpen ?? []).find((e: any) => e.related_entity === d.related_entity && e.risk_type === d.risk_type);
-        if (match) {
-          stillPresentIds.add(match.id);
+        const activeMatch = (existingActive ?? []).find((e: any) => e.related_entity === d.related_entity && e.risk_type === d.risk_type);
+        if (activeMatch) {
+          stillPresentIds.add(activeMatch.id);
           await supabase.from("project_risks").update({
-            title: d.title, description: d.description, severity: d.severity, last_confirmed_at: new Date().toISOString(),
-          }).eq("id", match.id);
-        } else {
-          await supabase.from("project_risks").insert({
-            project_id: projectId, risk_type: d.risk_type, severity: d.severity,
-            title: d.title, description: d.description, related_entity: d.related_entity,
-          });
-          insertedCount++;
+            title: d.title, description: d.description, severity: d.severity, last_confirmed_at: new Date().toISOString(), current_metric: d.metric,
+          }).eq("id", activeMatch.id);
+          continue;
         }
-      }
-      const toResolve = (existingOpen ?? []).filter((e: any) => !stillPresentIds.has(e.id));
-      for (const r of toResolve) {
-        await supabase.from("project_risks").update({ status: "resolved", resolved_at: new Date().toISOString() }).eq("id", r.id);
+
+        const resolvedMatch = (manuallyResolved ?? []).find((e: any) => e.related_entity === d.related_entity && e.risk_type === d.risk_type);
+        if (resolvedMatch) {
+          if (isMeaningfullyWorse(d.risk_type, resolvedMatch.resolved_metric, d.metric)) {
+            reopenedIds.add(resolvedMatch.id);
+            await supabase.from("project_risks").update({
+              status: "open", title: d.title, description: d.description, severity: d.severity,
+              last_confirmed_at: new Date().toISOString(), resolved_at: null, resolution_type: null, resolved_metric: null, resolved_by: null,
+              current_metric: d.metric,
+            }).eq("id", resolvedMatch.id);
+          }
+          // Not meaningfully worse — leave the manual resolution alone entirely.
+          continue;
+        }
+
+        await supabase.from("project_risks").insert({
+          project_id: projectId, risk_type: d.risk_type, severity: d.severity,
+          title: d.title, description: d.description, related_entity: d.related_entity, current_metric: d.metric,
+        });
+        insertedCount++;
       }
 
-      results[projectId] = { detected: insertedCount, resolved: toResolve.length };
+      const toAutoResolve = (existingActive ?? []).filter((e: any) => !stillPresentIds.has(e.id));
+      for (const r of toAutoResolve) {
+        await supabase.from("project_risks").update({
+          status: "resolved", resolved_at: new Date().toISOString(), resolution_type: "auto",
+        }).eq("id", r.id);
+      }
+
+      results[projectId] = { detected: insertedCount, resolved: toAutoResolve.length, reopened: reopenedIds.size };
     }
 
     return json({ ok: true, results });

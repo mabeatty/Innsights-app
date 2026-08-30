@@ -2,9 +2,13 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { AlertTriangle, CheckCircle2, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { AlertTriangle, CheckCircle2, RotateCcw, ChevronDown, ChevronUp, History } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 interface Risk {
   id: string;
@@ -15,6 +19,9 @@ interface Risk {
   status: "open" | "acknowledged" | "resolved";
   first_detected_at: string;
   last_confirmed_at: string;
+  resolved_at: string | null;
+  resolution_type: "auto" | "manual" | null;
+  current_metric: number | null;
 }
 
 interface Props {
@@ -39,8 +46,8 @@ const typeIcon = (t: Risk["risk_type"]) => (t === "Budget" ? "$" : t === "Schedu
 export default function ProjectRisksCard({ projectId }: Props) {
   const [risks, setRisks] = useState<Risk[]>([]);
   const [loading, setLoading] = useState(true);
-  const [showResolved, setShowResolved] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -68,8 +75,25 @@ export default function ProjectRisksCard({ projectId }: Props) {
     else load();
   };
 
+  // Manual resolve: snapshots the risk's current metric so a later automated
+  // detection run can tell whether the situation has gotten meaningfully
+  // worse (and should be reopened) or is basically unchanged (and should
+  // stay quietly resolved). See detect-project-risks' isMeaningfullyWorse.
+  const resolve = async (r: Risk) => {
+    const { error } = await supabase.from("project_risks").update({
+      status: "resolved",
+      resolved_at: new Date().toISOString(),
+      resolution_type: "manual",
+      resolved_metric: r.current_metric,
+    }).eq("id", r.id);
+    if (error) toast.error("Failed to resolve.");
+    else { toast.success("Risk resolved."); load(); }
+  };
+
   const reopen = async (id: string) => {
-    const { error } = await supabase.from("project_risks").update({ status: "open" }).eq("id", id);
+    const { error } = await supabase.from("project_risks").update({
+      status: "open", resolved_at: null, resolution_type: null, resolved_metric: null,
+    }).eq("id", id);
     if (error) toast.error("Failed to update.");
     else load();
   };
@@ -120,36 +144,82 @@ export default function ProjectRisksCard({ projectId }: Props) {
                       Ack
                     </Button>
                   )}
+                  <Button variant="ghost" size="sm" className="h-5 px-1 text-[10px]" title="Mark resolved" onClick={() => resolve(r)}>
+                    Resolve
+                  </Button>
                 </div>
               </div>
             ))}
 
             {resolvedRisks.length > 0 && (
-              <div className="pt-1">
-                <button className="text-[11px] text-muted-foreground hover:underline" onClick={() => setShowResolved((s) => !s)}>
-                  {showResolved ? "Hide" : "Show"} {resolvedRisks.length} resolved risk{resolvedRisks.length === 1 ? "" : "s"}
-                </button>
-                {showResolved && (
-                  <div className="space-y-1 mt-1.5">
-                    {resolvedRisks.map((r) => (
-                      <div key={r.id} className="rounded-md border border-dashed px-2 py-1.5 flex items-center justify-between gap-2 opacity-70">
-                        <p className="text-[11px]">{r.title}</p>
-                        <Button variant="ghost" size="icon" className="h-5 w-5" title="Reopen" onClick={() => reopen(r.id)}>
-                          <RotateCcw className="h-2.5 w-2.5" />
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <button className="text-[11px] text-muted-foreground hover:underline pt-1" onClick={() => setHistoryOpen(true)}>
+                {resolvedRisks.length} resolved risk{resolvedRisks.length === 1 ? "" : "s"} — view history
+              </button>
             )}
 
-            <p className="text-[10px] text-muted-foreground pt-0.5">
-              Automatically detected from budget, schedule, and extracted weekly reports — refreshed nightly and whenever a new report is processed.
-            </p>
+            <div className="flex items-center justify-between pt-0.5">
+              <p className="text-[10px] text-muted-foreground">
+                Automatically detected from budget, schedule, and extracted weekly reports — refreshed nightly and whenever a new report is processed.
+              </p>
+              <Button variant="ghost" size="sm" className="h-5 px-1.5 text-[10px] gap-1 shrink-0" onClick={() => setHistoryOpen(true)}>
+                <History className="h-3 w-3" /> History
+              </Button>
+            </div>
           </div>
         )}
       </CardContent>
+
+      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Risk History</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {risks.length === 0 && <p className="text-sm text-muted-foreground">No risks recorded for this project yet.</p>}
+            {risks
+              .slice()
+              .sort((a, b) => new Date(b.first_detected_at).getTime() - new Date(a.first_detected_at).getTime())
+              .map((r) => (
+                <div key={r.id} className="rounded-md border p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium leading-snug">{r.title}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{r.description}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={cn("inline-block rounded-full px-2 py-0.5 text-[10px] font-medium", severityClass(r.severity))}>{r.severity}</span>
+                      <span className={cn(
+                        "inline-block rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        r.status === "resolved" ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                          : r.status === "acknowledged" ? "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+                          : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                      )}>
+                        {r.status}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between mt-2 pt-2 border-t">
+                    <p className="text-[11px] text-muted-foreground">
+                      Detected {format(new Date(r.first_detected_at), "MMM d, yyyy")}
+                      {r.status === "resolved" && r.resolved_at && (
+                        <> · Resolved {format(new Date(r.resolved_at), "MMM d, yyyy")} ({r.resolution_type === "manual" ? "manually" : "automatically"})</>
+                      )}
+                      {r.status !== "resolved" && <> · Last confirmed {format(new Date(r.last_confirmed_at), "MMM d, yyyy")}</>}
+                    </p>
+                    {r.status === "resolved" && (
+                      <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1" onClick={() => reopen(r.id)}>
+                        <RotateCcw className="h-3 w-3" /> Reopen
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHistoryOpen(false)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Card>
   );
 }
