@@ -16,23 +16,13 @@ import { toast } from "sonner";
 import { useCriticalPath } from "./useCriticalPath";
 import GanttUploadDialog from "./GanttUploadDialog";
 import CriticalPathGantt from "./CriticalPathGantt";
-import { TASK_STATUSES, type CriticalPathTask, type TaskStatus } from "./criticalPathTypes";
+import type { CriticalPathTask } from "./criticalPathTypes";
 
 interface Props {
   projectId: string;
 }
 
 const fmtDate = (d: string | null) => (d ? format(new Date(`${d}T00:00:00`), "MM/dd/yy") : "—");
-
-const statusPillClasses = (status: TaskStatus) =>
-  cn(
-    "inline-block rounded-full px-2 py-0.5 text-xs font-medium",
-    status === "Not Started" && "bg-muted text-muted-foreground",
-    status === "In Progress" && "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-    status === "Complete" && "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-    status === "At Risk" && "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-    status === "Delayed" && "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  );
 
 export default function CriticalPathModule({ projectId }: Props) {
   const { tasks, uploads, loading, addTask, updateTask, deleteTask, shiftTask, refetch } = useCriticalPath(projectId);
@@ -55,7 +45,6 @@ export default function CriticalPathModule({ projectId }: Props) {
   const [formEnd, setFormEnd] = useState("");
   const [formDuration, setFormDuration] = useState<number | "">("");
   const [formCritical, setFormCritical] = useState(true);
-  const [formStatus, setFormStatus] = useState<TaskStatus>("Not Started");
   const [formPredecessorId, setFormPredecessorId] = useState<string>("");
   const [formNotes, setFormNotes] = useState("");
 
@@ -68,7 +57,6 @@ export default function CriticalPathModule({ projectId }: Props) {
     setFormEnd("");
     setFormDuration("");
     setFormCritical(true);
-    setFormStatus("Not Started");
     setFormPredecessorId("");
     setFormNotes("");
   };
@@ -87,7 +75,6 @@ export default function CriticalPathModule({ projectId }: Props) {
     setFormEnd(t.end_date ?? "");
     setFormDuration(t.duration_days ?? "");
     setFormCritical(t.is_critical);
-    setFormStatus(t.status);
     setFormPredecessorId(t.predecessor_task_id ?? "");
     setFormNotes(t.notes ?? "");
     setDialogOpen(true);
@@ -107,7 +94,6 @@ export default function CriticalPathModule({ projectId }: Props) {
       end_date: formEnd || null,
       duration_days: formDuration === "" ? null : Number(formDuration),
       is_critical: formCritical,
-      status: formStatus,
       predecessor_task_id: formPredecessorId || null,
       notes: formNotes.trim() || null,
     };
@@ -201,17 +187,16 @@ export default function CriticalPathModule({ projectId }: Props) {
               <th className="px-3 py-2 text-left font-medium">End</th>
               <th className="px-3 py-2 text-right font-medium">Duration</th>
               <th className="px-3 py-2 text-center font-medium">Critical</th>
-              <th className="px-3 py-2 text-left font-medium">Status</th>
               <th className="px-3 py-2"></th>
             </tr>
           </thead>
           <tbody>
             {loading && (
-              <tr><td colSpan={8} className="px-3 py-6 text-center text-muted-foreground">Loading…</td></tr>
+              <tr><td colSpan={7} className="px-3 py-6 text-center text-muted-foreground">Loading…</td></tr>
             )}
             {!loading && tasks.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-3 py-8 text-center text-muted-foreground">
+                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
                   No critical path tasks yet. Upload the contractor's Gantt chart to get started.
                 </td>
               </tr>
@@ -230,7 +215,6 @@ export default function CriticalPathModule({ projectId }: Props) {
                   <td className="px-3 py-2 text-center">
                     {t.is_critical && <span className="inline-block h-2 w-2 rounded-full bg-red-500" title="On critical path" />}
                   </td>
-                  <td className="px-3 py-2"><span className={statusPillClasses(t.status)}>{t.status}</span></td>
                   <td className="px-3 py-2">
                     <div className="flex items-center gap-1 justify-end">
                       <Button variant="ghost" size="icon" className="h-7 w-7" title="Shift dates" onClick={() => openShiftDialog(t)}>
@@ -273,15 +257,6 @@ export default function CriticalPathModule({ projectId }: Props) {
             <div className="space-y-1.5">
               <Label>Trade</Label>
               <Input value={formTrade} onChange={(e) => setFormTrade(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Status</Label>
-              <Select value={formStatus} onValueChange={(v) => setFormStatus(v as TaskStatus)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {TASK_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-                </SelectContent>
-              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Start Date</Label>

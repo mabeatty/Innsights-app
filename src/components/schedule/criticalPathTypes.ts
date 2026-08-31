@@ -88,13 +88,18 @@ export function buildWorkflowColorMap(tasks: { workflow_group: string | null }[]
   return map;
 }
 
+// Neutral fallback for tasks with no workflow_group (e.g. manually-entered
+// tasks, or a schedule with no real section/summary structure to extract).
+// Previously fell back to a status-based color, but status is no longer
+// shown or set anywhere in the Schedule tab UI — colors here should depend
+// only on what's actually visible and editable on this screen.
+const UNGROUPED_COLOR = "hsl(215 16% 47%)";
+
 /**
  * The actual bar FILL color for one task: always a shade of its
  * workflow_group's hue if it has one (varied by task index within the group
- * so sub-tasks are distinguishable but obviously related), otherwise falls
- * back to the original status-based color for ungrouped tasks (e.g.
- * manually-entered tasks with no workflow_group set, or schedules with no
- * real grouping structure to extract).
+ * so sub-tasks are distinguishable but obviously related), otherwise a
+ * single neutral color for ungrouped tasks.
  *
  * is_critical is not used for coloring at all. This Gantt only ever shows
  * a project's critical path (per how the feature is scoped) — every task on
@@ -104,12 +109,12 @@ export function buildWorkflowColorMap(tasks: { workflow_group: string | null }[]
  * others in a way that isn't meaningful here. There is nothing to elevate.
  */
 export function workflowTaskColor(
-  task: { workflow_group: string | null; status: TaskStatus },
+  task: { workflow_group: string | null },
   indexWithinGroup: number,
   groupColorMap: Map<string, string>,
 ): string {
   const baseColor = task.workflow_group ? groupColorMap.get(task.workflow_group) : null;
-  if (!baseColor) return TASK_STATUS_COLORS[task.status] || TASK_STATUS_COLORS["Not Started"];
+  if (!baseColor) return UNGROUPED_COLOR;
   const hueMatch = baseColor.match(/hsl\((\d+)/);
   const hue = hueMatch ? Number(hueMatch[1]) : 217;
   // Alternate lightness within a group (65/50/40/58...) so 4-5 sub-tasks in

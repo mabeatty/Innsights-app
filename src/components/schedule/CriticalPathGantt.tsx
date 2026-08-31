@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import {
   Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { TASK_STATUS_COLORS, buildWorkflowColorMap, workflowTaskColor, type CriticalPathTask } from "./criticalPathTypes";
+import { buildWorkflowColorMap, workflowTaskColor, type CriticalPathTask } from "./criticalPathTypes";
 
 interface Props {
   tasks: CriticalPathTask[];
@@ -240,7 +240,6 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
                           <TooltipContent side="top" className="text-xs space-y-0.5">
                             <p className="font-semibold">{t.task_name}</p>
                             <p>{format(new Date(`${t.start_date}T00:00:00`), "MMM d, yyyy")} – {format(new Date(`${t.end_date}T00:00:00`), "MMM d, yyyy")}</p>
-                            <p>Status: {t.status}</p>
                             {t.workflow_group && <p>Workflow: {t.workflow_group}</p>}
                             {t.trade && <p>Trade: {t.trade}</p>}
                           </TooltipContent>
@@ -276,12 +275,6 @@ export default function CriticalPathGantt({ tasks, onTaskClick }: Props) {
         {Array.from(groupColorMap.entries()).map(([group, color]) => (
           <span key={group} className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: color }} /> {group}</span>
         ))}
-        {groupColorMap.size === 0 && (
-          <>
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLORS["In Progress"] }} /> In progress</span>
-            <span className="flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: TASK_STATUS_COLORS["Complete"] }} /> Complete</span>
-          </>
-        )}
         <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 bg-destructive" /> Today</span>
         <span className="flex items-center gap-1"><span className="inline-block h-0.5 w-3 border-t border-dashed border-muted-foreground" /> Dependency</span>
       </div>
