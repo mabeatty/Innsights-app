@@ -1,9 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -12,8 +13,9 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
 import {
-  Plus, Pencil, Trash2, MessageSquare, Send,
+  Plus, Pencil, Trash2, MessageSquare, Send, FileText,
   Download, X, ExternalLink, Link2, Loader2, Sparkles, AlertTriangle,
+  ChevronDown, ChevronRight, ChevronUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -59,7 +61,8 @@ export default function OACMeetingsTab({ projectId, projectName, canEdit }: Prop
   const { user } = useAuth();
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
-  const [commentsDialogMeeting, setCommentsDialogMeeting] = useState<Meeting | null>(null);
+  const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  const [expandedId, setExpandedId] = useState<string | null>(null);
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -292,24 +295,41 @@ export default function OACMeetingsTab({ projectId, projectName, canEdit }: Prop
     if (error) { toast.error("Failed to post comment."); return; }
     setCommentDrafts((prev) => { const next = new Map(prev); next.set(meetingId, ""); return next; });
     await load();
-    setMeetings((prev) => {
-      const updated = prev.find((m) => m.id === meetingId);
-      if (updated) setCommentsDialogMeeting(updated);
-      return prev;
+  };
+
+  // Group meetings by month, most-recent-first (meetings already sorted
+  // that way) — matches Weekly Reports' monthly rollup exactly.
+  const monthGroups = useMemo(() => {
+    const groups = new Map<string, { label: string; meetings: Meeting[] }>();
+    for (const m of meetings) {
+      const d = new Date(m.meeting_date + "T00:00:00");
+      const key = format(d, "yyyy-MM");
+      const label = format(d, "MMMM yyyy");
+      if (!groups.has(key)) groups.set(key, { label, meetings: [] });
+      groups.get(key)!.meetings.push(m);
+    }
+    return Array.from(groups.entries()).map(([key, v]) => ({ key, ...v }));
+  }, [meetings]);
+
+  // Default to the most recent month expanded once meetings first load.
+  useEffect(() => {
+    if (monthGroups.length > 0 && expandedMonths.size === 0) {
+      setExpandedMonths(new Set([monthGroups[0].key]));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [monthGroups.length]);
+
+  const toggleMonth = (key: string) => {
+    setExpandedMonths((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
     });
   };
 
-  if (loading) return <p className="text-sm text-muted-foreground py-4">Loading OAC meetings…</p>;
+  const toggleExpand = (id: string) => setExpandedId((prev) => (prev === id ? null : id));
 
-  // Group by month — a per-meeting dropdown doesn't earn its keep when each
-  // entry is usually just one PDF; month headers give the same at-a-glance
-  // organization without a click-to-expand step on every single row.
-  const monthGroups = new Map<string, Meeting[]>();
-  for (const m of meetings) {
-    const key = format(new Date(`${m.meeting_date}T00:00:00`), "MMMM yyyy");
-    if (!monthGroups.has(key)) monthGroups.set(key, []);
-    monthGroups.get(key)!.push(m);
-  }
+  if (loading) return <p className="text-sm text-muted-foreground py-4">Loading OAC meetings…</p>;
 
   return (
     <div className="space-y-4 pt-2">
@@ -325,75 +345,134 @@ export default function OACMeetingsTab({ projectId, projectName, canEdit }: Prop
         )}
       </div>
 
-      {meetings.length === 0 && (
-        <p className="text-sm text-muted-foreground py-8 text-center border rounded-lg">No OAC meetings recorded yet.</p>
-      )}
+      {meetings.length === 0 ? (
+        <div className="text-center py-16 text-muted-foreground">
+          <FileText className="h-10 w-10 mx-auto mb-3 opacity-40" />
+          <p className="text-sm">No OAC meetings yet.</p>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {monthGroups.map((group) => {
+            const monthOpen = expandedMonths.has(group.key);
+            return (
+              <div key={group.key} className="border rounded-lg bg-card overflow-hidden">
+                <div
+                  className="flex items-center gap-2 px-4 py-2.5 cursor-pointer hover:bg-muted/50 transition-colors"
+                  onClick={() => toggleMonth(group.key)}
+                >
+                  {monthOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />}
+                  <p className="text-sm font-semibold flex-1">{group.label}</p>
+                  <Badge variant="secondary" className="shrink-0">{group.meetings.length}</Badge>
+                </div>
 
-      <div className="space-y-5">
-        {Array.from(monthGroups.entries()).map(([month, monthMeetings]) => (
-          <div key={month}>
-            <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1.5">{month}</h3>
-            <div className="border rounded-lg divide-y overflow-hidden">
-              {monthMeetings.map((m) => {
-                const primaryAtt = m.attachments[0];
-                const extraAttCount = m.attachments.length - 1;
-                return (
-                  <div key={m.id} className="flex items-center justify-between gap-2 px-4 py-2.5 hover:bg-muted/20">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-sm font-medium whitespace-nowrap w-16 shrink-0">{format(new Date(`${m.meeting_date}T00:00:00`), "MMM d")}</span>
-                      {m.title && <span className="text-sm text-muted-foreground truncate">{m.title}</span>}
-                      {primaryAtt ? (
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <Button size="sm" variant="link" className="h-auto py-0 px-0 gap-1 shrink-0 text-xs" onClick={() => downloadAttachment(primaryAtt)}>
-                            {primaryAtt.drive_url ? <ExternalLink className="h-3 w-3" /> : <Download className="h-3 w-3" />}
-                            <span className="truncate max-w-[220px]">{primaryAtt.file_name}</span>
-                          </Button>
-                          {extraAttCount > 0 && <span className="text-xs text-muted-foreground">+{extraAttCount} more</span>}
-                          {primaryAtt.extraction_status === "done" ? (
-                            <Button size="sm" variant="link" className="h-auto py-0 px-1 gap-1 shrink-0 text-xs text-primary" onClick={() => setSummaryDialogAtt(primaryAtt)}>
-                              <Sparkles className="h-3 w-3" /> Summary
+                {monthOpen && (
+                  <div className="border-t divide-y">
+                    {group.meetings.map((m) => {
+                      const comments = commentsByMeeting.get(m.id) ?? [];
+                      return (
+                        <div key={m.id}>
+                          <div className="flex items-center gap-2 pl-9 pr-3 py-1.5 hover:bg-muted/30 transition-colors">
+                            <p className="text-sm flex-1 min-w-0 truncate">
+                              {format(new Date(`${m.meeting_date}T00:00:00`), "MMM d, yyyy")}{m.title ? ` — ${m.title}` : ""}
+                            </p>
+
+                            {m.attachments.length === 0 && (
+                              <span className="text-xs text-muted-foreground shrink-0">No file</span>
+                            )}
+                            {m.attachments.map((att) => (
+                              <div key={att.id} className="flex items-center gap-1 shrink-0">
+                                <Button
+                                  size="sm" variant="link" className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
+                                  onClick={() => downloadAttachment(att)}
+                                >
+                                  {att.drive_url ? <ExternalLink className="h-3 w-3" /> : <Download className="h-3 w-3" />}
+                                  View Recap
+                                </Button>
+                                {att.extraction_status === "done" ? (
+                                  <Button
+                                    size="sm" variant="link" className="h-auto py-0 px-1 gap-1 shrink-0 text-xs text-primary"
+                                    title="View extracted summary" onClick={() => setSummaryDialogAtt(att)}
+                                  >
+                                    <Sparkles className="h-3 w-3" /> Summary
+                                  </Button>
+                                ) : att.extraction_status === "unsupported" ? (
+                                  <span className="text-xs text-muted-foreground flex items-center gap-1" title={att.extraction_error ?? undefined}>
+                                    <AlertTriangle className="h-3 w-3" /> Can't extract
+                                  </span>
+                                ) : (
+                                  <Button
+                                    size="sm" variant="link" className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
+                                    title={att.extraction_status === "failed" ? `Extraction failed: ${att.extraction_error ?? ""} — click to retry` : "Extract content for the AI assistant"}
+                                    disabled={extractingIds.has(att.id)} onClick={() => extractAttachment(att)}
+                                  >
+                                    {extractingIds.has(att.id) ? (
+                                      <><Loader2 className="h-3 w-3 animate-spin" /> Extracting…</>
+                                    ) : att.extraction_status === "failed" ? (
+                                      <><AlertTriangle className="h-3 w-3 text-destructive" /> Retry Extract</>
+                                    ) : (
+                                      <><Sparkles className="h-3 w-3" /> Extract</>
+                                    )}
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+
+                            {m.comment_count > 0 && (
+                              <Badge variant="secondary" className="gap-1 shrink-0 h-5 text-xs">
+                                <MessageSquare className="h-2.5 w-2.5" /> {m.comment_count}
+                              </Badge>
+                            )}
+                            {canEdit && (
+                              <div className="flex gap-0.5 shrink-0">
+                                <Button size="icon" variant="ghost" className="h-6 w-6" title="Edit" onClick={() => openEditDialog(m)}>
+                                  <Pencil className="h-3 w-3" />
+                                </Button>
+                                <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive" title="Delete" onClick={() => setDeleteMeeting(m)}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            )}
+                            <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" title="Expand" onClick={() => toggleExpand(m.id)}>
+                              {expandedId === m.id ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
                             </Button>
-                          ) : primaryAtt.extraction_status === "unsupported" ? (
-                            <span className="text-xs text-muted-foreground flex items-center gap-1 shrink-0" title={primaryAtt.extraction_error ?? undefined}>
-                              <AlertTriangle className="h-3 w-3" /> Can't extract
-                            </span>
-                          ) : (
-                            <Button
-                              size="sm" variant="link" className="h-auto py-0 px-1 gap-1 shrink-0 text-xs"
-                              disabled={extractingIds.has(primaryAtt.id)} onClick={() => extractAttachment(primaryAtt)}
-                              title={primaryAtt.extraction_status === "failed" ? `Extraction failed: ${primaryAtt.extraction_error ?? ""} — click to retry` : "Extract content for the AI assistant"}
-                            >
-                              {extractingIds.has(primaryAtt.id) ? <><Loader2 className="h-3 w-3 animate-spin" /> Extracting…</>
-                                : primaryAtt.extraction_status === "failed" ? <><AlertTriangle className="h-3 w-3 text-destructive" /> Retry</>
-                                : <><Sparkles className="h-3 w-3" /> Extract</>}
-                            </Button>
+                          </div>
+
+                          {expandedId === m.id && (
+                            <div className="border-t px-4 py-4 space-y-4 bg-muted/20">
+                              <div className="space-y-3">
+                                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Comments</p>
+                                {comments.length === 0 && <p className="text-xs text-muted-foreground">No comments yet.</p>}
+                                {comments.map((c) => (
+                                  <div key={c.id} className="text-sm space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-medium text-xs">{c.author_name}</span>
+                                      <span className="text-xs text-muted-foreground">{format(new Date(c.created_at), "MMM d, yyyy h:mm a")}</span>
+                                    </div>
+                                    <p className="text-sm text-foreground">{c.content}</p>
+                                  </div>
+                                ))}
+                                <div className="flex gap-2 pt-1">
+                                  <Input
+                                    value={commentDrafts.get(m.id) ?? ""}
+                                    onChange={(e) => setCommentDrafts((prev) => { const next = new Map(prev); next.set(m.id, e.target.value); return next; })}
+                                    placeholder="Add a comment…" className="h-8 text-sm"
+                                    onKeyDown={(e) => { if (e.key === "Enter") postComment(m.id); }}
+                                  />
+                                  <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => postComment(m.id)}><Send className="h-3.5 w-3.5" /></Button>
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">No file attached</span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-0.5 shrink-0">
-                      <Button
-                        variant="ghost" size="sm" className="h-7 px-1.5 gap-1 text-xs text-muted-foreground"
-                        title="Comments" onClick={() => setCommentsDialogMeeting(m)}
-                      >
-                        <MessageSquare className="h-3.5 w-3.5" /> {m.comment_count > 0 ? m.comment_count : ""}
-                      </Button>
-                      {canEdit && (
-                        <>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEditDialog(m)}><Pencil className="h-3.5 w-3.5" /></Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => setDeleteMeeting(m)}><Trash2 className="h-3.5 w-3.5" /></Button>
-                        </>
-                      )}
-                    </div>
+                      );
+                    })}
                   </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
@@ -468,45 +547,6 @@ export default function OACMeetingsTab({ projectId, projectName, canEdit }: Prop
           <p className="text-xs text-muted-foreground">This summary is what the AI project assistant sees for this meeting — not the full document text.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSummaryDialogAtt(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={!!commentsDialogMeeting} onOpenChange={(o) => !o && setCommentsDialogMeeting(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Comments — {commentsDialogMeeting && format(new Date(`${commentsDialogMeeting.meeting_date}T00:00:00`), "MMM d, yyyy")}
-              {commentsDialogMeeting?.title ? ` — ${commentsDialogMeeting.title}` : ""}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 max-h-80 overflow-y-auto">
-            {commentsDialogMeeting && (commentsByMeeting.get(commentsDialogMeeting.id) ?? []).length === 0 && (
-              <p className="text-sm text-muted-foreground">No comments yet.</p>
-            )}
-            {commentsDialogMeeting && (commentsByMeeting.get(commentsDialogMeeting.id) ?? []).map((c) => (
-              <div key={c.id} className="flex items-start gap-2 text-sm">
-                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
-                <div>
-                  <span className="font-medium">{c.author_name}</span>{" "}
-                  <span className="text-xs text-muted-foreground">{format(new Date(c.created_at), "MMM d, h:mm a")}</span>
-                  <p className="text-muted-foreground">{c.content}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-          {commentsDialogMeeting && (
-            <div className="flex items-center gap-2 pt-2 border-t">
-              <Input
-                placeholder="Add a comment…" className="h-8 text-sm"
-                value={commentDrafts.get(commentsDialogMeeting.id) ?? ""}
-                onChange={(e) => setCommentDrafts((prev) => { const next = new Map(prev); next.set(commentsDialogMeeting.id, e.target.value); return next; })}
-                onKeyDown={(e) => { if (e.key === "Enter") postComment(commentsDialogMeeting.id); }}
-              />
-              <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0" onClick={() => postComment(commentsDialogMeeting.id)}><Send className="h-3.5 w-3.5" /></Button>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCommentsDialogMeeting(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
