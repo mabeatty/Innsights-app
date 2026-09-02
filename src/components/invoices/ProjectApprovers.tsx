@@ -68,7 +68,56 @@ export function ProjectApprovers({ projectId }: Props) {
       // silently keep gating an approval — Treasury is no longer part of
       // the chain.
       await supabase.from("project_approvers").delete().eq("project_id", projectId).eq("role", "treasury");
-      toast.success("Invoice approvers saved.");
+
+      // Backfill: any invoice on this project that already exists with a
+      // still-pending approval row for a role that had no one assigned yet
+      // (approver_id null) needs to pick up the person just assigned —
+      // otherwise an invoice uploaded before a PM/Lead was assigned stays
+      // permanently unapprovable by anyone but an admin, since the
+      // approval-eligibility check compares against approver_id directly,
+      // not against project_approvers. Only touches rows still "Pending" —
+      // never overwrites a decision that's already been made.
+      const { data: projectInvoices } = await supabase
+        .from("invoices")
+        .select("id")
+        .eq("project_id", projectId);
+      const invoiceIds = (projectInvoices ?? []).map((i) => i.id);
+      let backfilledCount = 0;
+      const invoicesToPromote = new Set<string>();
+      if (invoiceIds.length > 0) {
+        for (const r of APPROVER_ROLES) {
+          const newApproverId = assignments[r.key] || null;
+          if (!newApproverId) continue;
+          const { data: updated, error: backfillErr } = await supabase
+            .from("invoice_approvals")
+            .update({ approver_id: newApproverId })
+            .in("invoice_id", invoiceIds)
+            .eq("approver_role", r.key)
+            .eq("status", "Pending")
+            .is("approver_id", null)
+            .select("id, invoice_id");
+          if (backfillErr) throw backfillErr;
+          backfilledCount += updated?.length ?? 0;
+          (updated ?? []).forEach((row: any) => invoicesToPromote.add(row.invoice_id));
+        }
+      }
+      // An invoice created before any approver was assigned is stamped
+      // "Pending Review" at upload and nothing else ever moves it forward —
+      // now that it has a real approver, promote it to "In Approval" so its
+      // status reflects reality instead of staying stuck.
+      if (invoicesToPromote.size > 0) {
+        await supabase
+          .from("invoices")
+          .update({ status: "In Approval" })
+          .in("id", Array.from(invoicesToPromote))
+          .eq("status", "Pending Review");
+      }
+
+      toast.success(
+        backfilledCount > 0
+          ? `Invoice approvers saved — ${backfilledCount} existing pending invoice${backfilledCount === 1 ? "" : "s"} updated to reflect the new assignment.`
+          : "Invoice approvers saved."
+      );
     } catch (e: any) {
       toast.error(e?.message || "Failed to save approvers.");
     } finally {
