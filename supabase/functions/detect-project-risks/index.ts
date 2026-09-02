@@ -154,6 +154,38 @@ Deno.serve(async (req) => {
         }
       }
 
+      // ── OAC meeting-flagged risk: same pattern as weekly reports above ──
+      const { data: meetings } = await supabase
+        .from("oac_meetings")
+        .select("id, meeting_date, title")
+        .eq("project_id", projectId)
+        .order("meeting_date", { ascending: false })
+        .limit(3);
+      const meetingIds = (meetings ?? []).map((m: any) => m.id);
+      if (meetingIds.length > 0) {
+        const { data: meetingAttachments } = await supabase
+          .from("oac_meeting_attachments")
+          .select("meeting_id, extracted_text, extraction_status")
+          .in("meeting_id", meetingIds)
+          .eq("extraction_status", "done");
+        for (const a of meetingAttachments ?? []) {
+          if (!a.extracted_text) continue;
+          const riskLine = a.extracted_text.split("\n").find((l: string) => l.toLowerCase().startsWith("risks flagged:"));
+          if (riskLine && !riskLine.toLowerCase().includes("risks flagged: none")) {
+            const meeting = (meetings ?? []).find((m: any) => m.id === a.meeting_id);
+            detected.push({
+              risk_type: "Report",
+              severity: "Medium",
+              title: `OAC meeting (${meeting?.meeting_date ?? "recent"}) flagged a risk`,
+              description: riskLine.replace(/^Risks flagged:\s*/i, ""),
+              related_entity: `oac_meeting:${a.meeting_id}`,
+              metric: null,
+            });
+          }
+        }
+      }
+
+
       // ── Reconcile against existing risks ──
       // Active (open/acknowledged) risks: matched and refreshed as before, or
       // newly inserted. No longer detected -> auto-resolved.

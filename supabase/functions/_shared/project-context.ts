@@ -115,6 +115,61 @@ export async function buildProjectContext(supabase: any, projectId: string): Pro
     parts.push("\nRECENT WEEKLY REPORTS:\n" + reportLines.join("\n"));
   }
 
+  // OAC Meetings: functionally parallel to weekly reports (see above) but a
+  // separate table/tab — recap PDFs (uploaded or Drive-linked), extracted
+  // and summarized (decisions, action items, open items, risks) the same
+  // way. Same caveat applies: only genuinely readable if extraction has run
+  // and succeeded for a given attachment.
+  const { data: meetings } = await supabase
+    .from("oac_meetings")
+    .select("id, meeting_date, title")
+    .eq("project_id", projectId)
+    .order("meeting_date", { ascending: false })
+    .limit(5);
+
+  if (meetings && meetings.length > 0) {
+    const meetingIds = meetings.map((m: any) => m.id);
+    const [{ data: oacAttachments }, { data: oacComments }] = await Promise.all([
+      supabase.from("oac_meeting_attachments").select("meeting_id, file_name, drive_url, extracted_text, extraction_status").in("meeting_id", meetingIds),
+      supabase.from("oac_meeting_comments").select("meeting_id, content, created_at").in("meeting_id", meetingIds).order("created_at", { ascending: true }),
+    ]);
+    const attByMeeting = new Map<string, any[]>();
+    (oacAttachments ?? []).forEach((a: any) => {
+      if (!attByMeeting.has(a.meeting_id)) attByMeeting.set(a.meeting_id, []);
+      attByMeeting.get(a.meeting_id)!.push(a);
+    });
+    const commentsByMeeting = new Map<string, any[]>();
+    (oacComments ?? []).forEach((c: any) => {
+      if (!commentsByMeeting.has(c.meeting_id)) commentsByMeeting.set(c.meeting_id, []);
+      commentsByMeeting.get(c.meeting_id)!.push(c);
+    });
+
+    const meetingLines = meetings.map((m: any) => {
+      const atts = attByMeeting.get(m.id) ?? [];
+      const cmts = commentsByMeeting.get(m.id) ?? [];
+      let line = `- ${m.meeting_date}${m.title ? ` [${m.title}]` : ""}`;
+      if (atts.length > 0) {
+        for (const a of atts) {
+          line += `\n  Attached: ${a.file_name || a.drive_url || "file"}`;
+          if (a.extraction_status === "done" && a.extracted_text) {
+            line += `\n  EXTRACTED CONTENT:\n${a.extracted_text.split("\n").map((l: string) => `    ${l}`).join("\n")}`;
+          } else if (a.extraction_status === "unsupported" || a.extraction_status === "failed") {
+            line += ` (content could not be extracted for this attachment)`;
+          } else {
+            line += ` (content not yet extracted — not readable here unless someone runs extraction on it)`;
+          }
+        }
+      } else {
+        line += `\n  No file attached.`;
+      }
+      if (cmts.length > 0) {
+        line += `\n  Comments:\n${cmts.map((c: any) => `    - ${c.content}`).join("\n")}`;
+      }
+      return line;
+    });
+    parts.push("\nRECENT OAC MEETINGS:\n" + meetingLines.join("\n"));
+  }
+
   // Critical path schedule: every task with its dates, status, and whether
   // it's on the critical path. Placed right after weekly reports since a
   // common question is cross-referencing reported field progress against

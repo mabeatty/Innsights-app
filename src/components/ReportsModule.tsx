@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { FileText, BotMessageSquare } from "lucide-react";
+import { FileText, BotMessageSquare, Users } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import WeeklyReportsTab from "@/components/reports/WeeklyReportsTab";
+import OACMeetingsTab from "@/components/reports/OACMeetingsTab";
 import ReportHistory from "@/components/reports/ReportHistory";
 import AutomatedReportingModule from "@/components/AutomatedReportingModule";
 
@@ -25,6 +26,9 @@ export default function ReportsModule({ projectId, projectName, entityName, bran
         <TabsTrigger value="weekly-reports" className="gap-1.5">
           <FileText className="h-3.5 w-3.5" /> Weekly Reports
         </TabsTrigger>
+        <TabsTrigger value="oac-meetings" className="gap-1.5">
+          <Users className="h-3.5 w-3.5" /> OAC Meetings
+        </TabsTrigger>
         <TabsTrigger value="automated-reporting" className="gap-1.5">
           <BotMessageSquare className="h-3.5 w-3.5" /> Automated Reporting
         </TabsTrigger>
@@ -33,6 +37,9 @@ export default function ReportsModule({ projectId, projectName, entityName, bran
       <TabsContent value="weekly-reports">
         <WeeklyReportsTab projectId={projectId} projectName={projectName} canEdit={canEdit} />
         <ReportHistory projectId={projectId} canEdit={canEdit} refreshTrigger={historyRefresh} />
+      </TabsContent>
+      <TabsContent value="oac-meetings">
+        <OACMeetingsTab projectId={projectId} projectName={projectName} canEdit={canEdit} />
       </TabsContent>
       <TabsContent value="automated-reporting">
         <AutomatedReportingModule

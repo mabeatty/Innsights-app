@@ -286,6 +286,27 @@ export type Database = {
         Update: { body?: string | null; created_at?: string; id?: string; invoice_id?: string | null; is_read?: boolean; link?: string | null; title?: string; type?: string; user_id?: string }
         Relationships: [{ foreignKeyName: "notifications_invoice_id_fkey"; columns: ["invoice_id"]; isOneToOne: false; referencedRelation: "invoices"; referencedColumns: ["id"] }]
       }
+      oac_meetings: {
+        Row: { created_at: string; created_by: string | null; id: string; meeting_date: string; project_id: string; title: string | null; updated_at: string }
+        Insert: { created_at?: string; created_by?: string | null; id?: string; meeting_date?: string; project_id: string; title?: string | null; updated_at?: string }
+        Update: { created_at?: string; created_by?: string | null; id?: string; meeting_date?: string; project_id?: string; title?: string | null; updated_at?: string }
+        Relationships: [{ foreignKeyName: "oac_meetings_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }]
+      }
+      oac_meeting_attachments: {
+        Row: { created_at: string; drive_file_id: string | null; drive_url: string | null; extracted_at: string | null; extracted_text: string | null; extraction_error: string | null; extraction_status: string; file_name: string; file_size: number; id: string; meeting_id: string; project_id: string; storage_path: string | null; uploaded_by: string }
+        Insert: { created_at?: string; drive_file_id?: string | null; drive_url?: string | null; extracted_at?: string | null; extracted_text?: string | null; extraction_error?: string | null; extraction_status?: string; file_name?: string; file_size?: number; id?: string; meeting_id: string; project_id: string; storage_path?: string | null; uploaded_by: string }
+        Update: { created_at?: string; drive_file_id?: string | null; drive_url?: string | null; extracted_at?: string | null; extracted_text?: string | null; extraction_error?: string | null; extraction_status?: string; file_name?: string; file_size?: number; id?: string; meeting_id?: string; project_id?: string; storage_path?: string | null; uploaded_by?: string }
+        Relationships: [
+          { foreignKeyName: "oac_meeting_attachments_meeting_id_fkey"; columns: ["meeting_id"]; isOneToOne: false; referencedRelation: "oac_meetings"; referencedColumns: ["id"] },
+          { foreignKeyName: "oac_meeting_attachments_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] },
+        ]
+      }
+      oac_meeting_comments: {
+        Row: { content: string; created_at: string; id: string; meeting_id: string; user_id: string }
+        Insert: { content: string; created_at?: string; id?: string; meeting_id: string; user_id: string }
+        Update: { content?: string; created_at?: string; id?: string; meeting_id?: string; user_id?: string }
+        Relationships: [{ foreignKeyName: "oac_meeting_comments_meeting_id_fkey"; columns: ["meeting_id"]; isOneToOne: false; referencedRelation: "oac_meetings"; referencedColumns: ["id"] }]
+      }
       organization_members: {
         Row: { access_level: string; created_at: string | null; expense_role: string | null; id: string; investment_access: boolean; organization_id: string | null; role: string | null; supervisor_id: string | null; user_id: string | null }
         Insert: { access_level?: string; created_at?: string | null; expense_role?: string | null; id?: string; investment_access?: boolean; organization_id?: string | null; role?: string | null; supervisor_id?: string | null; user_id?: string | null }

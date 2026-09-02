@@ -27,12 +27,13 @@ const SYSTEM_PROMPT_PREFIX =
   "items (permits, submittals, shop drawings, RFIs), bid items with vendor quotes and scope adjustments, any " +
   "bid leveling reports already generated, and executed contracts — use it to give specific, grounded answers " +
   "(real dollar amounts, vendor names, item names, division numbers, task names, dates) rather than generic " +
-  "advice. Weekly reports are conditional: each attached PDF may or may not have been text-extracted yet (someone " +
-  "has to trigger extraction per attachment, and it requires either a direct upload or, for Drive-linked files, " +
-  "Drive API credentials that may not be configured) — the context below tells you plainly, per attachment, " +
-  "whether extracted content is present. Only treat a report's contents as known if you see \"EXTRACTED CONTENT\" " +
-  "for it; otherwise say the report exists and is attached but its content isn't available to you yet, and " +
-  "suggest they extract it from the Weekly Reports tab or paste the relevant section. A common task is " +
+  "advice. Weekly reports and OAC meeting recaps are conditional: each attached PDF may or may not have been " +
+  "text-extracted yet (someone has to trigger extraction per attachment, and it requires either a direct " +
+  "upload or, for Drive-linked files, Drive API credentials that may not be configured) — the context below " +
+  "tells you plainly, per attachment, whether extracted content is present. Only treat a report or meeting's " +
+  "contents as known if you see \"EXTRACTED CONTENT\" for it; otherwise say the report/meeting exists and is " +
+  "attached but its content isn't available to you yet, and suggest they extract it from the relevant tab or " +
+  "paste the relevant section. A common task is " +
   "cross-referencing the schedule against other signals you do have — e.g. checking whether a critical path task " +
   "whose end date has passed is still marked incomplete, or whether an open permit/submittal/RFI could be " +
   "blocking an upcoming task, or comparing an extracted report's stated schedule status against the actual " +
