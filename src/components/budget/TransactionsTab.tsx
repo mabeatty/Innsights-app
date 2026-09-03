@@ -11,7 +11,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, ExternalLink, Link, ArrowUp, ArrowDown, ArrowUpDown, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronRight, ChevronDown, ExternalLink, Link, ArrowUp, ArrowDown, ArrowUpDown, Eye, CheckCircle2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -662,6 +662,15 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           </td>
           <td className="px-3 py-2" onClick={e => e.stopPropagation()}>
             {g.invoiceId ? (
+              g.invoiceStatus && g.invoiceStatus !== "Approved" && g.invoiceStatus !== "Rejected" ? (
+                <Button
+                  variant="outline" size="sm" className="h-7 gap-1 text-xs whitespace-nowrap"
+                  onClick={() => setSelectedInvoiceId(g.invoiceId!)}
+                  title="Review and approve this invoice"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Review & Approve
+                </Button>
+              ) : (
               <div className="grid grid-cols-3 gap-0" style={{ width: "84px" }}>
                 <div className="flex justify-center">
                   {g.documentUrl ? (
@@ -677,6 +686,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                 </div>
                 <span className="inline-block w-7 h-7" />
               </div>
+              )
             ) : readOnly ? (
               <div className="grid grid-cols-3 gap-0" style={{ width: "84px" }}>
                 <div className="flex justify-center">
