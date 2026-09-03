@@ -77,26 +77,32 @@ export function ProjectApprovers({ projectId }: Props) {
       // approval-eligibility check compares against approver_id directly,
       // not against project_approvers. Only touches rows still "Pending" —
       // never overwrites a decision that's already been made.
-      const { data: projectInvoices } = await supabase
+      const { data: projectInvoices, error: invErr } = await supabase
         .from("invoices")
         .select("id")
         .eq("project_id", projectId);
+      if (invErr) console.error("[ProjectApprovers backfill] failed to fetch project invoices:", invErr);
       const invoiceIds = (projectInvoices ?? []).map((i) => i.id);
       let backfilledCount = 0;
       const invoicesToPromote = new Set<string>();
       if (invoiceIds.length > 0) {
-        for (const r of APPROVER_ROLES) {
-          const newApproverId = assignments[r.key] || null;
+        for (const r of rows) {
+          const newApproverId = r.approver_id;
           if (!newApproverId) continue;
           const { data: updated, error: backfillErr } = await supabase
             .from("invoice_approvals")
             .update({ approver_id: newApproverId })
             .in("invoice_id", invoiceIds)
-            .eq("approver_role", r.key)
+            .eq("approver_role", r.role)
             .eq("status", "Pending")
             .is("approver_id", null)
             .select("id, invoice_id");
-          if (backfillErr) throw backfillErr;
+          if (backfillErr) {
+            console.error(`[ProjectApprovers backfill] failed for role ${r.role}:`, backfillErr);
+            toast.error(`Approvers saved, but backfilling existing invoices failed: ${backfillErr.message}`);
+            continue;
+          }
+          console.log(`[ProjectApprovers backfill] role ${r.role}: matched ${updated?.length ?? 0} row(s)`, updated);
           backfilledCount += updated?.length ?? 0;
           (updated ?? []).forEach((row: any) => invoicesToPromote.add(row.invoice_id));
         }
