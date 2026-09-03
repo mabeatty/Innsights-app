@@ -16,6 +16,7 @@ import {
   statusBadgeClasses, formatCurrency,
 } from "./types";
 import LienWaiverPanel from "./LienWaiverPanel";
+import PdfPreview from "./PdfPreview";
 
 interface Comment { id: string; author_name: string | null; body: string; created_at: string; author_id: string | null }
 
@@ -188,7 +189,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
 
   return (
     <Dialog open={!!invoiceId} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-6xl w-[95vw] max-h-[92vh] p-0 overflow-hidden">
+      <DialogContent className="max-w-7xl w-[97vw] max-h-[92vh] p-0 overflow-hidden">
         <DialogHeader className="px-5 pt-4 pb-2 border-b">
           <DialogTitle className="flex items-center gap-3">
             <span>{invoice?.vendor_name || "Invoice"}</span>
@@ -202,7 +203,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
             {/* Left: PDF preview */}
             <div className="bg-muted/30 border-r flex flex-col">
               {invoice.pdf_url ? (
-                <iframe src={invoice.pdf_url} className="w-full h-full" title="Invoice PDF" />
+                <PdfPreview url={invoice.pdf_url} />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">No PDF</div>
               )}
