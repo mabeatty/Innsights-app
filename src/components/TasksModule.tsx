@@ -1,20 +1,35 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RefreshCw, AlertTriangle, Clock, CheckCircle2, ListTodo } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { RefreshCw, AlertTriangle, ChevronDown, ChevronRight, Plus, X, CalendarIcon, ListTodo } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, isPast, addDays, isAfter } from "date-fns";
+import { format, isPast } from "date-fns";
+import { toast } from "sonner";
 
+interface ClickUpAssignee {
+  id: number;
+  username: string;
+  initials: string;
+  profilePicture: string | null;
+  color?: string;
+}
+interface ClickUpStatus { name: string; color: string; }
 interface ClickUpTask {
   id: string;
   name: string;
-  status: { name: string; color: string };
+  status: ClickUpStatus;
   due_date: number | null;
-  assignees: { id: number; username: string; initials: string; profilePicture: string | null }[];
+  assignees: ClickUpAssignee[];
   tags: { name: string; tag_bg: string; tag_fg: string }[];
 }
+interface ListStatus { status: string; color: string; orderindex: number; type: string; }
+interface ListMember { id: number; username: string; email: string; initials: string; color: string; profilePicture: string | null; }
 
 interface TasksModuleProps {
   projectId: string;
@@ -22,12 +37,21 @@ interface TasksModuleProps {
   organizationId: string | null;
 }
 
-export default function TasksModule({ projectId, clickupListId, organizationId }: TasksModuleProps) {
+const initialsOf = (name: string) => name?.charAt(0)?.toUpperCase() || "?";
+
+export default function TasksModule({ clickupListId, organizationId }: TasksModuleProps) {
   const [tasks, setTasks] = useState<ClickUpTask[]>([]);
+  const [statuses, setStatuses] = useState<ListStatus[]>([]);
+  const [members, setMembers] = useState<ListMember[]>([]);
   const [loading, setLoading] = useState(false);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [hasFetched, setHasFetched] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [savingTaskIds, setSavingTaskIds] = useState<Set<string>>(new Set());
+  const [newTaskGroup, setNewTaskGroup] = useState<string | null>(null);
+  const [newTaskName, setNewTaskName] = useState("");
+  const newTaskInputRef = useRef<HTMLInputElement>(null);
 
   const fetchTasks = useCallback(async () => {
     if (!clickupListId) return;
@@ -40,6 +64,8 @@ export default function TasksModule({ projectId, clickupListId, organizationId }
       if (fnError) throw fnError;
       if (data && data.ok === false) throw new Error(data.error || "Unknown error from ClickUp");
       setTasks(data?.tasks || []);
+      setStatuses(data?.statuses || []);
+      setMembers(data?.members || []);
       setLastSynced(new Date());
     } catch (err: any) {
       setError(err.message || "Failed to fetch tasks");
@@ -47,59 +73,128 @@ export default function TasksModule({ projectId, clickupListId, organizationId }
       setLoading(false);
       setHasFetched(true);
     }
+  }, [clickupListId, organizationId]);
+
+  useEffect(() => {
+    if (!hasFetched && clickupListId && !loading) fetchTasks();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clickupListId]);
 
-  // Auto-fetch on first render if list ID exists
-  if (!hasFetched && clickupListId && !loading) {
-    fetchTasks();
-  }
+  useEffect(() => {
+    if (newTaskGroup) newTaskInputRef.current?.focus();
+  }, [newTaskGroup]);
+
+  const withSaving = async (taskId: string, fn: () => Promise<void>) => {
+    setSavingTaskIds((prev) => new Set(prev).add(taskId));
+    try {
+      await fn();
+    } finally {
+      setSavingTaskIds((prev) => { const next = new Set(prev); next.delete(taskId); return next; });
+    }
+  };
+
+  const updateTaskStatus = (task: ClickUpTask, newStatus: string) =>
+    withSaving(task.id, async () => {
+      const prevTasks = tasks;
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: { ...t.status, name: newStatus } } : t)));
+      const { data, error: fnError } = await supabase.functions.invoke("clickup-update-task", {
+        body: { task_id: task.id, org_id: organizationId, status: newStatus },
+      });
+      if (fnError || data?.ok === false) {
+        setTasks(prevTasks);
+        toast.error(data?.error || fnError?.message || "Failed to update status");
+        return;
+      }
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? data.task : t)));
+    });
+
+  const updateTaskDueDate = (task: ClickUpTask, date: Date | undefined) =>
+    withSaving(task.id, async () => {
+      const prevTasks = tasks;
+      const ms = date ? date.getTime() : null;
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, due_date: ms } : t)));
+      const { data, error: fnError } = await supabase.functions.invoke("clickup-update-task", {
+        body: { task_id: task.id, org_id: organizationId, due_date: ms },
+      });
+      if (fnError || data?.ok === false) {
+        setTasks(prevTasks);
+        toast.error(data?.error || fnError?.message || "Failed to update due date");
+        return;
+      }
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? data.task : t)));
+    });
+
+  const toggleAssignee = (task: ClickUpTask, member: ListMember) =>
+    withSaving(task.id, async () => {
+      const isAssigned = task.assignees.some((a) => a.id === member.id);
+      const prevTasks = tasks;
+      setTasks((prev) => prev.map((t) => t.id === task.id
+        ? { ...t, assignees: isAssigned ? t.assignees.filter((a) => a.id !== member.id) : [...t.assignees, { id: member.id, username: member.username, initials: member.initials, profilePicture: member.profilePicture, color: member.color }] }
+        : t));
+      const { data, error: fnError } = await supabase.functions.invoke("clickup-update-task", {
+        body: {
+          task_id: task.id, org_id: organizationId,
+          add_assignees: isAssigned ? [] : [member.id],
+          remove_assignees: isAssigned ? [member.id] : [],
+        },
+      });
+      if (fnError || data?.ok === false) {
+        setTasks(prevTasks);
+        toast.error(data?.error || fnError?.message || "Failed to update assignee");
+        return;
+      }
+      setTasks((prev) => prev.map((t) => (t.id === task.id ? data.task : t)));
+    });
+
+  const createTask = async (statusName: string) => {
+    const name = newTaskName.trim();
+    if (!name || !clickupListId) { setNewTaskGroup(null); setNewTaskName(""); return; }
+    setNewTaskGroup(null);
+    setNewTaskName("");
+    const { data, error: fnError } = await supabase.functions.invoke("clickup-create-task", {
+      body: { list_id: clickupListId, org_id: organizationId, name, status: statusName },
+    });
+    if (fnError || data?.ok === false) {
+      toast.error(data?.error || fnError?.message || "Failed to create task");
+      return;
+    }
+    setTasks((prev) => [...prev, data.task]);
+  };
+
+  const toggleGroup = (name: string) =>
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(name)) next.delete(name); else next.add(name);
+      return next;
+    });
 
   if (!clickupListId) {
     return (
-      <Card className="border-dashed">
-        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-          <ListTodo className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm font-medium text-foreground">Connect a ClickUp list in Project Info to enable task tracking.</p>
-          <p className="text-xs text-muted-foreground mt-1">Add your ClickUp List ID in the Project Info panel above.</p>
-        </CardContent>
-      </Card>
+      <div className="rounded-lg border border-dashed py-12 text-center">
+        <ListTodo className="h-10 w-10 text-muted-foreground mb-3 mx-auto" />
+        <p className="text-sm font-medium text-foreground">Connect a ClickUp list in Project Info to enable task tracking.</p>
+        <p className="text-xs text-muted-foreground mt-1">Add your ClickUp List ID in the Project Info panel above.</p>
+      </div>
     );
   }
 
-  // Group tasks by tag
-  const grouped: Record<string, ClickUpTask[]> = {};
+  const orderedStatusNames = statuses.length > 0
+    ? statuses.map((s) => s.status)
+    : Array.from(new Set(tasks.map((t) => t.status.name)));
+  const statusColor = (name: string) => statuses.find((s) => s.status === name)?.color || tasks.find((t) => t.status.name === name)?.status.color || "#808080";
+  const tasksByStatus = new Map<string, ClickUpTask[]>();
+  orderedStatusNames.forEach((s) => tasksByStatus.set(s, []));
   tasks.forEach((t) => {
-    if (t.tags.length === 0) {
-      (grouped["Uncategorized"] ??= []).push(t);
-    } else {
-      t.tags.forEach((tag) => {
-        (grouped[tag.name] ??= []).push(t);
-      });
-    }
+    if (!tasksByStatus.has(t.status.name)) tasksByStatus.set(t.status.name, []);
+    tasksByStatus.get(t.status.name)!.push(t);
   });
 
-  const now = new Date();
-  const sevenDaysFromNow = addDays(now, 7);
-
-  const getDueIndicator = (task: ClickUpTask) => {
-    if (!task.due_date) return null;
-    const dueDate = new Date(task.due_date);
-    const isComplete = task.status.name.toLowerCase() === "closed" || task.status.name.toLowerCase() === "complete" || task.status.name.toLowerCase() === "done";
-    if (isComplete) return null;
-    if (isPast(dueDate)) return "overdue";
-    if (!isAfter(dueDate, sevenDaysFromNow)) return "soon";
-    return null;
-  };
-
   return (
-    <div className="space-y-4">
-      {/* Header */}
+    <div className="space-y-3">
       <div className="flex items-center justify-between">
         <div>
           {lastSynced && (
-            <p className="text-xs text-muted-foreground">
-              Last synced: {format(lastSynced, "MMM d, yyyy h:mm a")}
-            </p>
+            <p className="text-xs text-muted-foreground">Last synced: {format(lastSynced, "MMM d, yyyy h:mm a")}</p>
           )}
         </div>
         <Button variant="outline" size="sm" onClick={fetchTasks} disabled={loading} className="gap-1.5">
@@ -109,78 +204,159 @@ export default function TasksModule({ projectId, clickupListId, organizationId }
       </div>
 
       {error && (
-        <Card className="border-destructive bg-destructive/5">
-          <CardContent className="py-3 text-sm text-destructive">{error}</CardContent>
-        </Card>
+        <div className="rounded-lg border border-destructive bg-destructive/5 px-3 py-2.5 text-sm text-destructive">{error}</div>
       )}
 
-      {hasFetched && tasks.length === 0 && !error && (
-        <Card>
-          <CardContent className="py-8 text-center text-sm text-muted-foreground">No tasks found in this list.</CardContent>
-        </Card>
+      {hasFetched && tasks.length === 0 && !error && orderedStatusNames.length === 0 && (
+        <div className="rounded-lg border py-8 text-center text-sm text-muted-foreground">No tasks found in this list.</div>
       )}
 
-      {/* Grouped tasks */}
-      {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b)).map(([group, groupTasks]) => (
-        <Card key={group}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-semibold">{group}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-1 pt-0">
-            {groupTasks.map((task) => {
-              const indicator = getDueIndicator(task);
-              return (
-                <div key={task.id} className="flex items-center gap-3 py-2 border-b last:border-0">
-                  {/* Status badge */}
-                  <Badge
-                    className="text-[10px] shrink-0 border-0"
-                    style={{ backgroundColor: task.status.color, color: "#fff" }}
-                  >
-                    {task.status.name}
-                  </Badge>
+      <div className="rounded-lg border overflow-hidden divide-y">
+        {Array.from(tasksByStatus.entries()).map(([statusName, statusTasks]) => {
+          const collapsed = collapsedGroups.has(statusName);
+          const color = statusColor(statusName);
+          return (
+            <div key={statusName}>
+              <button
+                className="w-full flex items-center gap-2 px-3 py-2 bg-muted/40 hover:bg-muted/60 transition-colors"
+                onClick={() => toggleGroup(statusName)}
+              >
+                {collapsed ? <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />}
+                <span className="h-2 w-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-xs font-semibold uppercase tracking-wide">{statusName}</span>
+                <span className="text-xs text-muted-foreground">{statusTasks.length}</span>
+              </button>
 
-                  {/* Task name */}
-                  <span className="text-sm flex-1 truncate">{task.name}</span>
+              {!collapsed && (
+                <div>
+                  {statusTasks.map((task) => {
+                    const overdue = task.due_date && isPast(new Date(task.due_date));
+                    const isSaving = savingTaskIds.has(task.id);
+                    return (
+                      <div
+                        key={task.id}
+                        className={cn("flex items-center gap-2 px-3 py-1.5 pl-8 border-t hover:bg-muted/20 transition-colors", isSaving && "opacity-60")}
+                      >
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              className="text-[10px] font-medium px-2 py-0.5 rounded shrink-0 whitespace-nowrap text-white"
+                              style={{ backgroundColor: task.status.color }}
+                              disabled={statuses.length === 0}
+                            >
+                              {task.status.name}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="start">
+                            {statuses.map((s) => (
+                              <DropdownMenuItem key={s.status} onClick={() => updateTaskStatus(task, s.status)}>
+                                <span className="h-2 w-2 rounded-full mr-2" style={{ backgroundColor: s.color }} />
+                                {s.status}
+                              </DropdownMenuItem>
+                            ))}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
 
-                  {/* Due indicator */}
-                  {indicator === "overdue" && (
-                    <span className="flex items-center gap-1 text-xs text-destructive font-medium shrink-0">
-                      <AlertTriangle className="h-3 w-3" /> Overdue
-                    </span>
-                  )}
-                  {indicator === "soon" && (
-                    <span className="flex items-center gap-1 text-xs text-amber-600 font-medium shrink-0">
-                      <Clock className="h-3 w-3" /> Due soon
-                    </span>
-                  )}
+                        <span className="text-sm flex-1 truncate">{task.name}</span>
 
-                  {/* Due date */}
-                  {task.due_date && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      {format(new Date(task.due_date), "MMM d")}
-                    </span>
-                  )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="flex -space-x-1 shrink-0" disabled={members.length === 0}>
+                              {task.assignees.length > 0 ? (
+                                task.assignees.slice(0, 3).map((a) => (
+                                  <div
+                                    key={a.id}
+                                    className="h-6 w-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-medium text-white"
+                                    style={{ backgroundColor: a.color || "#87909e" }}
+                                    title={a.username}
+                                  >
+                                    {a.initials || initialsOf(a.username)}
+                                  </div>
+                                ))
+                              ) : (
+                                <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-muted-foreground">
+                                  <Plus className="h-3 w-3" />
+                                </div>
+                              )}
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {members.map((m) => {
+                              const assigned = task.assignees.some((a) => a.id === m.id);
+                              return (
+                                <DropdownMenuItem key={m.id} onClick={() => toggleAssignee(task, m)} className="flex items-center gap-2">
+                                  <div className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-medium text-white shrink-0" style={{ backgroundColor: m.color || "#87909e" }}>
+                                    {m.initials || initialsOf(m.username)}
+                                  </div>
+                                  <span className="flex-1 truncate">{m.username}</span>
+                                  {assigned && <span className="text-xs text-primary">✓</span>}
+                                </DropdownMenuItem>
+                              );
+                            })}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
 
-                  {/* Assignees */}
-                  {task.assignees.length > 0 && (
-                    <div className="flex -space-x-1 shrink-0">
-                      {task.assignees.slice(0, 3).map((a) => (
-                        <div
-                          key={a.id}
-                          className="h-6 w-6 rounded-full bg-muted border-2 border-background flex items-center justify-center text-[10px] font-medium"
-                          title={a.username}
-                        >
-                          {a.initials || a.username?.charAt(0)?.toUpperCase() || "?"}
-                        </div>
-                      ))}
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <button
+                              className={cn(
+                                "flex items-center gap-1 text-xs shrink-0 px-1.5 py-0.5 rounded hover:bg-muted",
+                                overdue ? "text-destructive font-medium" : "text-muted-foreground"
+                              )}
+                            >
+                              {overdue ? <AlertTriangle className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
+                              {task.due_date ? format(new Date(task.due_date), "MMM d") : "Set date"}
+                            </button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="end">
+                            <Calendar
+                              mode="single"
+                              selected={task.due_date ? new Date(task.due_date) : undefined}
+                              onSelect={(date) => updateTaskDueDate(task, date)}
+                            />
+                            {task.due_date && (
+                              <div className="border-t p-2">
+                                <Button variant="ghost" size="sm" className="w-full gap-1 text-xs" onClick={() => updateTaskDueDate(task, undefined)}>
+                                  <X className="h-3 w-3" /> Clear date
+                                </Button>
+                              </div>
+                            )}
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    );
+                  })}
+
+                  {newTaskGroup === statusName ? (
+                    <div className="flex items-center gap-2 px-3 py-1.5 pl-8 border-t bg-muted/10">
+                      <Input
+                        ref={newTaskInputRef}
+                        value={newTaskName}
+                        onChange={(e) => setNewTaskName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") createTask(statusName);
+                          if (e.key === "Escape") { setNewTaskGroup(null); setNewTaskName(""); }
+                        }}
+                        onBlur={() => { if (!newTaskName.trim()) setNewTaskGroup(null); }}
+                        placeholder="Task name…"
+                        className="h-7 text-sm"
+                      />
+                      <Button size="sm" className="h-7 shrink-0" onClick={() => createTask(statusName)}>Add</Button>
                     </div>
+                  ) : (
+                    <button
+                      className="w-full flex items-center gap-1.5 px-3 py-1.5 pl-8 border-t text-xs text-muted-foreground hover:bg-muted/20 hover:text-foreground transition-colors"
+                      onClick={() => setNewTaskGroup(statusName)}
+                    >
+                      <Plus className="h-3 w-3" /> Add Task
+                    </button>
                   )}
                 </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      ))}
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
