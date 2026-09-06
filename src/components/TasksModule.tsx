@@ -76,7 +76,24 @@ export default function TasksModule({ clickupListId, organizationId }: TasksModu
   }, [clickupListId, organizationId]);
 
   useEffect(() => {
-    if (!hasFetched && clickupListId && !loading) fetchTasks();
+    // Re-run whenever the list ID itself changes (including switching to a
+    // different project's list) — not just once ever. hasFetched previously
+    // gated this and, since it's never reset, permanently blocked every
+    // fetch after the first successful one: switching projects updated
+    // clickupListId correctly and this effect re-ran, but the fetch itself
+    // was silently skipped because hasFetched was already true from the
+    // prior project.
+    if (clickupListId) fetchTasks();
+    else {
+      // No list for this project — clear out the previous project's data
+      // rather than leaving stale tasks on screen.
+      setTasks([]);
+      setStatuses([]);
+      setMembers([]);
+      setHasFetched(false);
+      setError(null);
+      setCollapsedGroups(new Set());
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [clickupListId]);
 
