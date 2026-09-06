@@ -85,6 +85,14 @@ Deno.serve(async (req) => {
         color: t.status?.color || "#808080",
       },
       due_date: t.due_date ? Number(t.due_date) : null,
+      // parent drives the outline/tree rendering — subtasks nest under their
+      // parent row regardless of which status group the parent is in, same
+      // as ClickUp's own list view. subtasks_count/dependencies_count are
+      // cheap indicators shown in the row so a real hierarchy or dependency
+      // relationship is visible without opening every task's detail.
+      parent: t.parent || null,
+      subtasks_count: typeof t.subtasks_count === "number" ? t.subtasks_count : 0,
+      dependencies_count: typeof t.dependencies_count === "number" ? t.dependencies_count : 0,
       assignees: (t.assignees || []).map((a: any) => ({
         id: a.id,
         username: a.username,

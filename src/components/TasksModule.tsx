@@ -7,10 +7,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { RefreshCw, AlertTriangle, ChevronDown, ChevronRight, Plus, X, CalendarIcon, ListTodo } from "lucide-react";
+import { RefreshCw, AlertTriangle, ChevronDown, ChevronRight, Plus, X, CalendarIcon, ListTodo, ListTree, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isPast } from "date-fns";
 import { toast } from "sonner";
+import TaskDetailDialog from "@/components/tasks/TaskDetailDialog";
 
 interface ClickUpAssignee {
   id: number;
@@ -25,6 +26,9 @@ interface ClickUpTask {
   name: string;
   status: ClickUpStatus;
   due_date: number | null;
+  parent: string | null;
+  subtasks_count: number;
+  dependencies_count: number;
   assignees: ClickUpAssignee[];
   tags: { name: string; tag_bg: string; tag_fg: string }[];
 }
@@ -52,6 +56,12 @@ export default function TasksModule({ clickupListId, organizationId }: TasksModu
   const [newTaskGroup, setNewTaskGroup] = useState<string | null>(null);
   const [newTaskName, setNewTaskName] = useState("");
   const newTaskInputRef = useRef<HTMLInputElement>(null);
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  // Which parent tasks have their subtask rows collapsed (indented children
+  // hidden). Default expanded — a parent's subtasks are the whole reason
+  // "can't see subtasks" was the complaint, so hiding them by default would
+  // just recreate the same problem.
+  const [collapsedSubtaskParents, setCollapsedSubtaskParents] = useState<Set<string>>(new Set());
 
   const fetchTasks = useCallback(async () => {
     if (!clickupListId) return;
@@ -199,9 +209,29 @@ export default function TasksModule({ clickupListId, organizationId }: TasksModu
     ? statuses.map((s) => s.status)
     : Array.from(new Set(tasks.map((t) => t.status.name)));
   const statusColor = (name: string) => statuses.find((s) => s.status === name)?.color || tasks.find((t) => t.status.name === name)?.status.color || "#808080";
+
+  // Real parent/child tree: group only top-level tasks (parent === null) by
+  // status, matching ClickUp's own list view — a subtask nests under its
+  // parent row wherever the parent lives, rather than appearing as its own
+  // independent sibling in whatever status group its own status happens to
+  // fall into. A subtask whose parent isn't in this list at all (e.g. the
+  // parent lives in a different list) falls back to rendering as its own
+  // top-level row so it's never silently hidden.
+  const byId = new Map(tasks.map((t) => [t.id, t] as const));
+  const subtasksByParent = new Map<string, ClickUpTask[]>();
+  const topLevelTasks: ClickUpTask[] = [];
+  tasks.forEach((t) => {
+    if (t.parent && byId.has(t.parent)) {
+      if (!subtasksByParent.has(t.parent)) subtasksByParent.set(t.parent, []);
+      subtasksByParent.get(t.parent)!.push(t);
+    } else {
+      topLevelTasks.push(t);
+    }
+  });
+
   const tasksByStatus = new Map<string, ClickUpTask[]>();
   orderedStatusNames.forEach((s) => tasksByStatus.set(s, []));
-  tasks.forEach((t) => {
+  topLevelTasks.forEach((t) => {
     if (!tasksByStatus.has(t.status.name)) tasksByStatus.set(t.status.name, []);
     tasksByStatus.get(t.status.name)!.push(t);
   });
@@ -232,6 +262,142 @@ export default function TasksModule({ clickupListId, organizationId }: TasksModu
         {Array.from(tasksByStatus.entries()).map(([statusName, statusTasks]) => {
           const collapsed = collapsedGroups.has(statusName);
           const color = statusColor(statusName);
+
+          const renderTaskRow = (task: ClickUpTask, indent: number) => {
+            const overdue = task.due_date && isPast(new Date(task.due_date));
+            const isSaving = savingTaskIds.has(task.id);
+            const subtasks = subtasksByParent.get(task.id) ?? [];
+            const subtasksCollapsed = collapsedSubtaskParents.has(task.id);
+            return (
+              <div key={task.id}>
+                <div
+                  className={cn("flex items-center gap-2 px-3 py-1.5 border-t hover:bg-muted/20 transition-colors", isSaving && "opacity-60")}
+                  style={{ paddingLeft: `${8 + indent * 20}px` }}
+                >
+                  {subtasks.length > 0 ? (
+                    <button
+                      className="shrink-0 text-muted-foreground hover:text-foreground"
+                      onClick={() => setCollapsedSubtaskParents((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+                        return next;
+                      })}
+                    >
+                      {subtasksCollapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                    </button>
+                  ) : (
+                    <span className="w-3.5 shrink-0" />
+                  )}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button
+                        className="text-[10px] font-medium px-2 py-0.5 rounded shrink-0 whitespace-nowrap text-white"
+                        style={{ backgroundColor: task.status.color }}
+                        disabled={statuses.length === 0}
+                      >
+                        {task.status.name}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                      {statuses.map((s) => (
+                        <DropdownMenuItem key={s.status} onClick={() => updateTaskStatus(task, s.status)}>
+                          <span className="h-2 w-2 rounded-full mr-2" style={{ backgroundColor: s.color }} />
+                          {s.status}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <button
+                    className="text-sm flex-1 truncate text-left hover:underline underline-offset-2"
+                    onClick={() => setOpenTaskId(task.id)}
+                  >
+                    {task.name}
+                  </button>
+
+                  {subtasks.length > 0 && (
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground shrink-0" title="Subtasks">
+                      <ListTree className="h-3 w-3" /> {subtasks.length}
+                    </span>
+                  )}
+                  {task.dependencies_count > 0 && (
+                    <span className="flex items-center gap-0.5 text-xs text-muted-foreground shrink-0" title="Has dependencies">
+                      <Link2 className="h-3 w-3" /> {task.dependencies_count}
+                    </span>
+                  )}
+
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button className="flex -space-x-1 shrink-0" disabled={members.length === 0}>
+                        {task.assignees.length > 0 ? (
+                          task.assignees.slice(0, 3).map((a) => (
+                            <div
+                              key={a.id}
+                              className="h-6 w-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-medium text-white"
+                              style={{ backgroundColor: a.color || "#87909e" }}
+                              title={a.username}
+                            >
+                              {a.initials || initialsOf(a.username)}
+                            </div>
+                          ))
+                        ) : (
+                          <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-muted-foreground">
+                            <Plus className="h-3 w-3" />
+                          </div>
+                        )}
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {members.map((m) => {
+                        const assigned = task.assignees.some((a) => a.id === m.id);
+                        return (
+                          <DropdownMenuItem key={m.id} onClick={() => toggleAssignee(task, m)} className="flex items-center gap-2">
+                            <div className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-medium text-white shrink-0" style={{ backgroundColor: m.color || "#87909e" }}>
+                              {m.initials || initialsOf(m.username)}
+                            </div>
+                            <span className="flex-1 truncate">{m.username}</span>
+                            {assigned && <span className="text-xs text-primary">✓</span>}
+                          </DropdownMenuItem>
+                        );
+                      })}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        className={cn(
+                          "flex items-center gap-1 text-xs shrink-0 px-1.5 py-0.5 rounded hover:bg-muted",
+                          overdue ? "text-destructive font-medium" : "text-muted-foreground"
+                        )}
+                      >
+                        {overdue ? <AlertTriangle className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
+                        {task.due_date ? format(new Date(task.due_date), "MMM d") : "Set date"}
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="end">
+                      <Calendar
+                        mode="single"
+                        selected={task.due_date ? new Date(task.due_date) : undefined}
+                        onSelect={(date) => updateTaskDueDate(task, date)}
+                      />
+                      {task.due_date && (
+                        <div className="border-t p-2">
+                          <Button variant="ghost" size="sm" className="w-full gap-1 text-xs" onClick={() => updateTaskDueDate(task, undefined)}>
+                            <X className="h-3 w-3" /> Clear date
+                          </Button>
+                        </div>
+                      )}
+                    </PopoverContent>
+                  </Popover>
+                </div>
+
+                {subtasks.length > 0 && !subtasksCollapsed && subtasks.map((sub) => renderTaskRow(sub, indent + 1))}
+              </div>
+            );
+          };
+
           return (
             <div key={statusName}>
               <button
@@ -246,103 +412,7 @@ export default function TasksModule({ clickupListId, organizationId }: TasksModu
 
               {!collapsed && (
                 <div>
-                  {statusTasks.map((task) => {
-                    const overdue = task.due_date && isPast(new Date(task.due_date));
-                    const isSaving = savingTaskIds.has(task.id);
-                    return (
-                      <div
-                        key={task.id}
-                        className={cn("flex items-center gap-2 px-3 py-1.5 pl-8 border-t hover:bg-muted/20 transition-colors", isSaving && "opacity-60")}
-                      >
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="text-[10px] font-medium px-2 py-0.5 rounded shrink-0 whitespace-nowrap text-white"
-                              style={{ backgroundColor: task.status.color }}
-                              disabled={statuses.length === 0}
-                            >
-                              {task.status.name}
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="start">
-                            {statuses.map((s) => (
-                              <DropdownMenuItem key={s.status} onClick={() => updateTaskStatus(task, s.status)}>
-                                <span className="h-2 w-2 rounded-full mr-2" style={{ backgroundColor: s.color }} />
-                                {s.status}
-                              </DropdownMenuItem>
-                            ))}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <span className="text-sm flex-1 truncate">{task.name}</span>
-
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="flex -space-x-1 shrink-0" disabled={members.length === 0}>
-                              {task.assignees.length > 0 ? (
-                                task.assignees.slice(0, 3).map((a) => (
-                                  <div
-                                    key={a.id}
-                                    className="h-6 w-6 rounded-full border-2 border-background flex items-center justify-center text-[10px] font-medium text-white"
-                                    style={{ backgroundColor: a.color || "#87909e" }}
-                                    title={a.username}
-                                  >
-                                    {a.initials || initialsOf(a.username)}
-                                  </div>
-                                ))
-                              ) : (
-                                <div className="h-6 w-6 rounded-full border-2 border-dashed border-muted-foreground/40 flex items-center justify-center text-muted-foreground">
-                                  <Plus className="h-3 w-3" />
-                                </div>
-                              )}
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {members.map((m) => {
-                              const assigned = task.assignees.some((a) => a.id === m.id);
-                              return (
-                                <DropdownMenuItem key={m.id} onClick={() => toggleAssignee(task, m)} className="flex items-center gap-2">
-                                  <div className="h-5 w-5 rounded-full flex items-center justify-center text-[9px] font-medium text-white shrink-0" style={{ backgroundColor: m.color || "#87909e" }}>
-                                    {m.initials || initialsOf(m.username)}
-                                  </div>
-                                  <span className="flex-1 truncate">{m.username}</span>
-                                  {assigned && <span className="text-xs text-primary">✓</span>}
-                                </DropdownMenuItem>
-                              );
-                            })}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              className={cn(
-                                "flex items-center gap-1 text-xs shrink-0 px-1.5 py-0.5 rounded hover:bg-muted",
-                                overdue ? "text-destructive font-medium" : "text-muted-foreground"
-                              )}
-                            >
-                              {overdue ? <AlertTriangle className="h-3 w-3" /> : <CalendarIcon className="h-3 w-3" />}
-                              {task.due_date ? format(new Date(task.due_date), "MMM d") : "Set date"}
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="end">
-                            <Calendar
-                              mode="single"
-                              selected={task.due_date ? new Date(task.due_date) : undefined}
-                              onSelect={(date) => updateTaskDueDate(task, date)}
-                            />
-                            {task.due_date && (
-                              <div className="border-t p-2">
-                                <Button variant="ghost" size="sm" className="w-full gap-1 text-xs" onClick={() => updateTaskDueDate(task, undefined)}>
-                                  <X className="h-3 w-3" /> Clear date
-                                </Button>
-                              </div>
-                            )}
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    );
-                  })}
+                  {statusTasks.map((task) => renderTaskRow(task, 0))}
 
                   {newTaskGroup === statusName ? (
                     <div className="flex items-center gap-2 px-3 py-1.5 pl-8 border-t bg-muted/10">
@@ -374,6 +444,16 @@ export default function TasksModule({ clickupListId, organizationId }: TasksModu
           );
         })}
       </div>
+
+      <TaskDetailDialog
+        taskId={openTaskId}
+        organizationId={organizationId}
+        onClose={() => setOpenTaskId(null)}
+        onOpenTask={(id) => setOpenTaskId(id)}
+        onTaskUpdated={(taskId, patch) => {
+          setTasks((prev) => prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t)));
+        }}
+      />
     </div>
   );
 }

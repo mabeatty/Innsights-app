@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(body), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const { task_id, org_id, status, due_date, add_assignees, remove_assignees, name } = await req.json();
+    const { task_id, org_id, status, due_date, add_assignees, remove_assignees, name, description } = await req.json();
     if (!task_id || typeof task_id !== "string") return json({ ok: false, error: "task_id is required" });
     if (!org_id) return json({ ok: false, error: "org_id is required" });
 
@@ -56,6 +56,7 @@ Deno.serve(async (req) => {
     // accidentally dropping assignees the caller doesn't know about).
     const body: Record<string, unknown> = {};
     if (typeof name === "string") body.name = name;
+    if (typeof description === "string") body.description = description;
     if (typeof status === "string") body.status = status;
     if (due_date !== undefined) body.due_date = due_date === null ? null : Number(due_date);
     if (add_assignees || remove_assignees) {
@@ -90,6 +91,7 @@ Deno.serve(async (req) => {
       task: {
         id: updated.id,
         name: updated.name,
+        description: updated.description ?? "",
         status: { name: updated.status?.status || "unknown", color: updated.status?.color || "#808080" },
         due_date: updated.due_date ? Number(updated.due_date) : null,
         assignees: (updated.assignees || []).map((a: any) => ({
