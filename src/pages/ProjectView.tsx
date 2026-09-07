@@ -38,6 +38,7 @@ import APAgingTab from "@/components/budget/APAgingTab";
 import AssistantWidget from "@/components/AssistantWidget";
 import ReportsModule from "@/components/ReportsModule";
 import TasksModule from "@/components/TasksModule";
+import WeeklyNotesModule from "@/components/notes/WeeklyNotesModule";
 
 /* ── Types ── */
 interface Project {
@@ -254,6 +255,9 @@ export default function ProjectView() {
           <TabsTrigger value="tasks" className="gap-1.5">
             <ListTodo className="h-3.5 w-3.5" /> Tasks
           </TabsTrigger>
+          <TabsTrigger value="notes" className="gap-1.5">
+            <NotebookPen className="h-3.5 w-3.5" /> Notes
+          </TabsTrigger>
           <TabsTrigger value="documents" className="gap-1.5">
             <FolderOpen className="h-3.5 w-3.5" /> Resources
           </TabsTrigger>
@@ -330,6 +334,10 @@ export default function ProjectView() {
 
         <TabsContent value="tasks">
           <TasksModule projectId={id!} clickupListId={project.clickup_list_id} organizationId={organizationId} />
+        </TabsContent>
+
+        <TabsContent value="notes">
+          <WeeklyNotesModule projectId={id!} />
         </TabsContent>
 
         <TabsContent value="reports">
