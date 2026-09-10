@@ -64,10 +64,24 @@ export function ProjectApprovers({ projectId }: Props) {
         .from("project_approvers")
         .upsert(rows, { onConflict: "project_id,role" });
       if (error) throw error;
-      // Clear out any legacy Treasury row for this project so it can't
-      // silently keep gating an approval — Treasury is no longer part of
-      // the chain.
-      await supabase.from("project_approvers").delete().eq("project_id", projectId).eq("role", "treasury");
+
+      // Remove any project_approvers row for a role that no longer exists
+      // in APPROVER_ROLES at all (e.g. Treasury, retired when the approval
+      // chain was simplified to PM + Lead) — not just roles left unassigned
+      // on this project. A role can only be "stale" at the schema level,
+      // not per-project, so this checks against the full APPROVER_ROLES
+      // list rather than anything project-specific.
+      const currentRoleKeys = APPROVER_ROLES.map((r) => r.key);
+      const { data: allApproverRows } = await supabase
+        .from("project_approvers")
+        .select("role")
+        .eq("project_id", projectId);
+      const staleRoles = Array.from(new Set((allApproverRows ?? []).map((r: any) => r.role))).filter(
+        (role) => !currentRoleKeys.includes(role as ApproverRole)
+      );
+      if (staleRoles.length > 0) {
+        await supabase.from("project_approvers").delete().eq("project_id", projectId).in("role", staleRoles);
+      }
 
       // Backfill: any invoice on this project that already exists with a
       // still-pending approval row for a role that had no one assigned yet
@@ -119,11 +133,59 @@ export function ProjectApprovers({ projectId }: Props) {
           .eq("status", "Pending Review");
       }
 
-      toast.success(
-        backfilledCount > 0
-          ? `Invoice approvers saved — ${backfilledCount} existing pending invoice${backfilledCount === 1 ? "" : "s"} updated to reflect the new assignment.`
-          : "Invoice approvers saved."
-      );
+      // Stale-role cleanup on existing invoices: a role removed from
+      // APPROVER_ROLES (like Treasury) can leave orphaned Pending steps on
+      // invoices that were submitted while that role was still part of the
+      // chain — that step can never be actioned by anyone since nobody is
+      // assigned to a role that no longer exists anywhere in the system,
+      // so the invoice sits stuck on "In Approval" forever even after every
+      // real (current) role has approved it. Delete those orphaned steps,
+      // then recalculate status for any invoice where that was blocking it.
+      let staleStepsCleared = 0;
+      if (staleRoles.length > 0 && invoiceIds.length > 0) {
+        const { data: deletedSteps, error: staleErr } = await supabase
+          .from("invoice_approvals")
+          .delete()
+          .in("invoice_id", invoiceIds)
+          .in("approver_role", staleRoles)
+          .select("id, invoice_id");
+        if (staleErr) {
+          console.error("[ProjectApprovers stale-role cleanup] failed:", staleErr);
+        } else if (deletedSteps && deletedSteps.length > 0) {
+          staleStepsCleared = deletedSteps.length;
+          const affectedInvoiceIds = Array.from(new Set(deletedSteps.map((s: any) => s.invoice_id)));
+          // For each affected invoice, check whether every remaining step is
+          // Approved — if so, the invoice itself should now read Approved
+          // instead of being stuck on "In Approval" behind a role that no
+          // longer exists.
+          const { data: remainingSteps } = await supabase
+            .from("invoice_approvals")
+            .select("invoice_id, status")
+            .in("invoice_id", affectedInvoiceIds);
+          const stepsByInvoice = new Map<string, string[]>();
+          (remainingSteps ?? []).forEach((s: any) => {
+            if (!stepsByInvoice.has(s.invoice_id)) stepsByInvoice.set(s.invoice_id, []);
+            stepsByInvoice.get(s.invoice_id)!.push(s.status);
+          });
+          const invoicesToApprove = affectedInvoiceIds.filter((id) => {
+            const steps = stepsByInvoice.get(id) ?? [];
+            return steps.length > 0 && steps.every((s) => s === "Approved");
+          });
+          if (invoicesToApprove.length > 0) {
+            await supabase
+              .from("invoices")
+              .update({ status: "Approved" })
+              .in("id", invoicesToApprove)
+              .eq("status", "In Approval");
+          }
+        }
+      }
+
+      const messages = [
+        backfilledCount > 0 ? `${backfilledCount} existing pending invoice${backfilledCount === 1 ? "" : "s"} updated to reflect the new assignment` : null,
+        staleStepsCleared > 0 ? `${staleStepsCleared} stale approval step${staleStepsCleared === 1 ? "" : "s"} cleared from retired role${staleRoles.length === 1 ? "" : "s"}` : null,
+      ].filter(Boolean);
+      toast.success(messages.length > 0 ? `Invoice approvers saved — ${messages.join("; ")}.` : "Invoice approvers saved.");
     } catch (e: any) {
       toast.error(e?.message || "Failed to save approvers.");
     } finally {
