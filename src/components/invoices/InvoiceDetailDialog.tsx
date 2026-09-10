@@ -189,8 +189,8 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
 
   return (
     <Dialog open={!!invoiceId} onOpenChange={(v) => { if (!v) onClose(); }}>
-      <DialogContent className="max-w-7xl w-[97vw] max-h-[92vh] p-0 overflow-hidden">
-        <DialogHeader className="px-5 pt-4 pb-2 border-b">
+      <DialogContent className="max-w-7xl w-[97vw] max-h-[92vh] h-[92vh] p-0 overflow-hidden flex flex-col">
+        <DialogHeader className="px-5 pt-4 pb-2 border-b shrink-0">
           <DialogTitle className="flex items-center gap-3">
             <span>{invoice?.vendor_name || "Invoice"}</span>
             {invoice && <Badge className={statusBadgeClasses(invoice.status)} variant="outline">{invoice.status}</Badge>}
@@ -199,9 +199,9 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
         </DialogHeader>
 
         {invoice && (
-          <div className="grid grid-cols-1 md:grid-cols-2 h-[80vh] overflow-hidden">
+          <div className="grid grid-cols-1 md:grid-cols-2 flex-1 min-h-0 overflow-hidden">
             {/* Left: PDF preview */}
-            <div className="bg-muted/30 border-r flex flex-col">
+            <div className="bg-muted/30 border-r flex flex-col min-h-0">
               {invoice.pdf_url ? (
                 <PdfPreview url={invoice.pdf_url} />
               ) : (
@@ -215,7 +215,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
             </div>
 
             {/* Right: details + approval panel + comments */}
-            <div className="overflow-y-auto p-5 space-y-5">
+            <div className="overflow-y-auto min-h-0 p-5 space-y-5">
               {/* Details */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div><span className="text-muted-foreground">Project:</span><br/>{invoice.projects?.name || "—"}</div>
