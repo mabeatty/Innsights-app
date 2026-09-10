@@ -1,6 +1,11 @@
 import { useState } from "react";
 import { fmtDecimal } from "./types";
 import InvoiceDetailDialog from "../invoices/InvoiceDetailDialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { CheckCircle2 } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { useAPAging, daysPastDue, daysAgo, fmtShortDate, AGING_BUCKETS, type AgingRow } from "./useAPAging";
 
@@ -8,7 +13,7 @@ interface Props {
   projectId: string;
 }
 
-function AgingRowLine({ r, onClick }: { r: AgingRow; onClick: () => void }) {
+function AgingRowLine({ r, onClick, onMarkPaid }: { r: AgingRow; onClick: () => void; onMarkPaid?: (r: AgingRow) => void }) {
   const days = r.dueDate ? daysPastDue(r.dueDate) : r.invoiceDate ? daysAgo(r.invoiceDate) : null;
   const overdue = days !== null && days > 0 && !!r.dueDate;
   const agingLabel = days === null ? "—" : r.dueDate ? (days > 0 ? `${days}d overdue` : `Due in ${Math.abs(days)}d`) : `${days}d old`;
@@ -28,14 +33,43 @@ function AgingRowLine({ r, onClick }: { r: AgingRow; onClick: () => void }) {
         {r.isApproved ? agingLabel : "—"}
       </td>
       <td className="px-3 py-2 text-right">{fmtDecimal(r.amount)}</td>
+      {onMarkPaid && (
+        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
+          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => onMarkPaid(r)}>
+            <CheckCircle2 className="h-3.5 w-3.5" /> Mark Paid
+          </Button>
+        </td>
+      )}
     </tr>
   );
 }
 
 export default function APAgingTab({ projectId }: Props) {
-  const { approvedRows, unapprovedRows, loading, refetch, bucketTotals, grandTotal, unapprovedTotal } = useAPAging(projectId);
+  const { approvedRows, unapprovedRows, loading, refetch, bucketTotals, grandTotal, unapprovedTotal, markPaid } = useAPAging(projectId);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const [markPaidRow, setMarkPaidRow] = useState<AgingRow | null>(null);
+  const [paidDate, setPaidDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [markingPaid, setMarkingPaid] = useState(false);
   const missingDueDateCount = approvedRows.filter((r) => !r.dueDate).length;
+
+  const openMarkPaid = (r: AgingRow) => {
+    setMarkPaidRow(r);
+    setPaidDate(new Date().toISOString().slice(0, 10));
+  };
+
+  const confirmMarkPaid = async () => {
+    if (!markPaidRow) return;
+    setMarkingPaid(true);
+    try {
+      await markPaid(markPaidRow.invoiceId, paidDate);
+      toast.success(`${markPaidRow.vendorName} marked paid.`);
+      setMarkPaidRow(null);
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to mark as paid.");
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
 
   if (loading) return <p className="text-sm text-muted-foreground py-4">Loading AP aging…</p>;
 
@@ -109,14 +143,15 @@ export default function APAgingTab({ projectId }: Props) {
                 <th className="px-3 py-2 text-left">Due Date</th>
                 <th className="px-3 py-2 text-left">Aging</th>
                 <th className="px-3 py-2 text-right">Amount</th>
+                <th className="px-3 py-2 text-right">Payment</th>
               </tr>
             </thead>
             <tbody>
               {approvedRows.length === 0 && (
-                <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No unpaid approved invoices on this project.</td></tr>
+                <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No unpaid approved invoices on this project.</td></tr>
               )}
               {approvedRows.map((r) => (
-                <AgingRowLine key={r.invoiceId} r={r} onClick={() => setSelectedInvoiceId(r.invoiceId)} />
+                <AgingRowLine key={r.invoiceId} r={r} onClick={() => setSelectedInvoiceId(r.invoiceId)} onMarkPaid={openMarkPaid} />
               ))}
             </tbody>
             {approvedRows.length > 0 && (
@@ -124,6 +159,7 @@ export default function APAgingTab({ projectId }: Props) {
                 <tr className="border-t bg-muted/50 font-semibold">
                   <td className="px-3 py-2" colSpan={5}>Total</td>
                   <td className="px-3 py-2 text-right">{fmtDecimal(grandTotal)}</td>
+                  <td className="px-3 py-2" />
                 </tr>
               </tfoot>
             )}
@@ -136,6 +172,27 @@ export default function APAgingTab({ projectId }: Props) {
         onClose={() => setSelectedInvoiceId(null)}
         onChange={refetch}
       />
+
+      <Dialog open={!!markPaidRow} onOpenChange={(o) => !o && setMarkPaidRow(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Mark as Paid</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              {markPaidRow?.vendorName} — {markPaidRow ? fmtDecimal(markPaidRow.amount) : ""}
+            </p>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Payment date</label>
+              <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setMarkPaidRow(null)}>Cancel</Button>
+            <Button onClick={confirmMarkPaid} disabled={markingPaid}>{markingPaid ? "Saving…" : "Confirm Paid"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
