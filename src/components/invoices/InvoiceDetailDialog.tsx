@@ -234,7 +234,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   <Separator />
                   <div className="space-y-2">
                     <div className="text-sm font-medium">Line items</div>
-                    <div className="rounded-md border overflow-auto">
+                    <div className="rounded-md border overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-muted/50 text-muted-foreground text-left">
@@ -293,7 +293,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   <Separator />
                   <div className="space-y-2">
                     <div className="text-sm font-medium">AIA Detail (source transactions)</div>
-                    <div className="rounded-md border overflow-auto max-h-60">
+                    <div className="rounded-md border overflow-x-auto">
                       <table className="w-full text-xs">
                         <thead>
                           <tr className="bg-muted/50 text-muted-foreground text-left">
@@ -419,7 +419,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
               {/* Comments */}
               <div className="space-y-2">
                 <div className="text-sm font-medium">Comments</div>
-                <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                <div className="space-y-1.5">
                   {comments.length === 0 && <div className="text-xs text-muted-foreground">No comments yet.</div>}
                   {comments.map((c) => (
                     <div key={c.id} className="text-xs border rounded p-2 bg-muted/30">
