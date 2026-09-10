@@ -120,14 +120,25 @@ export function useAPAging(projectId: string) {
     setLoading(false);
   }, [projectId]);
 
-  const markPaid = useCallback(async (invoiceId: string, paidDate: string) => {
+  const markPaid = useCallback(async (invoiceId: string) => {
     // An invoice can be backed by more than one budget_transactions row
     // (e.g. split across categories) — mark every one of them Paid together
     // so the invoice disappears from aging as a whole, not partially.
     const { error } = await supabase
       .from("budget_transactions")
-      .update({ status: "Paid", paid_date: paidDate })
+      .update({ status: "Paid" })
       .eq("invoice_id", invoiceId)
+      .eq("status", "Approved");
+    if (error) throw error;
+    await load();
+  }, [load]);
+
+  const markPaidBulk = useCallback(async (invoiceIds: string[]) => {
+    if (invoiceIds.length === 0) return;
+    const { error } = await supabase
+      .from("budget_transactions")
+      .update({ status: "Paid" })
+      .in("invoice_id", invoiceIds)
       .eq("status", "Approved");
     if (error) throw error;
     await load();
@@ -150,5 +161,5 @@ export function useAPAging(projectId: string) {
   const grandTotal = useMemo(() => approvedRows.reduce((s, r) => s + r.amount, 0), [approvedRows]);
   const unapprovedTotal = useMemo(() => unapprovedRows.reduce((s, r) => s + r.amount, 0), [unapprovedRows]);
 
-  return { rows, approvedRows, unapprovedRows, loading, refetch: load, bucketTotals, grandTotal, unapprovedTotal, markPaid };
+  return { rows, approvedRows, unapprovedRows, loading, refetch: load, bucketTotals, grandTotal, unapprovedTotal, markPaid, markPaidBulk };
 }

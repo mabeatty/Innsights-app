@@ -2,8 +2,7 @@ import { useState } from "react";
 import { fmtDecimal } from "./types";
 import InvoiceDetailDialog from "../invoices/InvoiceDetailDialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -13,12 +12,25 @@ interface Props {
   projectId: string;
 }
 
-function AgingRowLine({ r, onClick, onMarkPaid }: { r: AgingRow; onClick: () => void; onMarkPaid?: (r: AgingRow) => void }) {
+function AgingRowLine({
+  r, onClick, selectable, checked, onToggle,
+}: {
+  r: AgingRow;
+  onClick: () => void;
+  selectable?: boolean;
+  checked?: boolean;
+  onToggle?: (id: string) => void;
+}) {
   const days = r.dueDate ? daysPastDue(r.dueDate) : r.invoiceDate ? daysAgo(r.invoiceDate) : null;
   const overdue = days !== null && days > 0 && !!r.dueDate;
   const agingLabel = days === null ? "—" : r.dueDate ? (days > 0 ? `${days}d overdue` : `Due in ${Math.abs(days)}d`) : `${days}d old`;
   return (
     <tr className="border-t cursor-pointer hover:bg-muted/30 transition-colors" onClick={onClick}>
+      {selectable && (
+        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
+          <Checkbox checked={!!checked} onCheckedChange={() => onToggle?.(r.invoiceId)} />
+        </td>
+      )}
       <td className="px-3 py-2 font-medium">{r.vendorName}</td>
       <td className="px-3 py-2 text-muted-foreground">{r.invoiceNumber || "—"}</td>
       <td className="px-3 py-2 text-muted-foreground">{fmtShortDate(r.invoiceDate)}</td>
@@ -33,37 +45,40 @@ function AgingRowLine({ r, onClick, onMarkPaid }: { r: AgingRow; onClick: () => 
         {r.isApproved ? agingLabel : "—"}
       </td>
       <td className="px-3 py-2 text-right">{fmtDecimal(r.amount)}</td>
-      {onMarkPaid && (
-        <td className="px-3 py-2 text-right" onClick={(e) => e.stopPropagation()}>
-          <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => onMarkPaid(r)}>
-            <CheckCircle2 className="h-3.5 w-3.5" /> Mark Paid
-          </Button>
-        </td>
-      )}
     </tr>
   );
 }
 
 export default function APAgingTab({ projectId }: Props) {
-  const { approvedRows, unapprovedRows, loading, refetch, bucketTotals, grandTotal, unapprovedTotal, markPaid } = useAPAging(projectId);
+  const { approvedRows, unapprovedRows, loading, refetch, bucketTotals, grandTotal, unapprovedTotal, markPaidBulk } = useAPAging(projectId);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
-  const [markPaidRow, setMarkPaidRow] = useState<AgingRow | null>(null);
-  const [paidDate, setPaidDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [markingPaid, setMarkingPaid] = useState(false);
   const missingDueDateCount = approvedRows.filter((r) => !r.dueDate).length;
 
-  const openMarkPaid = (r: AgingRow) => {
-    setMarkPaidRow(r);
-    setPaidDate(new Date().toISOString().slice(0, 10));
+  const allChecked = approvedRows.length > 0 && approvedRows.every((r) => checkedIds.has(r.invoiceId));
+  const someChecked = approvedRows.some((r) => checkedIds.has(r.invoiceId));
+
+  const toggleOne = (id: string) => {
+    setCheckedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
-  const confirmMarkPaid = async () => {
-    if (!markPaidRow) return;
+  const toggleAll = () => {
+    setCheckedIds(allChecked ? new Set() : new Set(approvedRows.map((r) => r.invoiceId)));
+  };
+
+  const markSelectedPaid = async () => {
+    const ids = Array.from(checkedIds);
+    if (ids.length === 0) return;
     setMarkingPaid(true);
     try {
-      await markPaid(markPaidRow.invoiceId, paidDate);
-      toast.success(`${markPaidRow.vendorName} marked paid.`);
-      setMarkPaidRow(null);
+      await markPaidBulk(ids);
+      toast.success(`${ids.length} invoice${ids.length === 1 ? "" : "s"} marked paid.`);
+      setCheckedIds(new Set());
     } catch (e: any) {
       toast.error(e?.message || "Failed to mark as paid.");
     } finally {
@@ -119,7 +134,15 @@ export default function APAgingTab({ projectId }: Props) {
 
       {/* ── Approved-and-unpaid batch ── */}
       <div className="space-y-2">
-        <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Approved, Unpaid</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Approved, Unpaid</h3>
+          {someChecked && (
+            <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={markSelectedPaid} disabled={markingPaid}>
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {markingPaid ? "Marking…" : `Mark ${checkedIds.size} Paid`}
+            </Button>
+          )}
+        </div>
 
         {/* Bucket summary */}
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -137,13 +160,15 @@ export default function APAgingTab({ projectId }: Props) {
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
               <tr>
+                <th className="px-3 py-2 w-8">
+                  {approvedRows.length > 0 && <Checkbox checked={allChecked} onCheckedChange={toggleAll} aria-label="Select all" />}
+                </th>
                 <th className="px-3 py-2 text-left">Vendor</th>
                 <th className="px-3 py-2 text-left">Invoice #</th>
                 <th className="px-3 py-2 text-left">Invoice Date</th>
                 <th className="px-3 py-2 text-left">Due Date</th>
                 <th className="px-3 py-2 text-left">Aging</th>
                 <th className="px-3 py-2 text-right">Amount</th>
-                <th className="px-3 py-2 text-right">Payment</th>
               </tr>
             </thead>
             <tbody>
@@ -151,15 +176,21 @@ export default function APAgingTab({ projectId }: Props) {
                 <tr><td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">No unpaid approved invoices on this project.</td></tr>
               )}
               {approvedRows.map((r) => (
-                <AgingRowLine key={r.invoiceId} r={r} onClick={() => setSelectedInvoiceId(r.invoiceId)} onMarkPaid={openMarkPaid} />
+                <AgingRowLine
+                  key={r.invoiceId}
+                  r={r}
+                  onClick={() => setSelectedInvoiceId(r.invoiceId)}
+                  selectable
+                  checked={checkedIds.has(r.invoiceId)}
+                  onToggle={toggleOne}
+                />
               ))}
             </tbody>
             {approvedRows.length > 0 && (
               <tfoot>
                 <tr className="border-t bg-muted/50 font-semibold">
-                  <td className="px-3 py-2" colSpan={5}>Total</td>
+                  <td className="px-3 py-2" colSpan={6}>Total</td>
                   <td className="px-3 py-2 text-right">{fmtDecimal(grandTotal)}</td>
-                  <td className="px-3 py-2" />
                 </tr>
               </tfoot>
             )}
@@ -172,27 +203,6 @@ export default function APAgingTab({ projectId }: Props) {
         onClose={() => setSelectedInvoiceId(null)}
         onChange={refetch}
       />
-
-      <Dialog open={!!markPaidRow} onOpenChange={(o) => !o && setMarkPaidRow(null)}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Mark as Paid</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <p className="text-sm text-muted-foreground">
-              {markPaidRow?.vendorName} — {markPaidRow ? fmtDecimal(markPaidRow.amount) : ""}
-            </p>
-            <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Payment date</label>
-              <Input type="date" value={paidDate} onChange={(e) => setPaidDate(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setMarkPaidRow(null)}>Cancel</Button>
-            <Button onClick={confirmMarkPaid} disabled={markingPaid}>{markingPaid ? "Saving…" : "Confirm Paid"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
