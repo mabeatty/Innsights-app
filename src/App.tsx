@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AppLayout } from "@/components/AppLayout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import CompanyDashboard from "./pages/CompanyDashboard";
 import NewProject from "./pages/NewProject";
 import ProjectView from "./pages/ProjectView";
 
@@ -96,6 +97,7 @@ const App = () => (
             <Route path="/mfa-enroll" element={<MfaRoute><MfaEnroll /></MfaRoute>} />
             <Route path="/mfa-verify" element={<MfaRoute><MfaVerify /></MfaRoute>} />
             <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+            <Route path="/company" element={<InvestmentRoute><CompanyDashboard /></InvestmentRoute>} />
             <Route path="/new-project" element={<ProtectedRoute><NewProject /></ProtectedRoute>} />
             <Route path="/project/:id" element={<ProtectedRoute><ProjectView /></ProtectedRoute>} />
             

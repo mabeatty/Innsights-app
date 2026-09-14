@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { LayoutDashboard, FolderPlus, LogOut, FileText, Settings, Users, ChevronRight, Receipt, TrendingUp, GripVertical, AlertTriangle, FolderOpen, Building2, FileCheck, Banknote, Compass } from "lucide-react";
+import { LayoutDashboard, FolderPlus, LogOut, FileText, Settings, Users, ChevronRight, Receipt, TrendingUp, GripVertical, AlertTriangle, FolderOpen, Building2, FileCheck, Banknote, Compass, DollarSign } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -21,6 +21,7 @@ import { useAlerts } from "@/hooks/useAlerts";
 const STORAGE_KEY = "innsights-sidebar-order";
 
 const defaultDraggableItems = [
+  { title: "Company Dashboard", url: "/company", icon: DollarSign, requiresInvestmentAccess: true },
   { title: "Investment Management", url: "/investments", icon: TrendingUp, requiresInvestmentAccess: true },
   { title: "Prospecting", url: "/prospecting", icon: Compass, requiresInvestmentAccess: false },
   { title: "Document Library", url: "/internal-documents", icon: FolderOpen, requiresInvestmentAccess: false },
@@ -31,7 +32,7 @@ const defaultDraggableItems = [
 ];
 
 const iconMap: Record<string, typeof LayoutDashboard> = {
-  TrendingUp, Receipt, FolderPlus, FolderOpen, Settings, Users,
+  TrendingUp, Receipt, FolderPlus, FolderOpen, Settings, Users, DollarSign,
 };
 
 interface SidebarProject {

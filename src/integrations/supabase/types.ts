@@ -170,6 +170,24 @@ export type Database = {
         Update: { created_at?: string; file_path?: string | null; file_url?: string; id?: string; is_active?: boolean; notes?: string | null; org_id?: string; template_name?: string; template_type?: string; updated_at?: string }
         Relationships: [{ foreignKeyName: "contract_templates_org_id_fkey"; columns: ["org_id"]; isOneToOne: false; referencedRelation: "organizations"; referencedColumns: ["id"] }]
       }
+      company_financial_categories: {
+        Row: { created_at: string; id: string; name: string; org_id: string; sort_order: number; type: string }
+        Insert: { created_at?: string; id?: string; name: string; org_id: string; sort_order?: number; type: string }
+        Update: { created_at?: string; id?: string; name?: string; org_id?: string; sort_order?: number; type?: string }
+        Relationships: []
+      }
+      company_budget: {
+        Row: { amount: number; category_id: string; created_at: string; id: string; month: string; org_id: string; updated_at: string; updated_by: string | null }
+        Insert: { amount?: number; category_id: string; created_at?: string; id?: string; month: string; org_id: string; updated_at?: string; updated_by?: string | null }
+        Update: { amount?: number; category_id?: string; created_at?: string; id?: string; month?: string; org_id?: string; updated_at?: string; updated_by?: string | null }
+        Relationships: [{ foreignKeyName: "company_budget_category_id_fkey"; columns: ["category_id"]; isOneToOne: false; referencedRelation: "company_financial_categories"; referencedColumns: ["id"] }]
+      }
+      company_actuals: {
+        Row: { amount: number; category_id: string; created_at: string; id: string; is_projected: boolean; month: string; org_id: string; updated_at: string; updated_by: string | null }
+        Insert: { amount?: number; category_id: string; created_at?: string; id?: string; is_projected?: boolean; month: string; org_id: string; updated_at?: string; updated_by?: string | null }
+        Update: { amount?: number; category_id?: string; created_at?: string; id?: string; is_projected?: boolean; month?: string; org_id?: string; updated_at?: string; updated_by?: string | null }
+        Relationships: [{ foreignKeyName: "company_actuals_category_id_fkey"; columns: ["category_id"]; isOneToOne: false; referencedRelation: "company_financial_categories"; referencedColumns: ["id"] }]
+      }
       contracts: {
         Row: { contract_number: string; contract_type: string; created_at: string; default_retainage_percent: number; payment_terms_days: number | null; document_name: string | null; document_path: string | null; document_url: string | null; executed_date: string | null; id: string; notes: string | null; org_id: string; original_amount: number; parent_contract_id: string | null; project_id: string; scope_summary: string; status: string; updated_at: string; vendor_id: string | null }
         Insert: { contract_number?: string; contract_type?: string; created_at?: string; default_retainage_percent?: number; payment_terms_days?: number | null; document_name?: string | null; document_path?: string | null; document_url?: string | null; executed_date?: string | null; id?: string; notes?: string | null; org_id: string; original_amount?: number; parent_contract_id?: string | null; project_id: string; scope_summary?: string; status?: string; updated_at?: string; vendor_id?: string | null }
