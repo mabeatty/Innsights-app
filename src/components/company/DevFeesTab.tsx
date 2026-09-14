@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useDevFees } from "@/hooks/useDevFees";
@@ -34,11 +34,22 @@ export default function DevFeesTab() {
   }
 
   const projectIds = projects.map((p) => p.projectId);
+  // Each cell is independently either real (billed) or forecast — a given
+  // project's amount in a given month is never split between the two, so
+  // this tracks per-project-month billed status directly rather than
+  // approximating it at the whole-month level. Attached directly onto each
+  // chart row (as `${pid}__billed`) so the tooltip can read it without
+  // re-deriving the month from a formatted label string.
   const chartData = monthlyTotals.map((m) => {
     const row: Record<string, any> = { label: format(new Date(`${m.month}T00:00:00`), "MMM yy") };
-    projectIds.forEach((pid) => { row[pid] = m.byProject[pid] ?? 0; });
+    projectIds.forEach((pid) => {
+      row[pid] = (m.byProjectActual[pid] ?? 0) + (m.byProjectForecast[pid] ?? 0);
+      row[`${pid}__billed`] = (m.byProjectActual[pid] ?? 0) > 0;
+    });
     return row;
   });
+  const hasAnyForecast = monthlyTotals.some((m) => m.forecastTotal > 0);
+  const hasAnyActual = monthlyTotals.some((m) => m.actualTotal > 0);
 
   return (
     <div className="space-y-6 pt-2">
@@ -55,16 +66,35 @@ export default function DevFeesTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Fee billed each month, by project</h3>
-        <p className="text-xs text-muted-foreground mb-2">Forward billing schedule — historical billing that predates this schedule isn't broken out by month.</p>
+        <p className="text-xs text-muted-foreground mb-2">
+          Solid bars are real, received billing. Lighter bars are the forward schedule — projected, not yet billed. Historical billing that predates this schedule isn't broken out by month.
+        </p>
+        {hasAnyActual && hasAnyForecast && (
+          <div className="flex items-center gap-3 mb-2 text-xs text-muted-foreground">
+            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-foreground/70" />Actual (billed)</span>
+            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-foreground/30" />Forecast (not yet billed)</span>
+          </div>
+        )}
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
-            <Tooltip formatter={(v: number, name: string) => [fmtFull(Number(v)), projects.find((p) => p.projectId === name)?.projectName ?? name]} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
+            <Tooltip
+              formatter={(v: number, name: string, entry: any) => {
+                const projectName = projects.find((p) => p.projectId === name)?.projectName ?? name;
+                const isBilled = entry?.payload?.[`${name}__billed`];
+                return [`${fmtFull(Number(v))} ${isBilled ? "(actual)" : "(forecast)"}`, projectName];
+              }}
+              contentStyle={{ fontSize: 12, borderRadius: 6 }}
+            />
             <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value} />
             {projectIds.map((pid, i) => (
-              <Bar key={pid} dataKey={pid} stackId="fees" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} radius={i === projectIds.length - 1 ? [3, 3, 0, 0] : undefined} />
+              <Bar key={pid} dataKey={pid} stackId="fees" radius={i === projectIds.length - 1 ? [3, 3, 0, 0] : undefined}>
+                {chartData.map((row, idx) => (
+                  <Cell key={idx} fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={row[`${pid}__billed`] ? 1 : 0.35} />
+                ))}
+              </Bar>
             ))}
           </BarChart>
         </ResponsiveContainer>

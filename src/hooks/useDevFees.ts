@@ -15,7 +15,11 @@ export interface DevFeeProject {
 export interface MonthlyFeeTotal {
   month: string;
   total: number;
-  byProject: Record<string, number>; // projectId -> amount
+  actualTotal: number; // real, billed (is_billed=true) amount for the month
+  forecastTotal: number; // projected, not-yet-billed (is_billed=false) amount for the month
+  byProject: Record<string, number>; // deprecated alias for byProjectActual — kept for compatibility
+  byProjectActual: Record<string, number>;
+  byProjectForecast: Record<string, number>;
 }
 
 // Loads the development fee tracker: one row per New-Build project (total
@@ -83,18 +87,33 @@ export function useDevFees() {
   const totalBilled = projects.reduce((s, p) => s + p.totalBilled, 0);
   const totalRemaining = projects.reduce((s, p) => s + p.remaining, 0);
 
-  // Monthly totals (forecast schedule) — aggregate and per-project, for the
-  // "how much paid each month" view. Only reflects rows actually in
-  // dev_fee_schedule (the forward-looking schedule loaded from the source
-  // doc); doesn't include pre-tracker historical billing since that's not
-  // broken out by month in the real data.
+  // Monthly totals, split cleanly into actual (is_billed=true, real money
+  // received) vs. forecast (is_billed=false, expected future billing) —
+  // these are never combined into one number per month, since a month is
+  // either something that already happened or something projected to
+  // happen, never both. Previous version summed every row regardless of
+  // is_billed, which meant future forecast months rendered identically to
+  // real billed months on the chart — a genuine display bug, not just a
+  // data problem, since the underlying is_billed flag was already correct
+  // and simply never consulted here.
   const monthsSet = new Set(scheduleRows.map((r) => r.month));
   const months = Array.from(monthsSet).sort();
   const monthlyTotals: MonthlyFeeTotal[] = months.map((month) => {
     const rowsForMonth = scheduleRows.filter((r) => r.month === month);
-    const byProject: Record<string, number> = {};
-    rowsForMonth.forEach((r) => { byProject[r.projectId] = (byProject[r.projectId] ?? 0) + r.amount; });
-    return { month, total: rowsForMonth.reduce((s, r) => s + r.amount, 0), byProject };
+    const actualRows = rowsForMonth.filter((r) => r.isBilled);
+    const forecastRows = rowsForMonth.filter((r) => !r.isBilled);
+    const byProjectActual: Record<string, number> = {};
+    actualRows.forEach((r) => { byProjectActual[r.projectId] = (byProjectActual[r.projectId] ?? 0) + r.amount; });
+    const byProjectForecast: Record<string, number> = {};
+    forecastRows.forEach((r) => { byProjectForecast[r.projectId] = (byProjectForecast[r.projectId] ?? 0) + r.amount; });
+    return {
+      month,
+      total: rowsForMonth.reduce((s, r) => s + r.amount, 0),
+      actualTotal: actualRows.reduce((s, r) => s + r.amount, 0),
+      forecastTotal: forecastRows.reduce((s, r) => s + r.amount, 0),
+      byProject: byProjectActual, // kept for backward compatibility — actual only
+      byProjectActual, byProjectForecast,
+    };
   });
 
   return {
