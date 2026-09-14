@@ -49,7 +49,7 @@ serve(async (req) => {
         products: ["transactions"],
         country_codes: ["US"],
         language: "en",
-        redirect_uri: "https://innsights.vercel.app/oauth-callback",
+        redirect_uri: "https://mabeatty-innsights.vercel.app/oauth-callback",
       }),
     });
 

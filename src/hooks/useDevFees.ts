@@ -42,16 +42,31 @@ export function useDevFees() {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }] = await Promise.all([
+      const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }] = await Promise.all([
         supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name)").eq("org_id", organizationId),
         supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name)").eq("org_id", organizationId).order("month"),
+        supabase.from("dev_fee_qb_actuals").select("project_id, month, amount").eq("org_id", organizationId).order("month"),
       ]);
       if (feeErr) throw feeErr;
       if (schedErr) throw schedErr;
+      if (qbErr) throw qbErr;
+
+      // Projects with real QuickBooks-sourced monthly actuals (dev_fee_qb_actuals)
+      // use QB as the source of truth for actual billed amounts — more accurate
+      // than the project-accounting-derived dev_fee_schedule rows, per direction
+      // (2026-09-14). Projects with no QB mapping/data fall back to the
+      // schedule-derived actuals exactly as before, so nothing regresses for
+      // projects QuickBooks doesn't track yet.
+      const qbProjectIds = new Set((qbRows ?? []).map((r: any) => r.project_id));
 
       const billedByProject = new Map<string, number>();
       (schedRows ?? []).forEach((r: any) => {
-        if (r.is_billed) billedByProject.set(r.project_id, (billedByProject.get(r.project_id) ?? 0) + Number(r.amount));
+        if (r.is_billed && !qbProjectIds.has(r.project_id)) {
+          billedByProject.set(r.project_id, (billedByProject.get(r.project_id) ?? 0) + Number(r.amount));
+        }
+      });
+      (qbRows ?? []).forEach((r: any) => {
+        billedByProject.set(r.project_id, (billedByProject.get(r.project_id) ?? 0) + Number(r.amount));
       });
 
       const builtProjects: DevFeeProject[] = (feeRows ?? []).map((r: any) => {
@@ -69,10 +84,24 @@ export function useDevFees() {
       builtProjects.sort((a, b) => b.totalFee - a.totalFee);
       setProjects(builtProjects);
 
-      setScheduleRows((schedRows ?? []).map((r: any) => ({
-        projectId: r.project_id, projectName: r.projects?.name ?? "Unknown",
-        month: r.month, amount: Number(r.amount), isBilled: r.is_billed,
-      })));
+      // Build the monthly chart's row set: schedule-derived forecast rows
+      // (is_billed=false) pass through unchanged for every project — QB has
+      // no concept of "not yet billed" — but schedule-derived actual rows
+      // are dropped for QB-mapped projects and replaced with the real QB
+      // monthly amounts, which may not split across months identically to
+      // the old schedule data.
+      const nonQbRows = (schedRows ?? [])
+        .filter((r: any) => !r.is_billed || !qbProjectIds.has(r.project_id))
+        .map((r: any) => ({
+          projectId: r.project_id, projectName: r.projects?.name ?? "Unknown",
+          month: r.month, amount: Number(r.amount), isBilled: r.is_billed,
+        }));
+      const projectNameById = new Map((feeRows ?? []).map((r: any) => [r.project_id, r.projects?.name ?? "Unknown"]));
+      const qbActualRows = (qbRows ?? []).map((r: any) => ({
+        projectId: r.project_id, projectName: projectNameById.get(r.project_id) ?? "Unknown",
+        month: r.month, amount: Number(r.amount), isBilled: true,
+      }));
+      setScheduleRows([...nonQbRows, ...qbActualRows]);
     } catch (e: any) {
       setError(e?.message || "Failed to load development fee data.");
     } finally {
