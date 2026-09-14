@@ -44,7 +44,7 @@ export default function DevFeesTab() {
   // series, nothing). A month where a project hasn't actually billed shows
   // literally nothing for that project, full stop.
   const chartData = monthlyTotals.map((m) => {
-    const row: Record<string, any> = { label: format(new Date(`${m.month}T00:00:00`), "MMM yy") };
+    const row: Record<string, any> = { label: format(new Date(`${m.month.length === 7 ? `${m.month}-01` : m.month}T00:00:00`), "MMM yy") };
     projectIds.forEach((pid) => { row[pid] = m.byProjectActual[pid] ?? 0; });
     return row;
   });

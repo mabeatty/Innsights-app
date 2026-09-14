@@ -84,14 +84,32 @@ export function useDevFees() {
       builtProjects.sort((a, b) => b.totalFee - a.totalFee);
       setProjects(builtProjects);
 
-      // Build the monthly chart's row set: schedule-derived forecast rows
-      // (is_billed=false) pass through unchanged for every project — QB has
-      // no concept of "not yet billed" — but schedule-derived actual rows
-      // are dropped for QB-mapped projects and replaced with the real QB
-      // monthly amounts, which may not split across months identically to
-      // the old schedule data.
+      // Build the monthly chart's row set. Two things have to be handled
+      // carefully here or the chart silently double-counts:
+      // 1. dev_fee_schedule.month is stored as a full date ('2026-06-01'),
+      //    while QB actuals use 'YYYY-MM' ('2026-06') — normalize both to
+      //    'YYYY-MM' so the same calendar month is always the same key.
+      // 2. For QB-mapped projects, a schedule forecast row can exist for a
+      //    month that QB has since actually reported (the forecast was
+      //    never cleared once the real billing happened) — that produced
+      //    two bars for the same month (a stale forecast + the real
+      //    actual). Forecast rows are dropped for any (project, month)
+      //    combination QB already has real data for; forecast rows for
+      //    months beyond what QB has reported still pass through, since
+      //    QB has no concept of future/projected amounts.
+      const qbMonthsByProject = new Map<string, Set<string>>();
+      (qbRows ?? []).forEach((r: any) => {
+        if (!qbMonthsByProject.has(r.project_id)) qbMonthsByProject.set(r.project_id, new Set());
+        qbMonthsByProject.get(r.project_id)!.add(r.month);
+      });
       const nonQbRows = (schedRows ?? [])
-        .filter((r: any) => !r.is_billed || !qbProjectIds.has(r.project_id))
+        .map((r: any) => ({ ...r, month: String(r.month).slice(0, 7) }))
+        .filter((r: any) => {
+          if (!qbProjectIds.has(r.project_id)) return true; // unmapped project — schedule is authoritative
+          if (r.is_billed) return false; // mapped project's real actuals come from QB, not schedule
+          // mapped project's forecast row — drop only if QB already actualized this exact month
+          return !qbMonthsByProject.get(r.project_id)?.has(r.month);
+        })
         .map((r: any) => ({
           projectId: r.project_id, projectName: r.projects?.name ?? "Unknown",
           month: r.month, amount: Number(r.amount), isBilled: r.is_billed,
