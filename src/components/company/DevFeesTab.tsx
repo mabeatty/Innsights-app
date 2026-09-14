@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useDevFees } from "@/hooks/useDevFees";
@@ -34,17 +34,18 @@ export default function DevFeesTab() {
   }
 
   const projectIds = projects.map((p) => p.projectId);
-  // Each cell is independently either real (billed) or forecast — a given
-  // project's amount in a given month is never split between the two, so
-  // this tracks per-project-month billed status directly rather than
-  // approximating it at the whole-month level. Attached directly onto each
-  // chart row (as `${pid}__billed`) so the tooltip can read it without
-  // re-deriving the month from a formatted label string.
+  // Two genuinely separate dataKeys per project (actual vs forecast) rather
+  // than one combined value with a per-Cell opacity override — the earlier
+  // Cell-based approach was unreliable in practice (opacity not always
+  // respecting the real billed status), and splitting into real, distinct
+  // series is the more robust fix rather than continuing to debug Cell
+  // rendering quirks. Each Bar gets one fixed, real opacity set directly on
+  // itself, not per-cell.
   const chartData = monthlyTotals.map((m) => {
     const row: Record<string, any> = { label: format(new Date(`${m.month}T00:00:00`), "MMM yy") };
     projectIds.forEach((pid) => {
-      row[pid] = (m.byProjectActual[pid] ?? 0) + (m.byProjectForecast[pid] ?? 0);
-      row[`${pid}__billed`] = (m.byProjectActual[pid] ?? 0) > 0;
+      row[`${pid}_actual`] = m.byProjectActual[pid] ?? 0;
+      row[`${pid}_forecast`] = m.byProjectForecast[pid] ?? 0;
     });
     return row;
   });
@@ -83,14 +84,13 @@ export default function DevFeesTab() {
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload || payload.length === 0) return null;
-                // Only real, actually-billed line items — a project sitting
-                // at $0 that month, or one whose amount there is forecast
-                // rather than billed, doesn't belong in this tooltip at all.
+                // Only real, actually-billed line items — the _forecast
+                // series never appears in this tooltip at all, and a
+                // project's _actual series at $0 that month is filtered
+                // out too.
                 const billedEntries = payload.filter((entry: any) => {
-                  const pid = entry.dataKey as string;
-                  const amount = entry.payload?.[pid] ?? 0;
-                  const isBilled = entry.payload?.[`${pid}__billed`];
-                  return amount > 0 && isBilled;
+                  const key = entry.dataKey as string;
+                  return key.endsWith("_actual") && Number(entry.value) > 0;
                 });
                 if (billedEntries.length === 0) {
                   return (
@@ -104,12 +104,12 @@ export default function DevFeesTab() {
                   <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
                     <p className="font-medium mb-1">{label}</p>
                     {billedEntries.map((entry: any) => {
-                      const pid = entry.dataKey as string;
+                      const pid = (entry.dataKey as string).replace(/_actual$/, "");
                       const projectName = projects.find((p) => p.projectId === pid)?.projectName ?? pid;
                       return (
                         <p key={pid} className="flex items-center justify-between gap-3">
                           <span className="text-muted-foreground">{projectName}</span>
-                          <span>{fmtFull(entry.payload[pid])}</span>
+                          <span>{fmtFull(Number(entry.value))}</span>
                         </p>
                       );
                     })}
@@ -117,13 +117,29 @@ export default function DevFeesTab() {
                 );
               }}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value} />
+            <Legend
+              wrapperStyle={{ fontSize: 11 }}
+              payload={projects.map((p, i) => ({ value: p.projectId, type: "square" as const, color: PROJECT_COLORS[i % PROJECT_COLORS.length] }))}
+              formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value}
+            />
             {projectIds.map((pid, i) => (
-              <Bar key={pid} dataKey={pid} stackId="fees" radius={i === projectIds.length - 1 ? [3, 3, 0, 0] : undefined}>
-                {chartData.map((row, idx) => (
-                  <Cell key={idx} fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={row[`${pid}__billed`] ? 1 : 0.35} />
-                ))}
-              </Bar>
+              <Bar
+                key={`${pid}_actual`}
+                dataKey={`${pid}_actual`}
+                stackId="fees"
+                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
+                fillOpacity={1}
+              />
+            ))}
+            {projectIds.map((pid, i) => (
+              <Bar
+                key={`${pid}_forecast`}
+                dataKey={`${pid}_forecast`}
+                stackId="fees"
+                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
+                fillOpacity={0.35}
+                radius={i === projectIds.length - 1 ? [3, 3, 0, 0] : undefined}
+              />
             ))}
           </BarChart>
         </ResponsiveContainer>
