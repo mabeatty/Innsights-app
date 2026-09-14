@@ -200,9 +200,9 @@ export type Database = {
         ]
       }
       dev_fee_projects: {
-        Row: { created_at: string; dev_fee: number; id: string; notes: string | null; or_fee: number; org_id: string; project_id: string; updated_at: string }
-        Insert: { created_at?: string; dev_fee?: number; id?: string; notes?: string | null; or_fee?: number; org_id: string; project_id: string; updated_at?: string }
-        Update: { created_at?: string; dev_fee?: number; id?: string; notes?: string | null; or_fee?: number; org_id?: string; project_id?: string; updated_at?: string }
+        Row: { created_at: string; dev_fee: number; id: string; notes: string | null; org_id: string; project_id: string; updated_at: string }
+        Insert: { created_at?: string; dev_fee?: number; id?: string; notes?: string | null; org_id: string; project_id: string; updated_at?: string }
+        Update: { created_at?: string; dev_fee?: number; id?: string; notes?: string | null; org_id?: string; project_id?: string; updated_at?: string }
         Relationships: [{ foreignKeyName: "dev_fee_projects_project_id_fkey"; columns: ["project_id"]; isOneToOne: true; referencedRelation: "projects"; referencedColumns: ["id"] }]
       }
       dev_fee_schedule: {

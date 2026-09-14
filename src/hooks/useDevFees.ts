@@ -6,8 +6,7 @@ export interface DevFeeProject {
   projectId: string;
   projectName: string;
   devFee: number;
-  orFee: number;
-  totalFee: number; // devFee + orFee
+  totalFee: number; // == devFee (kept as a distinct field in case a non-dev-fee component is reintroduced later)
   totalBilled: number; // sum of is_billed=true schedule rows
   remaining: number; // totalFee - totalBilled
   notes: string | null;
@@ -40,7 +39,7 @@ export function useDevFees() {
     setError(null);
     try {
       const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }] = await Promise.all([
-        supabase.from("dev_fee_projects").select("project_id, dev_fee, or_fee, notes, projects(name)").eq("org_id", organizationId),
+        supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name)").eq("org_id", organizationId),
         supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name)").eq("org_id", organizationId).order("month"),
       ]);
       if (feeErr) throw feeErr;
@@ -53,13 +52,12 @@ export function useDevFees() {
 
       const builtProjects: DevFeeProject[] = (feeRows ?? []).map((r: any) => {
         const devFee = Number(r.dev_fee);
-        const orFee = Number(r.or_fee);
-        const totalFee = devFee + orFee;
+        const totalFee = devFee;
         const totalBilled = billedByProject.get(r.project_id) ?? 0;
         return {
           projectId: r.project_id,
           projectName: r.projects?.name ?? "Unknown",
-          devFee, orFee, totalFee, totalBilled,
+          devFee, totalFee, totalBilled,
           remaining: totalFee - totalBilled,
           notes: r.notes,
         };
@@ -81,7 +79,6 @@ export function useDevFees() {
   useEffect(() => { load(); }, [load]);
 
   const totalDevFee = projects.reduce((s, p) => s + p.devFee, 0);
-  const totalOrFee = projects.reduce((s, p) => s + p.orFee, 0);
   const totalFee = projects.reduce((s, p) => s + p.totalFee, 0);
   const totalBilled = projects.reduce((s, p) => s + p.totalBilled, 0);
   const totalRemaining = projects.reduce((s, p) => s + p.remaining, 0);
@@ -103,6 +100,6 @@ export function useDevFees() {
   return {
     loading, error, refetch: load,
     projects, scheduleRows, monthlyTotals,
-    totalDevFee, totalOrFee, totalFee, totalBilled, totalRemaining,
+    totalDevFee, totalFee, totalBilled, totalRemaining,
   };
 }

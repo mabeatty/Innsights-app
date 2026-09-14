@@ -48,7 +48,7 @@ export default function DevFeesTab() {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KpiCard label="Total fee pipeline" value={fmtFull(totalFee)} sub="Development + owner's-rep fees, all projects" />
+        <KpiCard label="Total fee pipeline" value={fmtFull(totalFee)} sub="Development fees, all projects" />
         <KpiCard label="Billed to date" value={fmtFull(totalBilled)} sub={`${totalFee > 0 ? Math.round((totalBilled / totalFee) * 100) : 0}% of total`} />
         <KpiCard label="Remaining" value={fmtFull(totalRemaining)} sub="Not yet billed" />
       </div>
@@ -78,7 +78,6 @@ export default function DevFeesTab() {
               <tr>
                 <th className="px-3 py-2 text-left">Project</th>
                 <th className="px-3 py-2 text-right">Dev fee</th>
-                <th className="px-3 py-2 text-right">OR fee</th>
                 <th className="px-3 py-2 text-right">Total fee</th>
                 <th className="px-3 py-2 text-right">Billed to date</th>
                 <th className="px-3 py-2 text-right">Remaining</th>
@@ -95,7 +94,6 @@ export default function DevFeesTab() {
                       {p.notes && <span className="ml-1.5 text-amber-600 dark:text-amber-500" title={p.notes}>⚠</span>}
                     </td>
                     <td className="px-3 py-2 text-right text-muted-foreground">{fmtFull(p.devFee)}</td>
-                    <td className="px-3 py-2 text-right text-muted-foreground">{p.orFee > 0 ? fmtFull(p.orFee) : "—"}</td>
                     <td className="px-3 py-2 text-right">{fmtFull(p.totalFee)}</td>
                     <td className="px-3 py-2 text-right">{fmtFull(p.totalBilled)}</td>
                     <td className="px-3 py-2 text-right">{fmtFull(p.remaining)}</td>
@@ -115,7 +113,6 @@ export default function DevFeesTab() {
               <tr className="border-t bg-muted/50 font-semibold">
                 <td className="px-3 py-2">Total</td>
                 <td className="px-3 py-2 text-right">{fmtFull(projects.reduce((s, p) => s + p.devFee, 0))}</td>
-                <td className="px-3 py-2 text-right">{fmtFull(projects.reduce((s, p) => s + p.orFee, 0))}</td>
                 <td className="px-3 py-2 text-right">{fmtFull(totalFee)}</td>
                 <td className="px-3 py-2 text-right">{fmtFull(totalBilled)}</td>
                 <td className="px-3 py-2 text-right">{fmtFull(totalRemaining)}</td>
