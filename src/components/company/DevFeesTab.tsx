@@ -22,7 +22,12 @@ function KpiCard({ label, value, sub }: { label: string; value: string; sub?: st
   );
 }
 
-const PROJECT_COLORS = ["#2a78d6", "#1baf7a", "#eda100", "#eb6834", "#6250d6", "#c0392b", "#16a085", "#8e44ad"];
+// Chosen so no two colors are close enough to be confused at reduced
+// (forecast) opacity — the previous palette had New Albany (#1baf7a) and
+// Carmel (#16a085) as two near-identical green/teal shades, which is
+// exactly what looked like a rendering bug but was actually just two
+// projects sharing indistinguishable colors.
+const PROJECT_COLORS = ["#2a78d6", "#eda100", "#c0392b", "#8e44ad", "#1baf7a", "#e84393", "#2c3e50", "#e67e22"];
 
 export default function DevFeesTab() {
   const { loading, error, projects, monthlyTotals, totalFee, totalBilled, totalRemaining } = useDevFees();
