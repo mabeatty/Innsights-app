@@ -52,6 +52,7 @@ export default function CompanyFinancialsTab() {
     loading, error, categories, series, monthlyTotals,
     revenueBudgetTotal, revenueActualTotal, expenseBudgetTotal, expenseActualTotal,
     netIncomeBudget, netIncomeActual,
+    toDateRevenue, toDateExpenses, toDateEbitdaApprox, toDateNetMarginPct,
   } = useCompanyFinancials(year);
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
 
@@ -86,6 +87,26 @@ export default function CompanyFinancialsTab() {
             {" · "}
             <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-muted-foreground/35" />budget</span>
           </p>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium mb-2">Year to date <span className="text-xs font-normal text-muted-foreground">(closed months only, excludes projections)</span></h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <KpiCard label="Gross revenue" value={fmtFull(toDateRevenue)} sub="Closed months" />
+          <KpiCard label="Gross expenses" value={fmtFull(toDateExpenses)} sub="Closed months" />
+          <KpiCard
+            label="EBITDA (approx.)"
+            value={fmtFull(toDateEbitdaApprox)}
+            sub="Net income + taxes — no D&A in this business's accounts"
+            negative={toDateEbitdaApprox < 0}
+          />
+          <KpiCard
+            label="Net margin"
+            value={toDateNetMarginPct === null ? "—" : `${toDateNetMarginPct.toFixed(1)}%`}
+            sub="Net income ÷ revenue — no separate COGS tracked"
+            negative={toDateNetMarginPct !== null && toDateNetMarginPct < 0}
+          />
         </div>
       </div>
 

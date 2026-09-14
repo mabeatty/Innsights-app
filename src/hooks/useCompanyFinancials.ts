@@ -100,11 +100,36 @@ export function useCompanyFinancials(year: number) {
   const expenseBudgetTotal = expenseSeries.reduce((s, c) => s + c.budgetTotal, 0);
   const expenseActualTotal = expenseSeries.reduce((s, c) => s + c.actualTotal, 0);
 
+  // "To-date" is deliberately restricted to closed (non-projected) months —
+  // a projected month hasn't happened yet, so including it here would
+  // misrepresent a forecast as something that's already occurred. This
+  // reads directly off each month's own is_projected flag rather than a
+  // fixed month cutoff, so it stays correct automatically as months close
+  // and new actuals get entered.
+  const toDateRevenue = monthlyTotals.filter((m) => !m.isProjected).reduce((s, m) => s + m.revActual, 0);
+  const toDateExpenses = monthlyTotals.filter((m) => !m.isProjected).reduce((s, m) => s + m.expActual, 0);
+  const toDateNetIncome = toDateRevenue - toDateExpenses;
+  // No Depreciation & Amortization category exists in this business's real
+  // chart of accounts (no fixed assets being depreciated), and Interest is
+  // folded into Banking & Finance Costs rather than broken out separately —
+  // so this is Net Income + Taxes added back, an approximation of EBITDA
+  // rather than a full D&A-adjusted figure.
+  const toDateTaxes = series
+    .filter((s) => s.category.name === "Taxes")
+    .reduce((sum, s) => sum + s.months.filter((m) => !m.is_projected).reduce((a, m) => a + m.actual, 0), 0);
+  const toDateEbitdaApprox = toDateNetIncome + toDateTaxes;
+  // "Gross margin" here is really net margin (net income ÷ revenue) — there's
+  // no COGS category distinct from operating expenses in this business's
+  // real chart of accounts, so a traditional gross-margin calculation
+  // (revenue minus COGS, before overhead) isn't meaningful for this data.
+  const toDateNetMarginPct = toDateRevenue !== 0 ? (toDateNetIncome / toDateRevenue) * 100 : null;
+
   return {
     loading, error, refetch: load,
     categories, series, revenueSeries, expenseSeries, monthlyTotals,
     revenueBudgetTotal, revenueActualTotal, expenseBudgetTotal, expenseActualTotal,
     netIncomeBudget: revenueBudgetTotal - expenseBudgetTotal,
     netIncomeActual: revenueActualTotal - expenseActualTotal,
+    toDateRevenue, toDateExpenses, toDateNetIncome, toDateEbitdaApprox, toDateNetMarginPct,
   };
 }
