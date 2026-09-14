@@ -39,23 +39,15 @@ export default function DevFeesTab() {
   }
 
   const projectIds = projects.map((p) => p.projectId);
-  // Two genuinely separate dataKeys per project (actual vs forecast) rather
-  // than one combined value with a per-Cell opacity override — the earlier
-  // Cell-based approach was unreliable in practice (opacity not always
-  // respecting the real billed status), and splitting into real, distinct
-  // series is the more robust fix rather than continuing to debug Cell
-  // rendering quirks. Each Bar gets one fixed, real opacity set directly on
-  // itself, not per-cell.
+  // This chart shows ONLY real, actual billed amounts — forecast/projected
+  // months are not represented here in any form (not faded, not a second
+  // series, nothing). A month where a project hasn't actually billed shows
+  // literally nothing for that project, full stop.
   const chartData = monthlyTotals.map((m) => {
     const row: Record<string, any> = { label: format(new Date(`${m.month}T00:00:00`), "MMM yy") };
-    projectIds.forEach((pid) => {
-      row[`${pid}_actual`] = m.byProjectActual[pid] ?? 0;
-      row[`${pid}_forecast`] = m.byProjectForecast[pid] ?? 0;
-    });
+    projectIds.forEach((pid) => { row[pid] = m.byProjectActual[pid] ?? 0; });
     return row;
   });
-  const hasAnyForecast = monthlyTotals.some((m) => m.forecastTotal > 0);
-  const hasAnyActual = monthlyTotals.some((m) => m.actualTotal > 0);
 
   return (
     <div className="space-y-6 pt-2">
@@ -73,14 +65,8 @@ export default function DevFeesTab() {
       <div>
         <h3 className="text-sm font-medium mb-2">Fee billed each month, by project</h3>
         <p className="text-xs text-muted-foreground mb-2">
-          Solid bars are real, received billing. Lighter bars are the forward schedule — projected, not yet billed. Historical billing that predates this schedule isn't broken out by month.
+          Real, actual billings only. Projected/forecast amounts are not shown on this chart.
         </p>
-        {hasAnyActual && hasAnyForecast && (
-          <div className="flex items-center gap-3 mb-2 text-xs text-muted-foreground">
-            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-foreground/70" />Actual (billed)</span>
-            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-foreground/30" />Forecast (not yet billed)</span>
-          </div>
-        )}
         <ResponsiveContainer width="100%" height={280}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
@@ -89,14 +75,7 @@ export default function DevFeesTab() {
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload || payload.length === 0) return null;
-                // Only real, actually-billed line items — the _forecast
-                // series never appears in this tooltip at all, and a
-                // project's _actual series at $0 that month is filtered
-                // out too.
-                const billedEntries = payload.filter((entry: any) => {
-                  const key = entry.dataKey as string;
-                  return key.endsWith("_actual") && Number(entry.value) > 0;
-                });
+                const billedEntries = payload.filter((entry: any) => Number(entry.value) > 0);
                 if (billedEntries.length === 0) {
                   return (
                     <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
@@ -109,7 +88,7 @@ export default function DevFeesTab() {
                   <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
                     <p className="font-medium mb-1">{label}</p>
                     {billedEntries.map((entry: any) => {
-                      const pid = (entry.dataKey as string).replace(/_actual$/, "");
+                      const pid = entry.dataKey as string;
                       const projectName = projects.find((p) => p.projectId === pid)?.projectName ?? pid;
                       return (
                         <p key={pid} className="flex items-center justify-between gap-3">
@@ -122,38 +101,16 @@ export default function DevFeesTab() {
                 );
               }}
             />
-            <Legend
-              wrapperStyle={{ fontSize: 11 }}
-              payload={projects.map((p, i) => ({ value: p.projectId, type: "square" as const, color: PROJECT_COLORS[i % PROJECT_COLORS.length] }))}
-              formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value}
-            />
-            {projectIds.flatMap((pid, i) => [
-              // Each project's actual and forecast bars are declared back-
-              // to-back so recharts stacks them adjacent to each other.
-              // The earlier version declared all 7 "actual" bars first and
-              // all 7 "forecast" bars after — recharts stacks bars in
-              // declaration order, so a project's forecast segment ended
-              // up stacked on top of every OTHER project's actual segment
-              // instead of directly on its own actual segment. That's what
-              // produced what looked like one solid, wrong-colored bar:
-              // two different projects' segments stacked in an order that
-              // had nothing to do with their visual position.
+            <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value} />
+            {projectIds.map((pid, i) => (
               <Bar
-                key={`${pid}_actual`}
-                dataKey={`${pid}_actual`}
+                key={pid}
+                dataKey={pid}
                 stackId="fees"
                 fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
-                fillOpacity={1}
-              />,
-              <Bar
-                key={`${pid}_forecast`}
-                dataKey={`${pid}_forecast`}
-                stackId="fees"
-                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
-                fillOpacity={0.35}
                 radius={i === projectIds.length - 1 ? [3, 3, 0, 0] : undefined}
-              />,
-            ])}
+              />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>
