@@ -44,7 +44,7 @@ serve(async (req) => {
       });
     }
 
-    const redirectUri = "https://innsights.vercel.app/quickbooks-callback";
+    const redirectUri = "https://mabeatty-innsights.vercel.app/quickbooks-callback";
 
     // Exchange authorization code for tokens
     const basicAuth = btoa(`${clientId}:${clientSecret}`);

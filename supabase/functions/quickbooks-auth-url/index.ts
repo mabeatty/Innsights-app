@@ -36,7 +36,7 @@ serve(async (req) => {
       });
     }
 
-    const redirectUri = "https://innsights.vercel.app/quickbooks-callback";
+    const redirectUri = "https://mabeatty-innsights.vercel.app/quickbooks-callback";
     const scopes = "com.intuit.quickbooks.accounting";
     const state = crypto.randomUUID();
 
