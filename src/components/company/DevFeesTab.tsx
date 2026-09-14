@@ -127,16 +127,24 @@ export default function DevFeesTab() {
               payload={projects.map((p, i) => ({ value: p.projectId, type: "square" as const, color: PROJECT_COLORS[i % PROJECT_COLORS.length] }))}
               formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value}
             />
-            {projectIds.map((pid, i) => (
+            {projectIds.flatMap((pid, i) => [
+              // Each project's actual and forecast bars are declared back-
+              // to-back so recharts stacks them adjacent to each other.
+              // The earlier version declared all 7 "actual" bars first and
+              // all 7 "forecast" bars after — recharts stacks bars in
+              // declaration order, so a project's forecast segment ended
+              // up stacked on top of every OTHER project's actual segment
+              // instead of directly on its own actual segment. That's what
+              // produced what looked like one solid, wrong-colored bar:
+              // two different projects' segments stacked in an order that
+              // had nothing to do with their visual position.
               <Bar
                 key={`${pid}_actual`}
                 dataKey={`${pid}_actual`}
                 stackId="fees"
                 fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
                 fillOpacity={1}
-              />
-            ))}
-            {projectIds.map((pid, i) => (
+              />,
               <Bar
                 key={`${pid}_forecast`}
                 dataKey={`${pid}_forecast`}
@@ -144,8 +152,8 @@ export default function DevFeesTab() {
                 fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
                 fillOpacity={0.35}
                 radius={i === projectIds.length - 1 ? [3, 3, 0, 0] : undefined}
-              />
-            ))}
+              />,
+            ])}
           </BarChart>
         </ResponsiveContainer>
       </div>
