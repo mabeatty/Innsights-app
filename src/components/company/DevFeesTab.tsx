@@ -81,12 +81,41 @@ export default function DevFeesTab() {
             <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
             <Tooltip
-              formatter={(v: number, name: string, entry: any) => {
-                const projectName = projects.find((p) => p.projectId === name)?.projectName ?? name;
-                const isBilled = entry?.payload?.[`${name}__billed`];
-                return [`${fmtFull(Number(v))} ${isBilled ? "(actual)" : "(forecast)"}`, projectName];
+              content={({ active, payload, label }) => {
+                if (!active || !payload || payload.length === 0) return null;
+                // Only real, actually-billed line items — a project sitting
+                // at $0 that month, or one whose amount there is forecast
+                // rather than billed, doesn't belong in this tooltip at all.
+                const billedEntries = payload.filter((entry: any) => {
+                  const pid = entry.dataKey as string;
+                  const amount = entry.payload?.[pid] ?? 0;
+                  const isBilled = entry.payload?.[`${pid}__billed`];
+                  return amount > 0 && isBilled;
+                });
+                if (billedEntries.length === 0) {
+                  return (
+                    <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
+                      <p className="font-medium mb-0.5">{label}</p>
+                      <p className="text-muted-foreground">No actual billings this month</p>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
+                    <p className="font-medium mb-1">{label}</p>
+                    {billedEntries.map((entry: any) => {
+                      const pid = entry.dataKey as string;
+                      const projectName = projects.find((p) => p.projectId === pid)?.projectName ?? pid;
+                      return (
+                        <p key={pid} className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{projectName}</span>
+                          <span>{fmtFull(entry.payload[pid])}</span>
+                        </p>
+                      );
+                    })}
+                  </div>
+                );
               }}
-              contentStyle={{ fontSize: 12, borderRadius: 6 }}
             />
             <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => projects.find((p) => p.projectId === value)?.projectName ?? value} />
             {projectIds.map((pid, i) => (
