@@ -1,7 +1,8 @@
 import { Link } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign } from "lucide-react";
+import { ArrowLeft, DollarSign, Building2 } from "lucide-react";
 import CompanyFinancialsTab from "@/components/company/CompanyFinancialsTab";
+import DevFeesTab from "@/components/company/DevFeesTab";
 
 export default function CompanyDashboard() {
   return (
@@ -18,10 +19,17 @@ export default function CompanyDashboard() {
           <TabsTrigger value="financials" className="gap-1.5">
             <DollarSign className="h-3.5 w-3.5" /> Company Financials
           </TabsTrigger>
+          <TabsTrigger value="devfees" className="gap-1.5">
+            <Building2 className="h-3.5 w-3.5" /> Development Fees
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="financials">
           <CompanyFinancialsTab />
+        </TabsContent>
+
+        <TabsContent value="devfees">
+          <DevFeesTab />
         </TabsContent>
       </Tabs>
     </div>

@@ -199,6 +199,18 @@ export type Database = {
           { foreignKeyName: "contracts_vendor_id_fkey"; columns: ["vendor_id"]; isOneToOne: false; referencedRelation: "vendors"; referencedColumns: ["id"] },
         ]
       }
+      dev_fee_projects: {
+        Row: { created_at: string; dev_fee: number; id: string; notes: string | null; or_fee: number; org_id: string; project_id: string; updated_at: string }
+        Insert: { created_at?: string; dev_fee?: number; id?: string; notes?: string | null; or_fee?: number; org_id: string; project_id: string; updated_at?: string }
+        Update: { created_at?: string; dev_fee?: number; id?: string; notes?: string | null; or_fee?: number; org_id?: string; project_id?: string; updated_at?: string }
+        Relationships: [{ foreignKeyName: "dev_fee_projects_project_id_fkey"; columns: ["project_id"]; isOneToOne: true; referencedRelation: "projects"; referencedColumns: ["id"] }]
+      }
+      dev_fee_schedule: {
+        Row: { amount: number; created_at: string; id: string; is_billed: boolean; month: string; org_id: string; project_id: string; updated_at: string; updated_by: string | null }
+        Insert: { amount?: number; created_at?: string; id?: string; is_billed?: boolean; month: string; org_id: string; project_id: string; updated_at?: string; updated_by?: string | null }
+        Update: { amount?: number; created_at?: string; id?: string; is_billed?: boolean; month?: string; org_id?: string; project_id?: string; updated_at?: string; updated_by?: string | null }
+        Relationships: [{ foreignKeyName: "dev_fee_schedule_project_id_fkey"; columns: ["project_id"]; isOneToOne: false; referencedRelation: "projects"; referencedColumns: ["id"] }]
+      }
       draw_history: {
         Row: { backup_url: string | null; created_at: string; draw_month: string; draw_number: number; id: string; notes: string | null; project_id: string; snapshot_json: Json; status: string; submission_date: string; total_amount: number }
         Insert: { backup_url?: string | null; created_at?: string; draw_month?: string; draw_number: number; id?: string; notes?: string | null; project_id: string; snapshot_json?: Json; status?: string; submission_date?: string; total_amount?: number }
