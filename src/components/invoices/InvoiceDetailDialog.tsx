@@ -1,10 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,7 +16,7 @@ import { useTeamMembers } from "@/hooks/useTeamMembers";
 import { createNotifications } from "@/lib/notify";
 import {
   Invoice, InvoiceApproval, InvoiceLineItem, ApproverRole, APPROVER_ROLES,
-  statusBadgeClasses, formatCurrency,
+  statusBadgeClasses, formatCurrency, COST_TYPES,
 } from "./types";
 import LienWaiverPanel from "./LienWaiverPanel";
 import PdfPreview from "./PdfPreview";
@@ -41,6 +44,16 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
   const [actionNotes, setActionNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // Edit invoice details (top-level fields only — line items/division
+  // allocations are tied to budget sync and intentionally out of scope
+  // here, since re-slicing those touches budget_transactions elsewhere).
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    vendor_name: "", invoice_number: "", invoice_date: "", due_date: "",
+    amount: "", retainage_amount: "", cost_type: "", budget_line_item: "", notes: "",
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+
   const isAdmin = accessLevel === "admin";
   const nameFor = (id: string | null) =>
     !id ? "Unassigned" : members.find((m) => m.user_id === id)?.name ?? "Unknown member";
@@ -61,7 +74,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
   }, [invoiceId]);
 
   useEffect(() => { load(); }, [load]);
-  useEffect(() => { if (!invoiceId) { setPending(null); setMoreInfoOpen(false); setActionNotes(""); } }, [invoiceId]);
+  useEffect(() => { if (!invoiceId) { setPending(null); setMoreInfoOpen(false); setActionNotes(""); setIsEditing(false); } }, [invoiceId]);
 
   const approvalFor = (role: ApproverRole) => approvals.find((a) => a.approver_role === role);
   const canActOn = (a: InvoiceApproval | undefined) =>
@@ -185,6 +198,53 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     setNewComment(""); load();
   };
 
+  const startEditing = () => {
+    if (!invoice) return;
+    setEditForm({
+      vendor_name: invoice.vendor_name ?? "",
+      invoice_number: invoice.invoice_number ?? "",
+      invoice_date: invoice.invoice_date ?? "",
+      due_date: invoice.due_date ?? "",
+      amount: invoice.amount != null ? String(invoice.amount) : "",
+      retainage_amount: invoice.retainage_amount != null ? String(invoice.retainage_amount) : "",
+      cost_type: (invoice as any).cost_type ?? "",
+      budget_line_item: invoice.budget_line_item ?? "",
+      notes: invoice.notes ?? "",
+    });
+    setIsEditing(true);
+  };
+
+  const saveInvoiceEdit = async () => {
+    if (!invoice) return;
+    const amount = editForm.amount.trim() ? Number(editForm.amount) : null;
+    const retainage = editForm.retainage_amount.trim() ? Number(editForm.retainage_amount) : null;
+    if (editForm.amount.trim() && Number.isNaN(amount)) { toast.error("Amount must be a number."); return; }
+    if (editForm.retainage_amount.trim() && Number.isNaN(retainage)) { toast.error("Retainage must be a number."); return; }
+    setSavingEdit(true);
+    try {
+      const netAmount = amount != null ? amount - (retainage ?? 0) : null;
+      const { error } = await supabase.from("invoices").update({
+        vendor_name: editForm.vendor_name.trim() || null,
+        invoice_number: editForm.invoice_number.trim() || null,
+        invoice_date: editForm.invoice_date || null,
+        due_date: editForm.due_date || null,
+        amount, retainage_amount: retainage, net_amount: netAmount,
+        cost_type: editForm.cost_type || null,
+        budget_line_item: editForm.budget_line_item.trim() || null,
+        notes: editForm.notes.trim() || null,
+      }).eq("id", invoice.id);
+      if (error) throw error;
+      await recordAudit("Edited invoice details");
+      toast.success("Invoice updated.");
+      setIsEditing(false);
+      await load(); onChange();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to save changes.");
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   if (!invoiceId) return null;
 
   return (
@@ -195,6 +255,11 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
             <span>{invoice?.vendor_name || "Invoice"}</span>
             {invoice && <Badge className={statusBadgeClasses(invoice.status)} variant="outline">{invoice.status}</Badge>}
             {invoice?.source === "email" && <Badge variant="outline" className="gap-1 text-[10px]"><Mail className="h-2.5 w-2.5" />Via Email</Badge>}
+            {invoice && isAdmin && !isEditing && (
+              <Button variant="outline" size="sm" className="ml-auto gap-1.5" onClick={startEditing}>
+                <Pencil className="h-3.5 w-3.5" /> Edit
+              </Button>
+            )}
           </DialogTitle>
         </DialogHeader>
 
@@ -217,16 +282,75 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
             {/* Right: details + approval panel + comments */}
             <div className="overflow-y-auto min-h-0 p-5 space-y-5">
               {/* Details */}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-muted-foreground">Project:</span><br/>{invoice.projects?.name || "—"}</div>
-                <div><span className="text-muted-foreground">Cost type:</span><br/>{(invoice as any).cost_type || "—"}</div>
-                <div><span className="text-muted-foreground">Invoice #:</span><br/>{invoice.invoice_number || "—"}</div>
-                <div><span className="text-muted-foreground">Invoice date:</span><br/>{invoice.invoice_date ? format(new Date(invoice.invoice_date), "MMM d, yyyy") : "—"}</div>
-                <div><span className="text-muted-foreground">Amount:</span><br/>{formatCurrency(invoice.amount)}</div>
-                <div><span className="text-muted-foreground">Budget line:</span><br/>{invoice.budget_line_item || "—"}</div>
-                <div className="col-span-2"><span className="text-muted-foreground">Submitted by:</span><br/>{invoice.submitted_by_email || "—"} · {format(new Date(invoice.submitted_at), "MMM d, yyyy")}</div>
-                {invoice.notes && <div className="col-span-2"><span className="text-muted-foreground">Notes:</span><br/>{invoice.notes}</div>}
-              </div>
+              {isEditing ? (
+                <div className="space-y-3 rounded-md border p-4 bg-muted/20">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Vendor</Label>
+                      <Input value={editForm.vendor_name} onChange={(e) => setEditForm((f) => ({ ...f, vendor_name: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Cost type</Label>
+                      <Select value={editForm.cost_type} onValueChange={(v) => setEditForm((f) => ({ ...f, cost_type: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                        <SelectContent>
+                          {COST_TYPES.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Invoice #</Label>
+                      <Input value={editForm.invoice_number} onChange={(e) => setEditForm((f) => ({ ...f, invoice_number: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Invoice date</Label>
+                      <Input type="date" value={editForm.invoice_date} onChange={(e) => setEditForm((f) => ({ ...f, invoice_date: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Due date</Label>
+                      <Input type="date" value={editForm.due_date} onChange={(e) => setEditForm((f) => ({ ...f, due_date: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Amount</Label>
+                      <Input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Retainage amount</Label>
+                      <Input type="number" step="0.01" value={editForm.retainage_amount} onChange={(e) => setEditForm((f) => ({ ...f, retainage_amount: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Budget line</Label>
+                      <Input value={editForm.budget_line_item} onChange={(e) => setEditForm((f) => ({ ...f, budget_line_item: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Notes</Label>
+                    <Textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} />
+                  </div>
+                  {(invoice.status === "Approved" || invoice.status === "Routed for Payment") && (
+                    <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
+                      This invoice is already {invoice.status.toLowerCase()}. Editing it here won't automatically update
+                      any budget/draw data that was already synced from it — double-check those separately if the
+                      amount changes.
+                    </p>
+                  )}
+                  <div className="flex justify-end gap-2 pt-1">
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)} disabled={savingEdit}>Cancel</Button>
+                    <Button size="sm" onClick={saveInvoiceEdit} disabled={savingEdit}>{savingEdit ? "Saving…" : "Save changes"}</Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div><span className="text-muted-foreground">Project:</span><br/>{invoice.projects?.name || "—"}</div>
+                  <div><span className="text-muted-foreground">Cost type:</span><br/>{(invoice as any).cost_type || "—"}</div>
+                  <div><span className="text-muted-foreground">Invoice #:</span><br/>{invoice.invoice_number || "—"}</div>
+                  <div><span className="text-muted-foreground">Invoice date:</span><br/>{invoice.invoice_date ? format(new Date(invoice.invoice_date), "MMM d, yyyy") : "—"}</div>
+                  <div><span className="text-muted-foreground">Amount:</span><br/>{formatCurrency(invoice.amount)}</div>
+                  <div><span className="text-muted-foreground">Budget line:</span><br/>{invoice.budget_line_item || "—"}</div>
+                  <div className="col-span-2"><span className="text-muted-foreground">Submitted by:</span><br/>{invoice.submitted_by_email || "—"} · {format(new Date(invoice.submitted_at), "MMM d, yyyy")}</div>
+                  {invoice.notes && <div className="col-span-2"><span className="text-muted-foreground">Notes:</span><br/>{invoice.notes}</div>}
+                </div>
+              )}
 
               {/* Line items */}
               {lineItems.length > 0 && (
