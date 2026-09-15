@@ -168,6 +168,15 @@ export default function RevenueSummaryTab() {
                 </tr>
               ))}
             </tbody>
+            <tfoot>
+              <tr className="border-t font-medium">
+                <td className="py-1.5 pr-3">Total</td>
+                <td className="text-right py-1.5 px-3">{fmtFull(totalDev)}</td>
+                <td className="text-right py-1.5 px-3">{fmtFull(totalConstruction)}</td>
+                <td className="text-right py-1.5 px-3">{fmtFull(totalConsulting)}</td>
+                <td className="text-right py-1.5 pl-3">{fmtFull(totalRevenue)}</td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
