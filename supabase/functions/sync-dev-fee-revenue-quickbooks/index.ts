@@ -1,23 +1,19 @@
 // Pulls real monthly revenue from QuickBooks for the Company Dashboard's
-// Revenue tab, via a single ProfitAndLoss report call (SummarizeColumnBy=
-// Month):
+// Revenue tab (Development / Construction / Consulting Fees), attributed
+// per-project via revenue_qb_account_map, for a fixed 24-month calendar
+// window (Jan of the current year through Dec of the following year —
+// matches the existing forecast horizon already loaded into
+// dev_fee_schedule, so the Revenue tabs and that schedule cover the same
+// range). Two ProfitAndLoss report calls (one per year), each
+// SummarizeColumnBy=Month.
 //
-// 1. Development Fees — real per-project sub-accounts exist in QB for this
-//    fee type, so amounts are attributed per-project via
-//    dev_fee_qb_account_map / written to dev_fee_qb_actuals (unchanged
-//    behavior from before this function also covered Construction/
-//    Consulting Fees).
-// 2. Construction Fees and Consulting Fees — QB does NOT track these
-//    per-project (postings go to pooled subtype accounts like "Owner's
-//    Representative Fees" or "Legal Fee Revenue", not per-project
-//    sub-accounts, even though some per-project sub-accounts are defined
-//    in the chart of accounts — they simply have no actual postings).
-//    So these are synced as company-wide monthly totals into
-//    company_revenue_monthly, not attributed to any project. This is a
-//    QuickBooks data-structure limitation, not an Innsights choice — if
-//    per-project postings start happening for these fee types, this
-//    function would need updating to attribute them the way Development
-//    Fees already are.
+// A (revenue_type, QB sub-account name) pair with no matching row in
+// revenue_qb_account_map is skipped, not guessed — mapping is intentionally
+// manual since QB sub-account names don't reliably match Innsights project
+// names, and per direction (2026-09-14) Construction Fees and Consulting
+// Fees are being broken out by project in QuickBooks going forward, so new
+// mappings should be added to revenue_qb_account_map as those sub-accounts
+// go live with real postings.
 //
 // Requires the Supabase secrets Intuit_ID, Intuit_Secret, SUPABASE_URL,
 // SUPABASE_SERVICE_ROLE_KEY.
@@ -28,6 +24,12 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+
+const REVENUE_SECTIONS: { sectionLabel: string; revenueType: string }[] = [
+  { sectionLabel: "Development Fees", revenueType: "development_fee" },
+  { sectionLabel: "Construction Fees", revenueType: "construction_fee" },
+  { sectionLabel: "Consulting Fees", revenueType: "consulting_fee" },
+];
 
 async function refreshTokenIfNeeded(adminClient: any, connection: any) {
   const now = new Date();
@@ -59,10 +61,8 @@ async function refreshTokenIfNeeded(adminClient: any, connection: any) {
   return tokenData.access_token;
 }
 
-// Recursively find a top-level P&L section (e.g. "Development Fees",
-// "Construction Fees", "Consulting Fees") by matching its Header label
-// (QB prefixes some with the account number, e.g. "4200 Development
-// Fees" — matched by substring, not exact equality).
+// Recursively find a top-level P&L section by matching its Header label
+// (QB prefixes some with the account number, e.g. "4200 Development Fees").
 function findSection(rows: any[], labelSubstring: string): any | null {
   for (const row of rows ?? []) {
     const label = row?.Header?.ColData?.[0]?.value ?? "";
@@ -75,6 +75,53 @@ function findSection(rows: any[], labelSubstring: string): any | null {
   return null;
 }
 
+async function fetchPnlForYear(realmId: string, accessToken: string, year: number) {
+  const startDate = `${year}-01-01`;
+  const endDate = `${year}-12-31`;
+  const res = await fetch(
+    `https://quickbooks.api.intuit.com/v3/company/${realmId}/reports/ProfitAndLoss?start_date=${startDate}&end_date=${endDate}&summarize_column_by=Month&minorversion=65`,
+    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
+  );
+  if (!res.ok) {
+    const t = await res.text();
+    throw new Error(`QuickBooks report request failed for ${year}: ${res.status} ${t.slice(0, 200)}`);
+  }
+  return res.json();
+}
+
+function extractProjectRows(report: any, sectionLabel: string, mapByName: Map<string, string>) {
+  const columns: any[] = report?.Columns?.Column ?? [];
+  const monthByColIndex = new Map<number, string>();
+  columns.forEach((col: any, idx: number) => {
+    const startMeta = (col.MetaData ?? []).find((m: any) => m.Name === "StartDate");
+    if (startMeta?.Value) monthByColIndex.set(idx, startMeta.Value.slice(0, 7));
+  });
+
+  const section = findSection(report?.Rows?.Row ?? [], sectionLabel);
+  const dataRows = (section?.Rows?.Row ?? []).filter((r: any) => r.type === "Data" || r.ColData);
+
+  const upserts: { project_id: string; month: string; amount: number }[] = [];
+  const unmatchedAccounts: string[] = [];
+  for (const row of dataRows) {
+    const colData = row.ColData ?? [];
+    const rawLabel: string = colData?.[0]?.value ?? "";
+    const cleanLabel = rawLabel.replace(/^\d+\s+/, "").trim();
+    const projectId = mapByName.get(cleanLabel.toLowerCase());
+    if (!projectId) {
+      if (rawLabel) unmatchedAccounts.push(rawLabel);
+      continue;
+    }
+    for (let i = 1; i < colData.length - 1; i++) {
+      const month = monthByColIndex.get(i);
+      if (!month) continue;
+      const raw = colData[i]?.value;
+      const amount = raw ? Number(raw) : 0;
+      if (amount) upserts.push({ project_id: projectId, month, amount });
+    }
+  }
+  return { upserts, unmatchedAccounts };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -82,9 +129,14 @@ Deno.serve(async (req) => {
     new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
   try {
-    const { org_id, year } = await req.json().catch(() => ({ org_id: null, year: null }));
+    const { org_id, startYear } = await req.json().catch(() => ({ org_id: null, startYear: null }));
     if (!org_id) return json({ error: "Missing org_id." }, 400);
-    const targetYear = year || new Date().getFullYear();
+    // 24-month calendar window: Jan of startYear through Dec of startYear+1.
+    // Defaults to the current year, matching the existing forecast horizon
+    // already loaded into dev_fee_schedule (Jan 2026 – Dec 2027 as of this
+    // writing).
+    const year1 = startYear || new Date().getFullYear();
+    const year2 = year1 + 1;
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -99,95 +151,52 @@ Deno.serve(async (req) => {
     if (!connection) return json({ error: "QuickBooks not connected for this org." }, 400);
 
     const { data: mappings } = await adminClient
-      .from("dev_fee_qb_account_map")
-      .select("project_id, qb_account_name")
+      .from("revenue_qb_account_map")
+      .select("revenue_type, project_id, qb_account_name")
       .eq("org_id", org_id);
-    const mapByName = new Map((mappings ?? []).map((m: any) => [m.qb_account_name.trim().toLowerCase(), m.project_id]));
+
+    const mapByTypeAndName = new Map<string, Map<string, string>>();
+    for (const m of mappings ?? []) {
+      if (!mapByTypeAndName.has(m.revenue_type)) mapByTypeAndName.set(m.revenue_type, new Map());
+      mapByTypeAndName.get(m.revenue_type)!.set(m.qb_account_name.trim().toLowerCase(), m.project_id);
+    }
 
     const accessToken = await refreshTokenIfNeeded(adminClient, connection);
 
-    const startDate = `${targetYear}-01-01`;
-    const endDate = `${targetYear}-12-31`;
-    const reportRes = await fetch(
-      `https://quickbooks.api.intuit.com/v3/company/${connection.realm_id}/reports/ProfitAndLoss?start_date=${startDate}&end_date=${endDate}&summarize_column_by=Month&minorversion=65`,
-      { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/json" } }
-    );
-    if (!reportRes.ok) {
-      const t = await reportRes.text();
-      return json({ error: `QuickBooks report request failed: ${reportRes.status}`, detail: t.slice(0, 300) }, 500);
-    }
-    const report = await reportRes.json();
+    const reports = await Promise.all([
+      fetchPnlForYear(connection.realm_id, accessToken, year1),
+      fetchPnlForYear(connection.realm_id, accessToken, year2),
+    ]);
 
-    // Column metadata: index 0 = account label column, last index = Total,
-    // everything between is a month column with a StartDate we can read.
-    const columns: any[] = report?.Columns?.Column ?? [];
-    const monthByColIndex = new Map<number, string>();
-    columns.forEach((col: any, idx: number) => {
-      const startMeta = (col.MetaData ?? []).find((m: any) => m.Name === "StartDate");
-      if (startMeta?.Value) monthByColIndex.set(idx, startMeta.Value.slice(0, 7)); // 'YYYY-MM'
-    });
-    const readMonthlyValues = (colData: any[]): { month: string; amount: number }[] => {
-      const out: { month: string; amount: number }[] = [];
-      for (let i = 1; i < colData.length - 1; i++) {
-        const month = monthByColIndex.get(i);
-        if (!month) continue;
-        const raw = colData[i]?.value;
-        const amount = raw ? Number(raw) : 0;
-        if (amount) out.push({ month, amount });
-      }
-      return out;
-    };
+    const allUpserts: { org_id: string; revenue_type: string; project_id: string; month: string; amount: number }[] = [];
+    const unmatchedByType: Record<string, string[]> = {};
 
-    // ── 1. Development Fees: per-project, via dev_fee_qb_account_map ──
-    const devFeeSection = findSection(report?.Rows?.Row ?? [], "Development Fees");
-    const devFeeRows = (devFeeSection?.Rows?.Row ?? []).filter((r: any) => r.type === "Data" || r.ColData);
-    const devFeeUpserts: { org_id: string; project_id: string; month: string; amount: number }[] = [];
-    const unmatchedDevFeeAccounts: string[] = [];
-    for (const row of devFeeRows) {
-      const colData = row.ColData ?? [];
-      const rawLabel: string = colData?.[0]?.value ?? "";
-      const cleanLabel = rawLabel.replace(/^\d+\s+/, "").trim();
-      const projectId = mapByName.get(cleanLabel.toLowerCase());
-      if (!projectId) {
-        if (rawLabel) unmatchedDevFeeAccounts.push(rawLabel);
+    for (const { sectionLabel, revenueType } of REVENUE_SECTIONS) {
+      const mapByName = mapByTypeAndName.get(revenueType) ?? new Map();
+      if (mapByName.size === 0) {
+        unmatchedByType[revenueType] = ["(no project mappings configured for this revenue type yet)"];
         continue;
       }
-      for (const { month, amount } of readMonthlyValues(colData)) {
-        devFeeUpserts.push({ org_id, project_id, month, amount });
+      const unmatchedSet = new Set<string>();
+      for (const report of reports) {
+        const { upserts, unmatchedAccounts } = extractProjectRows(report, sectionLabel, mapByName);
+        upserts.forEach((u) => allUpserts.push({ org_id, revenue_type: revenueType, ...u }));
+        unmatchedAccounts.forEach((a) => unmatchedSet.add(a));
       }
-    }
-    if (devFeeUpserts.length > 0) {
-      const { error: devFeeErr } = await adminClient
-        .from("dev_fee_qb_actuals")
-        .upsert(devFeeUpserts.map((u) => ({ ...u, synced_at: new Date().toISOString() })), { onConflict: "org_id,project_id,month" });
-      if (devFeeErr) return json({ error: `Failed to save Development Fees: ${devFeeErr.message}` }, 500);
+      if (unmatchedSet.size > 0) unmatchedByType[revenueType] = [...unmatchedSet];
     }
 
-    // ── 2. Construction Fees & Consulting Fees: company-wide monthly totals ──
-    const companyWideUpserts: { org_id: string; revenue_type: string; month: string; amount: number }[] = [];
-    for (const [sectionLabel, revenueType] of [
-      ["Construction Fees", "construction_fee"],
-      ["Consulting Fees", "consulting_fee"],
-    ] as const) {
-      const section = findSection(report?.Rows?.Row ?? [], sectionLabel);
-      const summaryColData = section?.Summary?.ColData ?? [];
-      for (const { month, amount } of readMonthlyValues(summaryColData)) {
-        companyWideUpserts.push({ org_id, revenue_type: revenueType, month, amount });
-      }
-    }
-    if (companyWideUpserts.length > 0) {
-      const { error: cwErr } = await adminClient
-        .from("company_revenue_monthly")
-        .upsert(companyWideUpserts.map((u) => ({ ...u, synced_at: new Date().toISOString() })), { onConflict: "org_id,revenue_type,month" });
-      if (cwErr) return json({ error: `Failed to save company-wide revenue: ${cwErr.message}` }, 500);
+    if (allUpserts.length > 0) {
+      const { error: upsertErr } = await adminClient
+        .from("revenue_qb_actuals")
+        .upsert(
+          allUpserts.map((u) => ({ ...u, synced_at: new Date().toISOString() })),
+          { onConflict: "org_id,revenue_type,project_id,month" }
+        );
+      if (upsertErr) return json({ error: `Failed to save synced revenue: ${upsertErr.message}` }, 500);
     }
 
-    return json({
-      ok: true,
-      devFeeMonthsSynced: devFeeUpserts.length,
-      unmatchedDevFeeAccounts: [...new Set(unmatchedDevFeeAccounts)],
-      companyWideMonthsSynced: companyWideUpserts.length,
-    });
+    return json({ ok: true, yearsSynced: [year1, year2], monthsSynced: allUpserts.length, unmatchedByType });
   } catch (err) {
     console.error("[sync-dev-fee-revenue-quickbooks] error", err);
     return json({ error: (err as Error).message || "Unexpected error" }, 500);

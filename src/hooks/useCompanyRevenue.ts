@@ -1,20 +1,31 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
 
-export interface CompanyRevenueMonth {
-  month: string; // 'YYYY-MM'
-  amount: number;
+export interface RevenueMonthTotal {
+  month: string;
+  total: number;
+  byProject: Record<string, number>;
 }
 
-// Loads a single company-wide (not project-attributed) revenue stream —
-// e.g. Construction Fees, Consulting Fees — synced nightly from QuickBooks
-// by sync-dev-fee-revenue-quickbooks. Unlike Development Fees, QuickBooks
-// doesn't track these per-project (see that function's comments), so this
-// is a flat monthly total, no per-project breakdown.
+export interface RevenueProjectTotal {
+  projectId: string;
+  projectName: string;
+  total: number;
+}
+
+// Loads a single revenue stream (Construction Fees, Consulting Fees, etc.)
+// broken out by project, for the fixed 24-month Revenue calendar. Sourced
+// from revenue_qb_actuals via revenue_qb_account_map (see
+// sync-dev-fee-revenue-quickbooks) — same per-project mechanism Development
+// Fees uses. If QuickBooks has no per-project mapping configured yet for
+// this revenue type, months/projects simply come back empty rather than
+// guessing an attribution.
 export function useCompanyRevenue(revenueType: string) {
   const { organizationId } = useAuth();
-  const [months, setMonths] = useState<CompanyRevenueMonth[]>([]);
+  const [monthlyTotals, setMonthlyTotals] = useState<RevenueMonthTotal[]>([]);
+  const [projectTotals, setProjectTotals] = useState<RevenueProjectTotal[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -24,13 +35,34 @@ export function useCompanyRevenue(revenueType: string) {
     setError(null);
     try {
       const { data, error: err } = await supabase
-        .from("company_revenue_monthly")
-        .select("month, amount")
+        .from("revenue_qb_actuals")
+        .select("project_id, month, amount, projects(name)")
         .eq("org_id", organizationId)
         .eq("revenue_type", revenueType)
         .order("month");
       if (err) throw err;
-      setMonths((data ?? []).map((r: any) => ({ month: r.month, amount: Number(r.amount) })));
+
+      const rows = (data ?? []).map((r: any) => ({
+        projectId: r.project_id, projectName: r.projects?.name ?? "Unknown",
+        month: r.month, amount: Number(r.amount),
+      }));
+
+      const months = getRevenueCalendarMonths();
+      const built: RevenueMonthTotal[] = months.map((month) => {
+        const rowsForMonth = rows.filter((r) => r.month === month);
+        const byProject: Record<string, number> = {};
+        rowsForMonth.forEach((r) => { byProject[r.projectId] = (byProject[r.projectId] ?? 0) + r.amount; });
+        return { month, total: rowsForMonth.reduce((s, r) => s + r.amount, 0), byProject };
+      });
+      setMonthlyTotals(built);
+
+      const totalByProject = new Map<string, RevenueProjectTotal>();
+      rows.forEach((r) => {
+        const existing = totalByProject.get(r.projectId);
+        if (existing) existing.total += r.amount;
+        else totalByProject.set(r.projectId, { projectId: r.projectId, projectName: r.projectName, total: r.amount });
+      });
+      setProjectTotals(Array.from(totalByProject.values()).sort((a, b) => b.total - a.total));
     } catch (e: any) {
       setError(e?.message || "Failed to load revenue data.");
     } finally {
@@ -40,7 +72,7 @@ export function useCompanyRevenue(revenueType: string) {
 
   useEffect(() => { load(); }, [load]);
 
-  const total = months.reduce((s, m) => s + m.amount, 0);
+  const total = projectTotals.reduce((s, p) => s + p.total, 0);
 
-  return { loading, error, refetch: load, months, total };
+  return { loading, error, refetch: load, monthlyTotals, projectTotals, total };
 }

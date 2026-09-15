@@ -2,6 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { format } from "date-fns";
 import { useDevFees } from "@/hooks/useDevFees";
 import { useCompanyRevenue } from "@/hooks/useCompanyRevenue";
+import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
 
 const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
@@ -28,13 +29,14 @@ const SERIES = [
   { key: "consultingFee", label: "Consulting Fees", color: "#8e44ad" },
 ];
 
-// Aggregates all three fee types onto one monthly chart. Development Fees'
-// monthly actual comes from useDevFees (per-project QB actuals, summed);
-// Construction/Consulting Fees come from the company-wide
-// company_revenue_monthly table. Only the fee types with real 2026
-// QuickBooks activity are included here — Acquisition Fees and Disposition
-// Fees show zero activity for the year and are left out rather than
-// rendered as empty rows.
+// Aggregates all three fee types onto one chart across the fixed 24-month
+// Revenue calendar. Development Fees' monthly actual comes from useDevFees
+// (per-project QB actuals, summed); Construction/Consulting Fees come from
+// useCompanyRevenue, each also per-project under the hood but summed to a
+// company-wide total here since the Summary view is about total revenue by
+// type, not by project. Only fee types with real 2026 QuickBooks activity
+// are included — Acquisition Fees and Disposition Fees are excluded per
+// direction (2026-09-14), since they show zero activity this year.
 export default function RevenueSummaryTab() {
   const devFees = useDevFees();
   const constructionFees = useCompanyRevenue("construction_fee");
@@ -46,15 +48,10 @@ export default function RevenueSummaryTab() {
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading revenue summary…</p>;
   if (error) return <p className="text-sm text-destructive py-8">{error}</p>;
 
-  const monthsSet = new Set<string>();
-  devFees.monthlyTotals.forEach((m) => monthsSet.add(m.month));
-  constructionFees.months.forEach((m) => monthsSet.add(m.month));
-  consultingFees.months.forEach((m) => monthsSet.add(m.month));
-  const months = Array.from(monthsSet).sort();
-
+  const months = getRevenueCalendarMonths();
   const devByMonth = new Map(devFees.monthlyTotals.map((m) => [m.month, m.actualTotal]));
-  const constructionByMonth = new Map(constructionFees.months.map((m) => [m.month, m.amount]));
-  const consultingByMonth = new Map(consultingFees.months.map((m) => [m.month, m.amount]));
+  const constructionByMonth = new Map(constructionFees.monthlyTotals.map((m) => [m.month, m.total]));
+  const consultingByMonth = new Map(consultingFees.monthlyTotals.map((m) => [m.month, m.total]));
 
   const chartData = months.map((month) => ({
     label: format(new Date(`${month}-01T00:00:00`), "MMM yy"),
@@ -73,12 +70,12 @@ export default function RevenueSummaryTab() {
       <div>
         <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Revenue summary</h2>
         <p className="text-xs text-muted-foreground mt-0.5">
-          All fee revenue synced from QuickBooks, aggregated by month. Real billed/received amounts only.
+          All fee revenue synced from QuickBooks, aggregated by month across a 24-month calendar. Real billed/received amounts only.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-        <KpiCard label="Total revenue (YTD)" value={fmtFull(totalRevenue)} sub="All fee types, all months synced" />
+        <KpiCard label="Total revenue" value={fmtFull(totalRevenue)} sub="All fee types, 24-month calendar" />
         <KpiCard label="Development Fees" value={fmtFull(totalDev)} />
         <KpiCard label="Construction Fees" value={fmtFull(totalConstruction)} />
         <KpiCard label="Consulting Fees" value={fmtFull(totalConsulting)} />
@@ -89,7 +86,7 @@ export default function RevenueSummaryTab() {
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
             <Tooltip
               content={({ active, payload, label }) => {

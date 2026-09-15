@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
 
 export interface DevFeeProject {
   projectId: string;
   projectName: string;
   devFee: number;
   totalFee: number; // == devFee (kept as a distinct field in case a non-dev-fee component is reintroduced later)
-  totalBilled: number; // sum of is_billed=true schedule rows
+  totalBilled: number; // sum of real QuickBooks-sourced actuals (or schedule-derived actuals, for unmapped projects)
   remaining: number; // totalFee - totalBilled
   notes: string | null;
 }
@@ -15,21 +16,23 @@ export interface DevFeeProject {
 export interface MonthlyFeeTotal {
   month: string;
   total: number;
-  actualTotal: number; // real, billed (is_billed=true) amount for the month
-  forecastTotal: number; // projected, not-yet-billed (is_billed=false) amount for the month
+  actualTotal: number; // real, billed amount for the month
+  forecastTotal: number; // projected, not-yet-billed amount for the month
   byProject: Record<string, number>; // deprecated alias for byProjectActual — kept for compatibility
   byProjectActual: Record<string, number>;
   byProjectForecast: Record<string, number>;
 }
 
-// Loads the development fee tracker: one row per New-Build project (total
-// fee, billed-to-date, remaining) plus the monthly billing schedule needed
-// for the "paid each month, aggregate and per-project" view. Billed-to-date
-// here reflects only what's recorded in dev_fee_schedule with is_billed =
-// true — historical billing that predates this tracker (e.g. 2025 amounts)
-// isn't broken out by month in the source data, so it isn't fabricated
-// here; those totals live only in each project's aggregate billed figure
-// until real monthly detail exists to back them.
+// Loads the Development Fees revenue tracker for the fixed 24-month
+// Revenue-tab calendar (see revenueCalendar.ts). Real monthly actuals come
+// from revenue_qb_actuals (revenue_type='development_fee') for any project
+// with a QuickBooks mapping in revenue_qb_account_map — this is the real,
+// per-project QuickBooks sub-account data, more accurate than the
+// project-accounting-derived dev_fee_schedule rows it replaces for those
+// projects (direction given 2026-09-14). Projects with no QB mapping yet
+// fall back to dev_fee_schedule's is_billed=true rows exactly as before.
+// Every month in the 24-month calendar is always present in monthlyTotals,
+// even at $0, so charts never silently skip a month.
 export function useDevFees() {
   const { organizationId } = useAuth();
   const [projects, setProjects] = useState<DevFeeProject[]>([]);
@@ -45,18 +48,12 @@ export function useDevFees() {
       const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }] = await Promise.all([
         supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name)").eq("org_id", organizationId),
         supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name)").eq("org_id", organizationId).order("month"),
-        supabase.from("dev_fee_qb_actuals").select("project_id, month, amount").eq("org_id", organizationId).order("month"),
+        supabase.from("revenue_qb_actuals").select("project_id, month, amount").eq("org_id", organizationId).eq("revenue_type", "development_fee").order("month"),
       ]);
       if (feeErr) throw feeErr;
       if (schedErr) throw schedErr;
       if (qbErr) throw qbErr;
 
-      // Projects with real QuickBooks-sourced monthly actuals (dev_fee_qb_actuals)
-      // use QB as the source of truth for actual billed amounts — more accurate
-      // than the project-accounting-derived dev_fee_schedule rows, per direction
-      // (2026-09-14). Projects with no QB mapping/data fall back to the
-      // schedule-derived actuals exactly as before, so nothing regresses for
-      // projects QuickBooks doesn't track yet.
       const qbProjectIds = new Set((qbRows ?? []).map((r: any) => r.project_id));
 
       const billedByProject = new Map<string, number>();
@@ -84,19 +81,13 @@ export function useDevFees() {
       builtProjects.sort((a, b) => b.totalFee - a.totalFee);
       setProjects(builtProjects);
 
-      // Build the monthly chart's row set. Two things have to be handled
-      // carefully here or the chart silently double-counts:
-      // 1. dev_fee_schedule.month is stored as a full date ('2026-06-01'),
-      //    while QB actuals use 'YYYY-MM' ('2026-06') — normalize both to
-      //    'YYYY-MM' so the same calendar month is always the same key.
-      // 2. For QB-mapped projects, a schedule forecast row can exist for a
-      //    month that QB has since actually reported (the forecast was
-      //    never cleared once the real billing happened) — that produced
-      //    two bars for the same month (a stale forecast + the real
-      //    actual). Forecast rows are dropped for any (project, month)
-      //    combination QB already has real data for; forecast rows for
-      //    months beyond what QB has reported still pass through, since
-      //    QB has no concept of future/projected amounts.
+      // Build the monthly chart's row set. dev_fee_schedule.month is a full
+      // date ('2026-06-01'); revenue_qb_actuals.month is 'YYYY-MM' — both
+      // are normalized to 'YYYY-MM' so the same calendar month is never
+      // treated as two separate keys. For QB-mapped projects, a schedule
+      // forecast row is dropped once QB has actualized that exact month
+      // (otherwise a stale forecast and a real actual both render for the
+      // same month).
       const qbMonthsByProject = new Map<string, Set<string>>();
       (qbRows ?? []).forEach((r: any) => {
         if (!qbMonthsByProject.has(r.project_id)) qbMonthsByProject.set(r.project_id, new Set());
@@ -105,9 +96,8 @@ export function useDevFees() {
       const nonQbRows = (schedRows ?? [])
         .map((r: any) => ({ ...r, month: String(r.month).slice(0, 7) }))
         .filter((r: any) => {
-          if (!qbProjectIds.has(r.project_id)) return true; // unmapped project — schedule is authoritative
-          if (r.is_billed) return false; // mapped project's real actuals come from QB, not schedule
-          // mapped project's forecast row — drop only if QB already actualized this exact month
+          if (!qbProjectIds.has(r.project_id)) return true;
+          if (r.is_billed) return false;
           return !qbMonthsByProject.get(r.project_id)?.has(r.month);
         })
         .map((r: any) => ({
@@ -134,17 +124,10 @@ export function useDevFees() {
   const totalBilled = projects.reduce((s, p) => s + p.totalBilled, 0);
   const totalRemaining = projects.reduce((s, p) => s + p.remaining, 0);
 
-  // Monthly totals, split cleanly into actual (is_billed=true, real money
-  // received) vs. forecast (is_billed=false, expected future billing) —
-  // these are never combined into one number per month, since a month is
-  // either something that already happened or something projected to
-  // happen, never both. Previous version summed every row regardless of
-  // is_billed, which meant future forecast months rendered identically to
-  // real billed months on the chart — a genuine display bug, not just a
-  // data problem, since the underlying is_billed flag was already correct
-  // and simply never consulted here.
-  const monthsSet = new Set(scheduleRows.map((r) => r.month));
-  const months = Array.from(monthsSet).sort();
+  // Every month in the fixed 24-month Revenue calendar is included, even if
+  // no rows exist for it (actualTotal/forecastTotal both 0) — so charts
+  // consuming this always show the full calendar, not just months with data.
+  const months = getRevenueCalendarMonths();
   const monthlyTotals: MonthlyFeeTotal[] = months.map((month) => {
     const rowsForMonth = scheduleRows.filter((r) => r.month === month);
     const actualRows = rowsForMonth.filter((r) => r.isBilled);
@@ -158,7 +141,7 @@ export function useDevFees() {
       total: rowsForMonth.reduce((s, r) => s + r.amount, 0),
       actualTotal: actualRows.reduce((s, r) => s + r.amount, 0),
       forecastTotal: forecastRows.reduce((s, r) => s + r.amount, 0),
-      byProject: byProjectActual, // kept for backward compatibility — actual only
+      byProject: byProjectActual,
       byProjectActual, byProjectForecast,
     };
   });
