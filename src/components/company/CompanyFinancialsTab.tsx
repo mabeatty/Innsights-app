@@ -37,7 +37,7 @@ function VarianceChart({ data, actualColor }: {
         <Tooltip formatter={(v: number) => fmtFull(Number(v))} contentStyle={{ fontSize: 12, borderRadius: 6 }} />
         <Bar dataKey="actual" name="Actual" radius={[3, 3, 0, 0]}>
           {data.map((d, i) => (
-            <Cell key={i} fill={actualColor} fillOpacity={d.isProjected ? 0.4 : 1} />
+            <Cell key={i} fill={actualColor} fillOpacity={d.isProjected ? 0 : 1} />
           ))}
         </Bar>
         <Bar dataKey="budget" name="Budget" fill="hsl(var(--muted-foreground) / 0.35)" radius={[3, 3, 0, 0]} />
@@ -68,11 +68,11 @@ export default function CompanyFinancialsTab() {
 
   const revChartData = monthlyTotals.map((m) => ({
     label: format(new Date(`${m.month}T00:00:00`), "MMM"),
-    actual: m.revActual, budget: m.revBudget, isProjected: m.isProjected,
+    actual: m.isProjected ? 0 : m.revActual, budget: m.revBudget, isProjected: m.isProjected,
   }));
   const expChartData = monthlyTotals.map((m) => ({
     label: format(new Date(`${m.month}T00:00:00`), "MMM"),
-    actual: m.expActual, budget: m.expBudget, isProjected: m.isProjected,
+    actual: m.isProjected ? 0 : m.expActual, budget: m.expBudget, isProjected: m.isProjected,
   }));
 
   return (
@@ -83,9 +83,8 @@ export default function CompanyFinancialsTab() {
           <p className="text-xs text-muted-foreground mt-0.5">
             {year} actual vs. budget · <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-foreground/70" />actual</span>
             {" · "}
-            <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-foreground/30" />projected</span>
-            {" · "}
             <span className="inline-flex items-center gap-1"><span className="inline-block h-2 w-2 rounded-sm bg-muted-foreground/35" />budget</span>
+            {" · "}no actual is shown for months that haven't closed yet
           </p>
         </div>
       </div>
@@ -184,7 +183,7 @@ export default function CompanyFinancialsTab() {
                             {s.months.map((m) => (
                               <div key={m.month} className="text-center">
                                 <p className="text-muted-foreground">{format(new Date(`${m.month}T00:00:00`), "MMM")}</p>
-                                <p className={cn(m.is_projected && "opacity-50")}>{fmtK(m.actual)}</p>
+                                <p>{m.is_projected ? "—" : fmtK(m.actual)}</p>
                                 <p className="text-muted-foreground">{fmtK(m.budget)}</p>
                               </div>
                             ))}
