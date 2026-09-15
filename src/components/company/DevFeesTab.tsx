@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useDevFees } from "@/hooks/useDevFees";
@@ -70,13 +70,19 @@ export default function DevFeesTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Fee by month, by project</h3>
-        <p className="text-xs text-muted-foreground mb-2">
-          Solid = actual billed. Faded = forecast, not yet billed.
+        <p className="text-xs text-muted-foreground mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {projectIds.map((pid, i) => (
+            <span key={pid} className="inline-flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }} />
+              {projects.find((p) => p.projectId === pid)?.projectName ?? pid}
+            </span>
+          ))}
+          <span className="text-muted-foreground/70">· solid = actual · faded = forecast</span>
         </p>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={1} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -110,16 +116,8 @@ export default function DevFeesTab() {
                 );
               }}
             />
-            <Legend
-              wrapperStyle={{ fontSize: 11 }}
-              payload={projectIds.map((pid, i) => ({
-                value: projects.find((p) => p.projectId === pid)?.projectName ?? pid,
-                type: "square",
-                color: PROJECT_COLORS[i % PROJECT_COLORS.length],
-              }))}
-            />
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="fees_actual" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
+              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="fees_actual" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} radius={[3, 3, 0, 0]} />
             ))}
             {projectIds.map((pid, i) => (
               <Bar
@@ -127,6 +125,7 @@ export default function DevFeesTab() {
                 dataKey={`${pid}_forecast`} stackId="fees_forecast"
                 fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
                 fillOpacity={0.35}
+                radius={[3, 3, 0, 0]}
               />
             ))}
           </BarChart>

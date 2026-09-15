@@ -1,5 +1,5 @@
 import { useState, Fragment } from "react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCompanyFinancials } from "@/hooks/useCompanyFinancials";
@@ -119,13 +119,21 @@ export default function ExpensesTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Expenses by month, by category</h3>
-        <p className="text-xs text-muted-foreground mb-2">
-          Solid = actual (closed months only). Faded = forecast/budget ({calendarYear1} reforecast — {calendarYear1 + 1} has no budget loaded, shown as $0).
+        <p className="text-xs text-muted-foreground mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {expenseCategories.map((cat, i) => (
+            <span key={cat.id} className="inline-flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+              {cat.name}
+            </span>
+          ))}
+          <span className="text-muted-foreground/70">
+            · solid = actual (closed months) · faded = {calendarYear1} reforecast ({calendarYear1 + 1} not yet budgeted)
+          </span>
         </p>
         <ResponsiveContainer width="100%" height={320}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={1} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -161,12 +169,11 @@ export default function ExpensesTab() {
                 );
               }}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} payload={expenseCategories.map((cat, i) => ({ value: cat.name, type: "square", color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }))} />
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses_actual" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses_actual" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} radius={[3, 3, 0, 0]} />
             ))}
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses_forecast" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} />
+              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses_forecast" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} radius={[3, 3, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer>

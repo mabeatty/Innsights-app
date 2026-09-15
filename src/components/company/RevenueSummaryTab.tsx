@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { useDevFees } from "@/hooks/useDevFees";
 import { useCompanyRevenue } from "@/hooks/useCompanyRevenue";
@@ -116,11 +116,19 @@ export default function RevenueSummaryTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Revenue by month, by fee type</h3>
-        <p className="text-xs text-muted-foreground mb-2">Solid = actual. Faded = forecast, not yet billed.</p>
+        <p className="text-xs text-muted-foreground mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+          {SERIES.map((s) => (
+            <span key={s.key} className="inline-flex items-center gap-1">
+              <span className="inline-block h-2 w-2 rounded-sm" style={{ backgroundColor: s.color }} />
+              {s.label}
+            </span>
+          ))}
+          <span className="text-muted-foreground/70">· solid = actual · faded = forecast</span>
+        </p>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+            <XAxis dataKey="label" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} interval={1} />
             <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
             <Tooltip
               content={({ active, payload, label }) => {
@@ -154,12 +162,11 @@ export default function RevenueSummaryTab() {
                 );
               }}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} payload={SERIES.map((s) => ({ value: s.label, type: "square", color: s.color }))} />
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue_actual" fill={s.color} />
+              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue_actual" fill={s.color} radius={[3, 3, 0, 0]} />
             ))}
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue_forecast" fill={s.color} fillOpacity={0.35} />
+              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue_forecast" fill={s.color} fillOpacity={0.35} radius={[3, 3, 0, 0]} />
             ))}
           </BarChart>
         </ResponsiveContainer>
