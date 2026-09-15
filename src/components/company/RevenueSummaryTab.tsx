@@ -25,7 +25,7 @@ function KpiCard({ label, value, sub }: { label: string; value: string; sub?: st
 
 const SERIES = [
   { key: "developmentFee", label: "Development Fees", color: "#2a78d6" },
-  { key: "constructionFee", label: "Construction Fees", color: "#eda100" },
+  { key: "constructionFee", label: "Owner's Rep", color: "#eda100" },
   { key: "consultingFee", label: "Consulting Fees", color: "#8e44ad" },
 ];
 
@@ -96,7 +96,7 @@ export default function RevenueSummaryTab() {
       <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
         <KpiCard label="Total revenue" value={fmtFull(totalRevenue)} sub="All fee types, 24-month calendar" />
         <KpiCard label="Development Fees" value={fmtFull(totalDev)} />
-        <KpiCard label="Construction Fees" value={fmtFull(totalConstruction)} />
+        <KpiCard label="Owner's Rep" value={fmtFull(totalConstruction)} />
         <KpiCard label="Consulting Fees" value={fmtFull(totalConsulting)} />
       </div>
 
@@ -146,18 +146,29 @@ export default function RevenueSummaryTab() {
       <div>
         <h3 className="text-sm font-medium mb-2">Revenue by source (project)</h3>
         <p className="text-xs text-muted-foreground mb-2">Total revenue per project, combined across all fee types.</p>
-        <div className="space-y-1.5">
-          {bySource.map((s) => (
-            <div key={s.projectId} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
-              <span>{s.projectName}</span>
-              <span className="flex items-center gap-3 text-xs text-muted-foreground">
-                {s.developmentFee > 0 && <span>Dev: {fmtFull(s.developmentFee)}</span>}
-                {s.constructionFee > 0 && <span>Constr: {fmtFull(s.constructionFee)}</span>}
-                {s.consultingFee > 0 && <span>Consult: {fmtFull(s.consultingFee)}</span>}
-                <span className="text-foreground font-medium">{fmtFull(s.total)}</span>
-              </span>
-            </div>
-          ))}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm border-collapse">
+            <thead>
+              <tr className="text-xs text-muted-foreground border-b">
+                <th className="text-left font-medium py-1.5 pr-3">Project</th>
+                <th className="text-right font-medium py-1.5 px-3">Dev Fee</th>
+                <th className="text-right font-medium py-1.5 px-3">Owner's Rep</th>
+                <th className="text-right font-medium py-1.5 px-3">Consulting</th>
+                <th className="text-right font-medium py-1.5 pl-3">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {bySource.map((s) => (
+                <tr key={s.projectId} className="border-b last:border-b-0">
+                  <td className="py-1.5 pr-3">{s.projectName}</td>
+                  <td className="text-right py-1.5 px-3 text-muted-foreground">{s.developmentFee > 0 ? fmtFull(s.developmentFee) : "—"}</td>
+                  <td className="text-right py-1.5 px-3 text-muted-foreground">{s.constructionFee > 0 ? fmtFull(s.constructionFee) : "—"}</td>
+                  <td className="text-right py-1.5 px-3 text-muted-foreground">{s.consultingFee > 0 ? fmtFull(s.consultingFee) : "—"}</td>
+                  <td className="text-right py-1.5 pl-3 font-medium">{fmtFull(s.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

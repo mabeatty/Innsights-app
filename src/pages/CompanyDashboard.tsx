@@ -40,7 +40,7 @@ export default function CompanyDashboard() {
                 <Building2 className="h-3.5 w-3.5" /> Development Fees
               </TabsTrigger>
               <TabsTrigger value="constructionfees" className="gap-1.5">
-                <HardHat className="h-3.5 w-3.5" /> Construction Fees
+                <HardHat className="h-3.5 w-3.5" /> Owner's Rep
               </TabsTrigger>
               <TabsTrigger value="consultingfees" className="gap-1.5">
                 <Handshake className="h-3.5 w-3.5" /> Consulting Fees
@@ -54,7 +54,7 @@ export default function CompanyDashboard() {
               <DevFeesTab />
             </TabsContent>
             <TabsContent value="constructionfees">
-              <CompanyRevenueTab revenueType="construction_fee" title="Construction Fees" color="#eda100" />
+              <CompanyRevenueTab revenueType="construction_fee" title="Owner's Rep" color="#eda100" />
             </TabsContent>
             <TabsContent value="consultingfees">
               <CompanyRevenueTab revenueType="consulting_fee" title="Consulting Fees" color="#8e44ad" />
