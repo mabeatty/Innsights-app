@@ -85,7 +85,7 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
                 }
                 return (
                   <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
-                    <p className="font-medium mb-1 flex items-center justify-between gap-3">
+                    <p className="font-semibold mb-1 flex items-center justify-between gap-3">
                       <span>{label}</span>
                       <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
                     </p>
