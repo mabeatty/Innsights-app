@@ -2,6 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import { format } from "date-fns";
 import { useDevFees } from "@/hooks/useDevFees";
 import { useCompanyRevenue } from "@/hooks/useCompanyRevenue";
+import { useCompanyFinancials } from "@/hooks/useCompanyFinancials";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
 
 const fmtK = (n: number) => {
@@ -41,9 +42,16 @@ export default function RevenueSummaryTab() {
   const devFees = useDevFees();
   const constructionFees = useCompanyRevenue("construction_fee");
   const consultingFees = useCompanyRevenue("consulting_fee");
+  // Expense forecast comes from company_budget (the FY26 reforecast — see
+  // useCompanyFinancials) via the Company Financials tab's data source.
+  // Only 2026 has budget data loaded; 2027 has none, so its expense
+  // forecast is genuinely absent, not zero.
+  const calendarYear1 = new Date().getFullYear();
+  const financialsYear1 = useCompanyFinancials(calendarYear1);
+  const financialsYear2 = useCompanyFinancials(calendarYear1 + 1);
 
-  const loading = devFees.loading || constructionFees.loading || consultingFees.loading;
-  const error = devFees.error || constructionFees.error || consultingFees.error;
+  const loading = devFees.loading || constructionFees.loading || consultingFees.loading || financialsYear1.loading || financialsYear2.loading;
+  const error = devFees.error || constructionFees.error || consultingFees.error || financialsYear1.error || financialsYear2.error;
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading revenue summary…</p>;
   if (error) return <p className="text-sm text-destructive py-8">{error}</p>;
@@ -83,6 +91,31 @@ export default function RevenueSummaryTab() {
   constructionFees.projectTotals.forEach((p) => addToSource(p.projectId, p.projectName, "constructionFee", p.total));
   consultingFees.projectTotals.forEach((p) => addToSource(p.projectId, p.projectName, "consultingFee", p.total));
   const bySource = Array.from(bySourceMap.values()).sort((a, b) => b.total - a.total);
+
+  // Forecast: revenue forecast only exists for Development Fees
+  // (dev_fee_schedule's is_billed=false rows, already computed as
+  // forecastTotal per month) — Owner's Rep and Consulting have no forecast
+  // source at all, since only real QB transactions were loaded for them,
+  // not a projection. Expense forecast comes from company_budget (the FY26
+  // reforecast) and only covers 2026 — 2027 has no budget loaded, so it's
+  // left as null (no data) rather than 0, to distinguish "nothing
+  // projected" from "projected zero."
+  const expenseForecastByMonth = new Map<string, number>();
+  [...financialsYear1.monthlyTotals, ...financialsYear2.monthlyTotals].forEach((m) => {
+    expenseForecastByMonth.set(m.month.slice(0, 7), m.expBudget);
+  });
+  const hasExpenseDataForYear = (month: string) => month.slice(0, 4) === String(calendarYear1);
+
+  const forecastChartData = months.map((month) => ({
+    label: format(new Date(`${month}-01T00:00:00`), "MMM yy"),
+    revenueForecast: devFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0,
+    expenseForecast: hasExpenseDataForYear(month) ? (expenseForecastByMonth.get(month) ?? 0) : null,
+  }));
+  const totalRevenueForecast = devFees.monthlyTotals.reduce((s, m) => s + m.forecastTotal, 0);
+  const totalExpenseForecast = [...expenseForecastByMonth.entries()]
+    .filter(([m]) => hasExpenseDataForYear(m))
+    .reduce((s, [, v]) => s + v, 0);
+
 
   return (
     <div className="space-y-6 pt-2">
@@ -142,6 +175,49 @@ export default function RevenueSummaryTab() {
             {SERIES.map((s) => (
               <Bar key={s.key} dataKey={s.key} name={s.label} stackId="revenue" fill={s.color} radius={[0, 0, 0, 0]} />
             ))}
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium mb-2">Forecast: revenue vs. expenses by month</h3>
+        <p className="text-xs text-muted-foreground mb-2">
+          Revenue forecast reflects Development Fees only (the only fee type with a projection loaded — Owner's Rep and
+          Consulting have no forecast source yet, only real transactions). Expense forecast covers {calendarYear1} only,
+          from the FY{String(calendarYear1).slice(2)} reforecast — no {calendarYear1 + 1} expense budget is loaded yet.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <KpiCard label="Total revenue forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees only" />
+          <KpiCard label={`Total expense forecast (${calendarYear1})`} value={fmtFull(totalExpenseForecast)} sub={`${calendarYear1 + 1} not yet budgeted`} />
+        </div>
+        <ResponsiveContainer width="100%" height={260}>
+          <BarChart data={forecastChartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+            <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
+            <Tooltip
+              content={({ active, payload, label }) => {
+                if (!active || !payload || payload.length === 0) return null;
+                const revEntry = payload.find((e: any) => e.dataKey === "revenueForecast");
+                const expEntry = payload.find((e: any) => e.dataKey === "expenseForecast");
+                return (
+                  <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
+                    <p className="font-semibold mb-1">{label}</p>
+                    <p className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Revenue forecast</span>
+                      <span>{fmtFull(Number(revEntry?.value ?? 0))}</span>
+                    </p>
+                    <p className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">Expense forecast</span>
+                      <span>{expEntry?.value == null ? "No data" : fmtFull(Number(expEntry.value))}</span>
+                    </p>
+                  </div>
+                );
+              }}
+            />
+            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Bar dataKey="revenueForecast" name="Revenue forecast" fill="#2a78d6" radius={[3, 3, 0, 0]} />
+            <Bar dataKey="expenseForecast" name="Expense forecast" fill="#c0392b" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
