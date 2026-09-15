@@ -128,7 +128,7 @@ export default function ExpensesTab() {
             </span>
           ))}
           <span className="text-muted-foreground/70">
-            · solid = actual (closed months) · faded = {calendarYear1} reforecast ({calendarYear1 + 1} not yet budgeted)
+            · color = actual, by category (closed months) · grey = {calendarYear1} reforecast ({calendarYear1 + 1} not yet budgeted)
           </span>
         </p>
         <ResponsiveContainer width="100%" height={320}>
@@ -184,8 +184,7 @@ export default function ExpensesTab() {
                 key={`${cat.id}_forecast`}
                 dataKey={`${cat.id}_forecast`}
                 stackId="expenses_forecast"
-                fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]}
-                fillOpacity={0.35}
+                fill="hsl(var(--muted-foreground) / 0.35)"
                 shape={makeStackedBarShape(`${cat.id}_forecast`, expenseCategories.map((c) => `${c.id}_forecast`))}
               />
             ))}

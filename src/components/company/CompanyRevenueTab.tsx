@@ -83,7 +83,7 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
               {projectTotals.find((p) => p.projectId === pid)?.projectName ?? pid}
             </span>
           ))}
-          <span className="text-muted-foreground/70">· solid = actual · faded = forecast</span>
+          <span className="text-muted-foreground/70">· color = actual, by project · grey = forecast</span>
         </p>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
@@ -136,8 +136,7 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
                 key={`${pid}_forecast`}
                 dataKey={`${pid}_forecast`}
                 stackId="revenue_forecast"
-                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
-                fillOpacity={0.35}
+                fill="hsl(var(--muted-foreground) / 0.35)"
                 shape={makeStackedBarShape(`${pid}_forecast`, projectIds.map((id) => `${id}_forecast`))}
               />
             ))}

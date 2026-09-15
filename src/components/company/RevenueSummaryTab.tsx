@@ -124,7 +124,7 @@ export default function RevenueSummaryTab() {
               {s.label}
             </span>
           ))}
-          <span className="text-muted-foreground/70">· solid = actual · faded = forecast</span>
+          <span className="text-muted-foreground/70">· color = actual, by fee type · grey = forecast</span>
         </p>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
@@ -177,8 +177,7 @@ export default function RevenueSummaryTab() {
                 key={`${s.key}_forecast`}
                 dataKey={`${s.key}_forecast`}
                 stackId="revenue_forecast"
-                fill={s.color}
-                fillOpacity={0.35}
+                fill="hsl(var(--muted-foreground) / 0.35)"
                 shape={makeStackedBarShape(`${s.key}_forecast`, SERIES.map((x) => `${x.key}_forecast`))}
               />
             ))}
