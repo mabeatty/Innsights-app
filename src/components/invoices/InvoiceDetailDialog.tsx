@@ -251,7 +251,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     <Dialog open={!!invoiceId} onOpenChange={(v) => { if (!v) onClose(); }}>
       <DialogContent className="max-w-7xl w-[97vw] max-h-[92vh] h-[92vh] p-0 overflow-hidden flex flex-col">
         <DialogHeader className="px-5 pt-4 pb-2 border-b shrink-0">
-          <DialogTitle className="flex items-center gap-3">
+          <DialogTitle className="flex items-center gap-3 pr-8">
             <span>{invoice?.vendor_name || "Invoice"}</span>
             {invoice && <Badge className={statusBadgeClasses(invoice.status)} variant="outline">{invoice.status}</Badge>}
             {invoice?.source === "email" && <Badge variant="outline" className="gap-1 text-[10px]"><Mail className="h-2.5 w-2.5" />Via Email</Badge>}
