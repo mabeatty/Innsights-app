@@ -1,10 +1,11 @@
 import { Link } from "react-router-dom";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { ArrowLeft, DollarSign, TrendingUp, Building2, HardHat, Handshake, LayoutGrid } from "lucide-react";
+import { ArrowLeft, DollarSign, TrendingUp, TrendingDown, Building2, HardHat, Handshake, LayoutGrid } from "lucide-react";
 import CompanyFinancialsTab from "@/components/company/CompanyFinancialsTab";
 import DevFeesTab from "@/components/company/DevFeesTab";
 import RevenueSummaryTab from "@/components/company/RevenueSummaryTab";
 import CompanyRevenueTab from "@/components/company/CompanyRevenueTab";
+import ExpensesTab from "@/components/company/ExpensesTab";
 
 export default function CompanyDashboard() {
   return (
@@ -23,6 +24,9 @@ export default function CompanyDashboard() {
           </TabsTrigger>
           <TabsTrigger value="revenue" className="gap-1.5">
             <TrendingUp className="h-3.5 w-3.5" /> Revenue
+          </TabsTrigger>
+          <TabsTrigger value="expenses" className="gap-1.5">
+            <TrendingDown className="h-3.5 w-3.5" /> Expenses
           </TabsTrigger>
         </TabsList>
 
@@ -54,12 +58,16 @@ export default function CompanyDashboard() {
               <DevFeesTab />
             </TabsContent>
             <TabsContent value="constructionfees">
-              <CompanyRevenueTab revenueType="construction_fee" title="Owner's Rep" color="#eda100" />
+              <CompanyRevenueTab revenueType="construction_fee" title="Owner's Rep" />
             </TabsContent>
             <TabsContent value="consultingfees">
-              <CompanyRevenueTab revenueType="consulting_fee" title="Consulting Fees" color="#8e44ad" />
+              <CompanyRevenueTab revenueType="consulting_fee" title="Consulting Fees" />
             </TabsContent>
           </Tabs>
+        </TabsContent>
+
+        <TabsContent value="expenses">
+          <ExpensesTab />
         </TabsContent>
       </Tabs>
     </div>

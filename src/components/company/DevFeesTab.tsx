@@ -118,6 +118,62 @@ export default function DevFeesTab() {
         </ResponsiveContainer>
       </div>
 
+      {totalRemaining > 0 && (
+        <div>
+          <h3 className="text-sm font-medium mb-2">Forecast (not yet billed), by project</h3>
+          <p className="text-xs text-muted-foreground mb-2">Projected amounts from the development fee schedule, not real billings.</p>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart
+              data={monthlyTotals.map((m) => {
+                const row: Record<string, any> = { label: format(new Date(`${m.month.length === 7 ? `${m.month}-01` : m.month}T00:00:00`), "MMM yy") };
+                projectIds.forEach((pid) => { row[pid] = m.byProjectForecast[pid] ?? 0; });
+                return row;
+              })}
+              margin={{ top: 4, right: 4, left: 4, bottom: 0 }}
+            >
+              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
+              <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
+              <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
+              <Tooltip
+                content={({ active, payload, label }) => {
+                  if (!active || !payload || payload.length === 0) return null;
+                  const nonZero = payload.filter((entry: any) => Number(entry.value) > 0);
+                  if (nonZero.length === 0) {
+                    return (
+                      <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
+                        <p className="font-medium mb-0.5">{label}</p>
+                        <p className="text-muted-foreground">No forecast this month</p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
+                      <p className="font-semibold mb-1 flex items-center justify-between gap-3">
+                        <span>{label}</span>
+                        <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
+                      </p>
+                      {nonZero.map((entry: any) => {
+                        const pid = entry.dataKey as string;
+                        const projectName = projects.find((p) => p.projectId === pid)?.projectName ?? pid;
+                        return (
+                          <p key={pid} className="flex items-center justify-between gap-3">
+                            <span className="text-muted-foreground">{projectName}</span>
+                            <span>{fmtFull(Number(entry.value))}</span>
+                          </p>
+                        );
+                      })}
+                    </div>
+                  );
+                }}
+              />
+              {projectIds.map((pid, i) => (
+                <Bar key={pid} dataKey={pid} stackId="forecast" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={0.5} radius={[0, 0, 0, 0]} />
+              ))}
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div>
         <h3 className="text-sm font-medium mb-2">By project</h3>
         <div className="rounded-lg border overflow-hidden">

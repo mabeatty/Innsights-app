@@ -108,10 +108,16 @@ export default function RevenueSummaryTab() {
 
   const forecastChartData = months.map((month) => ({
     label: format(new Date(`${month}-01T00:00:00`), "MMM yy"),
-    revenueForecast: devFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0,
+    revenueForecast:
+      (devFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0) +
+      (constructionFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0) +
+      (consultingFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0),
     expenseForecast: hasExpenseDataForYear(month) ? (expenseForecastByMonth.get(month) ?? 0) : null,
   }));
-  const totalRevenueForecast = devFees.monthlyTotals.reduce((s, m) => s + m.forecastTotal, 0);
+  const totalRevenueForecast =
+    devFees.monthlyTotals.reduce((s, m) => s + m.forecastTotal, 0) +
+    constructionFees.forecastTotal +
+    consultingFees.forecastTotal;
   const totalExpenseForecast = [...expenseForecastByMonth.entries()]
     .filter(([m]) => hasExpenseDataForYear(m))
     .reduce((s, [, v]) => s + v, 0);
@@ -182,12 +188,13 @@ export default function RevenueSummaryTab() {
       <div>
         <h3 className="text-sm font-medium mb-2">Forecast: revenue vs. expenses by month</h3>
         <p className="text-xs text-muted-foreground mb-2">
-          Revenue forecast reflects Development Fees only (the only fee type with a projection loaded — Owner's Rep and
-          Consulting have no forecast source yet, only real transactions). Expense forecast covers {calendarYear1} only,
-          from the FY{String(calendarYear1).slice(2)} reforecast — no {calendarYear1 + 1} expense budget is loaded yet.
+          Revenue forecast reflects Development Fees (schedule-based) and Owner's Rep (estimated even-split from a lump
+          forecast total — see per-project notes). Consulting has no forecast source loaded yet, so contributes $0.
+          Expense forecast covers {calendarYear1} only, from the FY{String(calendarYear1).slice(2)} reforecast — no
+          {" "}{calendarYear1 + 1} expense budget is loaded yet.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <KpiCard label="Total revenue forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees only" />
+          <KpiCard label="Total revenue forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees + Owner's Rep" />
           <KpiCard label={`Total expense forecast (${calendarYear1})`} value={fmtFull(totalExpenseForecast)} sub={`${calendarYear1 + 1} not yet budgeted`} />
         </div>
         <ResponsiveContainer width="100%" height={260}>

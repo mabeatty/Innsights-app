@@ -7,22 +7,28 @@ import { formatProjectLabel } from "@/lib/projectLabel";
 export interface RevenueMonthTotal {
   month: string;
   total: number;
+  forecastTotal: number;
   byProject: Record<string, number>;
+  byProjectForecast: Record<string, number>;
 }
 
 export interface RevenueProjectTotal {
   projectId: string;
   projectName: string;
   total: number;
+  forecastTotal: number;
 }
 
-// Loads a single revenue stream (Construction Fees, Consulting Fees, etc.)
-// broken out by project, for the fixed 24-month Revenue calendar. Sourced
-// from revenue_qb_actuals via revenue_qb_account_map (see
-// sync-dev-fee-revenue-quickbooks) — same per-project mechanism Development
-// Fees uses. If QuickBooks has no per-project mapping configured yet for
-// this revenue type, months/projects simply come back empty rather than
-// guessing an attribution.
+// Loads a single revenue stream (Construction Fees/"Owner's Rep",
+// Consulting Fees, etc.) broken out by project, for the fixed 24-month
+// Revenue calendar. Actuals come from revenue_qb_actuals via
+// revenue_qb_account_map (see sync-dev-fee-revenue-quickbooks) — same
+// per-project mechanism Development Fees uses. Forecast (not-yet-billed)
+// amounts come from revenue_forecast — a separate table since, unlike
+// Development Fees (which already had a real forecast schedule), these
+// revenue types had no forecast source until one was manually loaded from
+// a source document. A revenue type with no forecast rows loaded simply
+// shows 0 forecast, not fabricated.
 export function useCompanyRevenue(revenueType: string) {
   const { organizationId } = useAuth();
   const [monthlyTotals, setMonthlyTotals] = useState<RevenueMonthTotal[]>([]);
@@ -35,15 +41,18 @@ export function useCompanyRevenue(revenueType: string) {
     setLoading(true);
     setError(null);
     try {
-      const { data, error: err } = await supabase
-        .from("revenue_qb_actuals")
-        .select("project_id, month, amount, projects(name, hotel_name)")
-        .eq("org_id", organizationId)
-        .eq("revenue_type", revenueType)
-        .order("month");
-      if (err) throw err;
+      const [{ data: actualData, error: actualErr }, { data: forecastData, error: forecastErr }] = await Promise.all([
+        supabase.from("revenue_qb_actuals").select("project_id, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", revenueType).order("month"),
+        supabase.from("revenue_forecast").select("project_id, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", revenueType).order("month"),
+      ]);
+      if (actualErr) throw actualErr;
+      if (forecastErr) throw forecastErr;
 
-      const rows = (data ?? []).map((r: any) => ({
+      const rows = (actualData ?? []).map((r: any) => ({
+        projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
+        month: r.month, amount: Number(r.amount),
+      }));
+      const forecastRows = (forecastData ?? []).map((r: any) => ({
         projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
         month: r.month, amount: Number(r.amount),
       }));
@@ -51,9 +60,17 @@ export function useCompanyRevenue(revenueType: string) {
       const months = getRevenueCalendarMonths();
       const built: RevenueMonthTotal[] = months.map((month) => {
         const rowsForMonth = rows.filter((r) => r.month === month);
+        const forecastForMonth = forecastRows.filter((r) => r.month === month);
         const byProject: Record<string, number> = {};
         rowsForMonth.forEach((r) => { byProject[r.projectId] = (byProject[r.projectId] ?? 0) + r.amount; });
-        return { month, total: rowsForMonth.reduce((s, r) => s + r.amount, 0), byProject };
+        const byProjectForecast: Record<string, number> = {};
+        forecastForMonth.forEach((r) => { byProjectForecast[r.projectId] = (byProjectForecast[r.projectId] ?? 0) + r.amount; });
+        return {
+          month,
+          total: rowsForMonth.reduce((s, r) => s + r.amount, 0),
+          forecastTotal: forecastForMonth.reduce((s, r) => s + r.amount, 0),
+          byProject, byProjectForecast,
+        };
       });
       setMonthlyTotals(built);
 
@@ -61,9 +78,14 @@ export function useCompanyRevenue(revenueType: string) {
       rows.forEach((r) => {
         const existing = totalByProject.get(r.projectId);
         if (existing) existing.total += r.amount;
-        else totalByProject.set(r.projectId, { projectId: r.projectId, projectName: r.projectName, total: r.amount });
+        else totalByProject.set(r.projectId, { projectId: r.projectId, projectName: r.projectName, total: r.amount, forecastTotal: 0 });
       });
-      setProjectTotals(Array.from(totalByProject.values()).sort((a, b) => b.total - a.total));
+      forecastRows.forEach((r) => {
+        const existing = totalByProject.get(r.projectId);
+        if (existing) existing.forecastTotal += r.amount;
+        else totalByProject.set(r.projectId, { projectId: r.projectId, projectName: r.projectName, total: 0, forecastTotal: r.amount });
+      });
+      setProjectTotals(Array.from(totalByProject.values()).sort((a, b) => (b.total + b.forecastTotal) - (a.total + a.forecastTotal)));
     } catch (e: any) {
       setError(e?.message || "Failed to load revenue data.");
     } finally {
@@ -74,6 +96,7 @@ export function useCompanyRevenue(revenueType: string) {
   useEffect(() => { load(); }, [load]);
 
   const total = projectTotals.reduce((s, p) => s + p.total, 0);
+  const forecastTotal = projectTotals.reduce((s, p) => s + p.forecastTotal, 0);
 
-  return { loading, error, refetch: load, monthlyTotals, projectTotals, total };
+  return { loading, error, refetch: load, monthlyTotals, projectTotals, total, forecastTotal };
 }
