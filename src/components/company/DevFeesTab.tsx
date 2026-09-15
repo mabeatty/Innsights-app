@@ -2,6 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { useDevFees } from "@/hooks/useDevFees";
+import { makeStackedBarShape } from "@/lib/stackedBarShape";
 
 const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
@@ -117,14 +118,22 @@ export default function DevFeesTab() {
               }}
             />
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="fees_actual" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
+              <Bar
+                key={`${pid}_actual`}
+                dataKey={`${pid}_actual`}
+                stackId="fees_actual"
+                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
+                shape={makeStackedBarShape(`${pid}_actual`, projectIds.map((id) => `${id}_actual`))}
+              />
             ))}
             {projectIds.map((pid, i) => (
               <Bar
                 key={`${pid}_forecast`}
-                dataKey={`${pid}_forecast`} stackId="fees_forecast"
+                dataKey={`${pid}_forecast`}
+                stackId="fees_forecast"
                 fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
                 fillOpacity={0.35}
+                shape={makeStackedBarShape(`${pid}_forecast`, projectIds.map((id) => `${id}_forecast`))}
               />
             ))}
           </BarChart>

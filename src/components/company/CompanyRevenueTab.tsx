@@ -1,6 +1,7 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { format } from "date-fns";
 import { useCompanyRevenue } from "@/hooks/useCompanyRevenue";
+import { makeStackedBarShape } from "@/lib/stackedBarShape";
 
 const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
@@ -122,10 +123,23 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
               }}
             />
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="revenue_actual" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
+              <Bar
+                key={`${pid}_actual`}
+                dataKey={`${pid}_actual`}
+                stackId="revenue_actual"
+                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
+                shape={makeStackedBarShape(`${pid}_actual`, projectIds.map((id) => `${id}_actual`))}
+              />
             ))}
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_forecast`} dataKey={`${pid}_forecast`} stackId="revenue_forecast" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={0.35} />
+              <Bar
+                key={`${pid}_forecast`}
+                dataKey={`${pid}_forecast`}
+                stackId="revenue_forecast"
+                fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
+                fillOpacity={0.35}
+                shape={makeStackedBarShape(`${pid}_forecast`, projectIds.map((id) => `${id}_forecast`))}
+              />
             ))}
           </BarChart>
         </ResponsiveContainer>

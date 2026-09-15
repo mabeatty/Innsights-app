@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCompanyFinancials } from "@/hooks/useCompanyFinancials";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
+import { makeStackedBarShape } from "@/lib/stackedBarShape";
 
 const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
@@ -170,10 +171,23 @@ export default function ExpensesTab() {
               }}
             />
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses_actual" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+              <Bar
+                key={`${cat.id}_actual`}
+                dataKey={`${cat.id}_actual`}
+                stackId="expenses_actual"
+                fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]}
+                shape={makeStackedBarShape(`${cat.id}_actual`, expenseCategories.map((c) => `${c.id}_actual`))}
+              />
             ))}
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses_forecast" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} />
+              <Bar
+                key={`${cat.id}_forecast`}
+                dataKey={`${cat.id}_forecast`}
+                stackId="expenses_forecast"
+                fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]}
+                fillOpacity={0.35}
+                shape={makeStackedBarShape(`${cat.id}_forecast`, expenseCategories.map((c) => `${c.id}_forecast`))}
+              />
             ))}
           </BarChart>
         </ResponsiveContainer>

@@ -3,6 +3,7 @@ import { format } from "date-fns";
 import { useDevFees } from "@/hooks/useDevFees";
 import { useCompanyRevenue } from "@/hooks/useCompanyRevenue";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
+import { makeStackedBarShape } from "@/lib/stackedBarShape";
 
 const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
@@ -163,10 +164,23 @@ export default function RevenueSummaryTab() {
               }}
             />
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue_actual" fill={s.color} />
+              <Bar
+                key={`${s.key}_actual`}
+                dataKey={`${s.key}_actual`}
+                stackId="revenue_actual"
+                fill={s.color}
+                shape={makeStackedBarShape(`${s.key}_actual`, SERIES.map((x) => `${x.key}_actual`))}
+              />
             ))}
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue_forecast" fill={s.color} fillOpacity={0.35} />
+              <Bar
+                key={`${s.key}_forecast`}
+                dataKey={`${s.key}_forecast`}
+                stackId="revenue_forecast"
+                fill={s.color}
+                fillOpacity={0.35}
+                shape={makeStackedBarShape(`${s.key}_forecast`, SERIES.map((x) => `${x.key}_forecast`))}
+              />
             ))}
           </BarChart>
         </ResponsiveContainer>
