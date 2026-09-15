@@ -163,10 +163,10 @@ export default function RevenueSummaryTab() {
               }}
             />
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue_actual" fill={s.color} radius={[3, 3, 0, 0]} />
+              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue_actual" fill={s.color} />
             ))}
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue_forecast" fill={s.color} fillOpacity={0.35} radius={[3, 3, 0, 0]} />
+              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue_forecast" fill={s.color} fillOpacity={0.35} />
             ))}
           </BarChart>
         </ResponsiveContainer>

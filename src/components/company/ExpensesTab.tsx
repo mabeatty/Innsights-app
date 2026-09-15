@@ -170,10 +170,10 @@ export default function ExpensesTab() {
               }}
             />
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses_actual" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} radius={[3, 3, 0, 0]} />
+              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses_actual" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
             ))}
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses_forecast" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} radius={[3, 3, 0, 0]} />
+              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses_forecast" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} />
             ))}
           </BarChart>
         </ResponsiveContainer>
