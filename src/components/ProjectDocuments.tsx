@@ -15,14 +15,16 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronRight, Plus, Trash2, ExternalLink, Copy, Send, Pencil } from "lucide-react";
+import { ChevronRight, Plus, Trash2, ExternalLink, Copy, Send, Pencil, FolderOpen, CheckCircle2 } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import DriveFileBrowser from "@/components/drive/DriveFileBrowser";
+import { DOCUMENT_TYPE_CHECKLIST } from "@/lib/documentTaxonomy";
 
-const FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Corporate", "Franchise Documents", "Other"] as const;
+const FOLDERS = ["Design", "Diligence", "Contracts", "Permits", "Corporate", "Franchise", "Other"] as const;
 type FolderName = (typeof FOLDERS)[number];
 
 interface DocRow {
@@ -33,6 +35,7 @@ interface DocRow {
   drive_url: string;
   added_by: string;
   created_at: string;
+  document_type: string | null;
 }
 
 interface OrgMember {
@@ -53,6 +56,10 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
   const [newDocName, setNewDocName] = useState("");
   const [newDriveUrl, setNewDriveUrl] = useState("");
   const [adding, setAdding] = useState(false);
+
+  // Drive file browser state — used for checklist rows (Design/Diligence/
+  // Franchise) and for Permits' open-ended "Add Permit" flow.
+  const [browserOpenFor, setBrowserOpenFor] = useState<{ folder: FolderName; documentType: string | null; existingId?: string } | null>(null);
 
   // Edit document state
   const [editTarget, setEditTarget] = useState<DocRow | null>(null);
@@ -125,6 +132,32 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
       await fetchDocs();
     }
     setAdding(false);
+  };
+
+  const handleDriveFileSelected = async (file: { id: string; name: string; url: string }) => {
+    if (!browserOpenFor || !user) return;
+    const { folder, documentType, existingId } = browserOpenFor;
+    // Checklist rows (Design/Diligence/Franchise) always use the checklist
+    // label as the document name, so the row reads consistently regardless
+    // of what the actual file in Drive happens to be named. Permits (no
+    // fixed type) uses the real Drive file name, since there's no fixed
+    // label to fall back to.
+    const documentName = documentType ?? file.name;
+    if (existingId) {
+      const { error } = await supabase.from("project_documents").update({
+        document_name: documentName, drive_url: file.url,
+      }).eq("id", existingId);
+      if (error) { toast.error(`Failed to update: ${error.message}`); return; }
+      toast.success("Document updated.");
+    } else {
+      const { error } = await supabase.from("project_documents").insert({
+        project_id: projectId, folder_name: folder, document_name: documentName,
+        drive_url: file.url, added_by: user.id, document_type: documentType,
+      });
+      if (error) { toast.error(`Failed to add document: ${error.message}`); return; }
+      toast.success("Document added.");
+    }
+    await fetchDocs();
   };
 
   const openEditDialog = (doc: DocRow) => {
@@ -225,11 +258,150 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
     return member?.email ?? userId.slice(0, 8) + "…";
   };
 
+  const renderDocRow = (doc: DocRow) => (
+    <div key={doc.id} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-muted/20">
+      <button
+        onClick={() => window.open(doc.drive_url, "_blank", "noopener,noreferrer")}
+        className="flex items-center gap-2 text-primary hover:underline text-left truncate flex-1 min-w-0"
+      >
+        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">{doc.document_name}</span>
+      </button>
+      <div className="flex items-center gap-3 ml-4 shrink-0 text-muted-foreground text-xs">
+        <span className="hidden sm:inline">{getUserEmail(doc.added_by)}</span>
+        <span>{format(new Date(doc.created_at), "MMM d, yyyy")}</span>
+        <Button variant="ghost" size="icon" className="h-7 w-7" title="Copy link" onClick={() => copyLink(doc.drive_url)}>
+          <Copy className="h-3.5 w-3.5" />
+        </Button>
+        {canEdit && (
+          <>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEditDialog(doc)}>
+              <Pencil className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7" title="Send" onClick={() => openSendDialog(doc)}>
+              <Send className="h-3.5 w-3.5" />
+            </Button>
+            <Button
+              variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive"
+              title="Delete" onClick={() => setDeleteTarget(doc)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="space-y-3 pt-2">
       {FOLDERS.map((folder) => {
         const folderDocs = docs.filter((d) => d.folder_name === folder);
         const isOpen = openFolders.has(folder);
+        const checklist = DOCUMENT_TYPE_CHECKLIST[folder];
+
+        if (checklist) {
+          // Fixed checklist categories (Design, Diligence, Franchise): one
+          // row per document type, each showing whether it's been added
+          // yet, with an Add/Replace button that opens the Drive browser.
+          // Any pre-existing document in this category that predates this
+          // classification (document_type is null, or doesn't match a
+          // checklist entry) still shows in an "Other documents" section
+          // below — nothing from before this feature is hidden.
+          const otherDocs = folderDocs.filter((d) => !d.document_type || !checklist.includes(d.document_type));
+          const addedCount = checklist.filter((t) => folderDocs.some((d) => d.document_type === t)).length;
+          return (
+            <Collapsible key={folder} open={isOpen} onOpenChange={() => toggleFolder(folder)}>
+              <div className="flex items-center justify-between rounded-md border px-4 py-2 bg-muted/30">
+                <CollapsibleTrigger className="flex items-center gap-2 flex-1 text-left">
+                  <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                  <span className="text-sm font-medium">{folder}</span>
+                  <span className="text-xs text-muted-foreground">({addedCount}/{checklist.length}{otherDocs.length > 0 ? ` +${otherDocs.length}` : ""})</span>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                <div className="border rounded-b-md divide-y">
+                  {checklist.map((docType) => {
+                    const existing = folderDocs.find((d) => d.document_type === docType);
+                    return (
+                      <div key={docType} className="flex items-center justify-between px-4 py-2 text-sm">
+                        <div className="flex items-center gap-2 min-w-0">
+                          {existing ? (
+                            <button
+                              onClick={() => window.open(existing.drive_url, "_blank", "noopener,noreferrer")}
+                              className="flex items-center gap-2 text-left truncate"
+                            >
+                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                              <span className="truncate">{docType}</span>
+                            </button>
+                          ) : (
+                            <span className="flex items-center gap-2 text-muted-foreground">
+                              <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-dashed" />
+                              {docType}
+                            </span>
+                          )}
+                        </div>
+                        {canEdit && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {existing && (
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove" onClick={() => setDeleteTarget(existing)}>
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="outline" size="sm"
+                              onClick={() => setBrowserOpenFor({ folder, documentType: docType, existingId: existing?.id })}
+                            >
+                              <FolderOpen className="h-3.5 w-3.5 mr-1" /> {existing ? "Replace" : "Add"}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {otherDocs.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-xs text-muted-foreground px-2 mb-1">Other {folder.toLowerCase()} documents</p>
+                    <div className="border rounded-md divide-y">{otherDocs.map(renderDocRow)}</div>
+                  </div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        }
+
+        if (folder === "Permits") {
+          // Open-ended — every jurisdiction is different, so no fixed
+          // checklist, just a plain list plus an Add button that opens the
+          // Drive browser directly (the real Drive file name becomes the
+          // document name, since there's no fixed label to use instead).
+          return (
+            <Collapsible key={folder} open={isOpen} onOpenChange={() => toggleFolder(folder)}>
+              <div className="flex items-center justify-between rounded-md border px-4 py-2 bg-muted/30">
+                <CollapsibleTrigger className="flex items-center gap-2 flex-1 text-left">
+                  <ChevronRight className={`h-4 w-4 transition-transform ${isOpen ? "rotate-90" : ""}`} />
+                  <span className="text-sm font-medium">{folder}</span>
+                  <span className="text-xs text-muted-foreground">({folderDocs.length})</span>
+                </CollapsibleTrigger>
+                {canEdit && (
+                  <Button variant="ghost" size="sm" onClick={() => setBrowserOpenFor({ folder, documentType: null })}>
+                    <FolderOpen className="h-3.5 w-3.5 mr-1" /> Add Permit
+                  </Button>
+                )}
+              </div>
+              <CollapsibleContent>
+                {folderDocs.length === 0 ? (
+                  <p className="text-xs text-muted-foreground py-3 px-6">No permits yet.</p>
+                ) : (
+                  <div className="border rounded-b-md divide-y">{folderDocs.map(renderDocRow)}</div>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
+          );
+        }
+
+        // Contracts, Corporate, Other — unchanged manual add-a-link flow.
         return (
           <Collapsible key={folder} open={isOpen} onOpenChange={() => toggleFolder(folder)}>
             <div className="flex items-center justify-between rounded-md border px-4 py-2 bg-muted/30">
@@ -252,68 +424,19 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
               {folderDocs.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-3 px-6">No documents yet.</p>
               ) : (
-                <div className="border rounded-b-md divide-y">
-                  {folderDocs.map((doc) => (
-                    <div key={doc.id} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-muted/20">
-                      <button
-                        onClick={() => window.open(doc.drive_url, "_blank", "noopener,noreferrer")}
-                        className="flex items-center gap-2 text-primary hover:underline text-left truncate flex-1 min-w-0"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
-                        <span className="truncate">{doc.document_name}</span>
-                      </button>
-                      <div className="flex items-center gap-3 ml-4 shrink-0 text-muted-foreground text-xs">
-                        <span className="hidden sm:inline">{getUserEmail(doc.added_by)}</span>
-                        <span>{format(new Date(doc.created_at), "MMM d, yyyy")}</span>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          title="Copy link"
-                          onClick={() => copyLink(doc.drive_url)}
-                        >
-                          <Copy className="h-3.5 w-3.5" />
-                        </Button>
-                        {canEdit && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              title="Edit"
-                              onClick={() => openEditDialog(doc)}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              title="Send"
-                              onClick={() => openSendDialog(doc)}
-                            >
-                              <Send className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7 text-destructive hover:text-destructive"
-                              title="Delete"
-                              onClick={() => setDeleteTarget(doc)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <div className="border rounded-b-md divide-y">{folderDocs.map(renderDocRow)}</div>
               )}
             </CollapsibleContent>
           </Collapsible>
         );
       })}
+
+      <DriveFileBrowser
+        open={!!browserOpenFor}
+        onOpenChange={(o) => !o && setBrowserOpenFor(null)}
+        onSelect={handleDriveFileSelected}
+        title={browserOpenFor ? `Select file for ${browserOpenFor.documentType ?? "Permit"}` : undefined}
+      />
 
       {/* Add Document Dialog */}
       <Dialog open={!!addFolder} onOpenChange={(o) => !o && setAddFolder(null)}>
