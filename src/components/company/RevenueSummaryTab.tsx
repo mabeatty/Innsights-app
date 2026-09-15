@@ -121,7 +121,10 @@ export default function RevenueSummaryTab() {
                 }
                 return (
                   <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
-                    <p className="font-medium mb-1">{label}</p>
+                    <p className="font-medium mb-1 flex items-center justify-between gap-3">
+                      <span>{label}</span>
+                      <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
+                    </p>
                     {nonZero.map((entry: any) => {
                       const series = SERIES.find((s) => s.key === entry.dataKey);
                       return (
