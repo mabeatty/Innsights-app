@@ -55,6 +55,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
   const [savingEdit, setSavingEdit] = useState(false);
 
   const isAdmin = accessLevel === "admin";
+  const canEdit = accessLevel !== "view";
   const nameFor = (id: string | null) =>
     !id ? "Unassigned" : members.find((m) => m.user_id === id)?.name ?? "Unknown member";
   const myName = members.find((m) => m.user_id === user?.id)?.name ?? user?.email ?? "A teammate";
@@ -255,7 +256,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
             <span>{invoice?.vendor_name || "Invoice"}</span>
             {invoice && <Badge className={statusBadgeClasses(invoice.status)} variant="outline">{invoice.status}</Badge>}
             {invoice?.source === "email" && <Badge variant="outline" className="gap-1 text-[10px]"><Mail className="h-2.5 w-2.5" />Via Email</Badge>}
-            {invoice && isAdmin && !isEditing && (
+            {invoice && canEdit && !isEditing && (
               <Button variant="outline" size="sm" className="ml-auto gap-1.5" onClick={startEditing}>
                 <Pencil className="h-3.5 w-3.5" /> Edit
               </Button>
