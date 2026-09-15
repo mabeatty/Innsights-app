@@ -188,13 +188,14 @@ export default function RevenueSummaryTab() {
       <div>
         <h3 className="text-sm font-medium mb-2">Forecast: revenue vs. expenses by month</h3>
         <p className="text-xs text-muted-foreground mb-2">
-          Revenue forecast reflects Development Fees (schedule-based) and Owner's Rep (estimated even-split from a lump
-          forecast total — see per-project notes). Consulting has no forecast source loaded yet, so contributes $0.
-          Expense forecast covers {calendarYear1} only, from the FY{String(calendarYear1).slice(2)} reforecast — no
+          Revenue forecast reflects Development Fees only — includes the schedule-based forecast plus an estimated
+          even-split of Intech's and Cleveland's Owner's Rep fee (reclassified as Development Fee per direction,
+          2026-09-15; see revenue_forecast notes for detail). Owner's Rep and Consulting have no forecast of their own
+          loaded. Expense forecast covers {calendarYear1} only, from the FY{String(calendarYear1).slice(2)} reforecast — no
           {" "}{calendarYear1 + 1} expense budget is loaded yet.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-          <KpiCard label="Total revenue forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees + Owner's Rep" />
+          <KpiCard label="Total revenue forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees" />
           <KpiCard label={`Total expense forecast (${calendarYear1})`} value={fmtFull(totalExpenseForecast)} sub={`${calendarYear1 + 1} not yet budgeted`} />
         </div>
         <ResponsiveContainer width="100%" height={260}>

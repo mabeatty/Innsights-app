@@ -46,14 +46,16 @@ export function useDevFees() {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }] = await Promise.all([
+      const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }, { data: extraForecastRows, error: forecastErr }] = await Promise.all([
         supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name, hotel_name)").eq("org_id", organizationId),
         supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name, hotel_name)").eq("org_id", organizationId).order("month"),
         supabase.from("revenue_qb_actuals").select("project_id, month, amount").eq("org_id", organizationId).eq("revenue_type", "development_fee").order("month"),
+        supabase.from("revenue_forecast").select("project_id, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", "development_fee").order("month"),
       ]);
       if (feeErr) throw feeErr;
       if (schedErr) throw schedErr;
       if (qbErr) throw qbErr;
+      if (forecastErr) throw forecastErr;
 
       const qbProjectIds = new Set((qbRows ?? []).map((r: any) => r.project_id));
 
@@ -110,7 +112,16 @@ export function useDevFees() {
         projectId: r.project_id, projectName: projectNameById.get(r.project_id) ?? "Unknown",
         month: r.month, amount: Number(r.amount), isBilled: true,
       }));
-      setScheduleRows([...nonQbRows, ...qbActualRows]);
+      // Extra manually-loaded forecast (e.g. Owner's Rep fee reclassified as
+      // Development Fee for Intech/Cleveland, per direction 2026-09-15) —
+      // additive on top of the schedule-derived forecast, since it's a
+      // distinct fee stream layered onto the same project/month, not a
+      // replacement for the base Dev Fee schedule amount.
+      const extraForecastMapped = (extraForecastRows ?? []).map((r: any) => ({
+        projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
+        month: r.month, amount: Number(r.amount), isBilled: false,
+      }));
+      setScheduleRows([...nonQbRows, ...qbActualRows, ...extraForecastMapped]);
     } catch (e: any) {
       setError(e?.message || "Failed to load development fee data.");
     } finally {
