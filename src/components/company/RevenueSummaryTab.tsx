@@ -65,6 +65,25 @@ export default function RevenueSummaryTab() {
   const totalConsulting = consultingFees.total;
   const totalRevenue = totalDev + totalConstruction + totalConsulting;
 
+  // Revenue by source (project): combine each project's Development,
+  // Construction, and Consulting Fee totals into one row, so "where does
+  // our revenue actually come from" is answerable at a glance without
+  // switching between sub-tabs.
+  type SourceRow = { projectId: string; projectName: string; developmentFee: number; constructionFee: number; consultingFee: number; total: number };
+  const bySourceMap = new Map<string, SourceRow>();
+  const addToSource = (projectId: string, projectName: string, key: "developmentFee" | "constructionFee" | "consultingFee", amount: number) => {
+    if (!bySourceMap.has(projectId)) {
+      bySourceMap.set(projectId, { projectId, projectName, developmentFee: 0, constructionFee: 0, consultingFee: 0, total: 0 });
+    }
+    const row = bySourceMap.get(projectId)!;
+    row[key] += amount;
+    row.total += amount;
+  };
+  devFees.projects.forEach((p) => { if (p.totalBilled > 0) addToSource(p.projectId, p.projectName, "developmentFee", p.totalBilled); });
+  constructionFees.projectTotals.forEach((p) => addToSource(p.projectId, p.projectName, "constructionFee", p.total));
+  consultingFees.projectTotals.forEach((p) => addToSource(p.projectId, p.projectName, "consultingFee", p.total));
+  const bySource = Array.from(bySourceMap.values()).sort((a, b) => b.total - a.total);
+
   return (
     <div className="space-y-6 pt-2">
       <div>
@@ -122,6 +141,24 @@ export default function RevenueSummaryTab() {
             ))}
           </BarChart>
         </ResponsiveContainer>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-medium mb-2">Revenue by source (project)</h3>
+        <p className="text-xs text-muted-foreground mb-2">Total revenue per project, combined across all fee types.</p>
+        <div className="space-y-1.5">
+          {bySource.map((s) => (
+            <div key={s.projectId} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+              <span>{s.projectName}</span>
+              <span className="flex items-center gap-3 text-xs text-muted-foreground">
+                {s.developmentFee > 0 && <span>Dev: {fmtFull(s.developmentFee)}</span>}
+                {s.constructionFee > 0 && <span>Constr: {fmtFull(s.constructionFee)}</span>}
+                {s.consultingFee > 0 && <span>Consult: {fmtFull(s.consultingFee)}</span>}
+                <span className="text-foreground font-medium">{fmtFull(s.total)}</span>
+              </span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
