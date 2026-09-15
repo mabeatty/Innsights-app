@@ -114,10 +114,10 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
               }}
             />
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="revenue" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
+              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="revenue_actual" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
             ))}
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_forecast`} dataKey={`${pid}_forecast`} stackId="revenue" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={0.35} />
+              <Bar key={`${pid}_forecast`} dataKey={`${pid}_forecast`} stackId="revenue_forecast" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={0.35} />
             ))}
           </BarChart>
         </ResponsiveContainer>

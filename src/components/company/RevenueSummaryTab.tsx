@@ -156,10 +156,10 @@ export default function RevenueSummaryTab() {
             />
             <Legend wrapperStyle={{ fontSize: 11 }} payload={SERIES.map((s) => ({ value: s.label, type: "square", color: s.color }))} />
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue" fill={s.color} />
+              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue_actual" fill={s.color} />
             ))}
             {SERIES.map((s) => (
-              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue" fill={s.color} fillOpacity={0.35} />
+              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue_forecast" fill={s.color} fillOpacity={0.35} />
             ))}
           </BarChart>
         </ResponsiveContainer>

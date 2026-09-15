@@ -163,10 +163,10 @@ export default function ExpensesTab() {
             />
             <Legend wrapperStyle={{ fontSize: 11 }} payload={expenseCategories.map((cat, i) => ({ value: cat.name, type: "square", color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }))} />
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
+              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses_actual" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
             ))}
             {expenseCategories.map((cat, i) => (
-              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} />
+              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses_forecast" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} />
             ))}
           </BarChart>
         </ResponsiveContainer>

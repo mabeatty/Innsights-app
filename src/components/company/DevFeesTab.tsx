@@ -119,13 +119,12 @@ export default function DevFeesTab() {
               }))}
             />
             {projectIds.map((pid, i) => (
-              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="fees" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
+              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="fees_actual" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
             ))}
             {projectIds.map((pid, i) => (
               <Bar
                 key={`${pid}_forecast`}
-                dataKey={`${pid}_forecast`}
-                stackId="fees"
+                dataKey={`${pid}_forecast`} stackId="fees_forecast"
                 fill={PROJECT_COLORS[i % PROJECT_COLORS.length]}
                 fillOpacity={0.35}
               />
