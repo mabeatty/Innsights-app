@@ -15,7 +15,7 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ChevronRight, Plus, Trash2, ExternalLink, Copy, Send, Pencil, FolderOpen, CheckCircle2 } from "lucide-react";
+import { ChevronRight, Plus, Trash2, Copy, Send, Pencil, FolderOpen } from "lucide-react";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
@@ -262,9 +262,8 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
     <div key={doc.id} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-muted/20">
       <button
         onClick={() => window.open(doc.drive_url, "_blank", "noopener,noreferrer")}
-        className="flex items-center gap-2 text-primary hover:underline text-left truncate flex-1 min-w-0"
+        className="flex items-center gap-2 text-primary underline text-left truncate flex-1 min-w-0"
       >
-        <ExternalLink className="h-3.5 w-3.5 shrink-0" />
         <span className="truncate">{doc.document_name}</span>
       </button>
       <div className="flex items-center gap-3 ml-4 shrink-0 text-muted-foreground text-xs">
@@ -329,16 +328,12 @@ export default function ProjectDocuments({ projectId, projectName }: { projectId
                           {existing ? (
                             <button
                               onClick={() => window.open(existing.drive_url, "_blank", "noopener,noreferrer")}
-                              className="flex items-center gap-2 text-left truncate"
+                              className="text-left truncate underline text-primary"
                             >
-                              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                              <span className="truncate">{docType}</span>
+                              {docType}
                             </button>
                           ) : (
-                            <span className="flex items-center gap-2 text-muted-foreground">
-                              <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-dashed" />
-                              {docType}
-                            </span>
+                            <span className="truncate text-muted-foreground">{docType}</span>
                           )}
                         </div>
                         {canEdit && (
