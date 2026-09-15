@@ -55,9 +55,12 @@ export default function RevenueSummaryTab() {
 
   const chartData = months.map((month) => ({
     label: format(new Date(`${month}-01T00:00:00`), "MMM yy"),
-    developmentFee: devByMonth.get(month) ?? 0,
-    constructionFee: constructionByMonth.get(month) ?? 0,
-    consultingFee: consultingByMonth.get(month) ?? 0,
+    developmentFee_actual: devByMonth.get(month) ?? 0,
+    developmentFee_forecast: devFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0,
+    constructionFee_actual: constructionByMonth.get(month) ?? 0,
+    constructionFee_forecast: constructionFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0,
+    consultingFee_actual: consultingByMonth.get(month) ?? 0,
+    consultingFee_forecast: consultingFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0,
   }));
 
   const totalDev = devFees.monthlyTotals.reduce((s, m) => s + m.actualTotal, 0);
@@ -88,13 +91,6 @@ export default function RevenueSummaryTab() {
   // (dev_fee_schedule's is_billed=false rows, plus manually-loaded
   // revenue_forecast rows — see useDevFees) — Owner's Rep and Consulting
   // have no forecast source of their own.
-  const forecastChartData = months.map((month) => ({
-    label: format(new Date(`${month}-01T00:00:00`), "MMM yy"),
-    revenueForecast:
-      (devFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0) +
-      (constructionFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0) +
-      (consultingFees.monthlyTotals.find((m) => m.month === month)?.forecastTotal ?? 0),
-  }));
   const totalRevenueForecast =
     devFees.monthlyTotals.reduce((s, m) => s + m.forecastTotal, 0) +
     constructionFees.forecastTotal +
@@ -110,15 +106,17 @@ export default function RevenueSummaryTab() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
         <KpiCard label="Total revenue" value={fmtFull(totalRevenue)} sub="All fee types, 24-month calendar" />
         <KpiCard label="Development Fees" value={fmtFull(totalDev)} />
         <KpiCard label="Owner's Rep" value={fmtFull(totalConstruction)} />
         <KpiCard label="Consulting Fees" value={fmtFull(totalConsulting)} />
+        <KpiCard label="Total forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees only" />
       </div>
 
       <div>
         <h3 className="text-sm font-medium mb-2">Revenue by month, by fee type</h3>
+        <p className="text-xs text-muted-foreground mb-2">Solid = actual. Faded = forecast, not yet billed.</p>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
@@ -143,10 +141,11 @@ export default function RevenueSummaryTab() {
                       <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
                     </p>
                     {nonZero.map((entry: any) => {
-                      const series = SERIES.find((s) => s.key === entry.dataKey);
+                      const [seriesKey, kind] = (entry.dataKey as string).split("_");
+                      const series = SERIES.find((s) => s.key === seriesKey);
                       return (
                         <p key={entry.dataKey} className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">{series?.label ?? entry.dataKey}</span>
+                          <span className="text-muted-foreground">{series?.label ?? seriesKey}{kind === "forecast" ? " (forecast)" : ""}</span>
                           <span>{fmtFull(Number(entry.value))}</span>
                         </p>
                       );
@@ -155,42 +154,13 @@ export default function RevenueSummaryTab() {
                 );
               }}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
+            <Legend wrapperStyle={{ fontSize: 11 }} payload={SERIES.map((s) => ({ value: s.label, type: "square", color: s.color }))} />
             {SERIES.map((s) => (
-              <Bar key={s.key} dataKey={s.key} name={s.label} stackId="revenue" fill={s.color} radius={[0, 0, 0, 0]} />
+              <Bar key={`${s.key}_actual`} dataKey={`${s.key}_actual`} stackId="revenue" fill={s.color} />
             ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div>
-        <h3 className="text-sm font-medium mb-2">Revenue forecast by month</h3>
-        <p className="text-xs text-muted-foreground mb-2">
-          Reflects Development Fees only — includes the schedule-based forecast plus an estimated even-split of
-          Intech's and Cleveland's Owner's Rep fee (reclassified as Development Fee per direction, 2026-09-15; see
-          revenue_forecast notes for detail). Owner's Rep and Consulting have no forecast of their own loaded.
-          Expense forecast lives on the Expenses tab.
-        </p>
-        <div className="mb-3">
-          <KpiCard label="Total revenue forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees" />
-        </div>
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={forecastChartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
-            <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
-            <Tooltip
-              content={({ active, payload, label }) => {
-                if (!active || !payload || payload.length === 0) return null;
-                return (
-                  <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
-                    <p className="font-semibold mb-0.5">{label}</p>
-                    <p className="text-muted-foreground">{fmtFull(Number(payload[0].value))}</p>
-                  </div>
-                );
-              }}
-            />
-            <Bar dataKey="revenueForecast" name="Revenue forecast" fill="#2a78d6" radius={[3, 3, 0, 0]} />
+            {SERIES.map((s) => (
+              <Bar key={`${s.key}_forecast`} dataKey={`${s.key}_forecast`} stackId="revenue" fill={s.color} fillOpacity={0.35} />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>

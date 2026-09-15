@@ -70,15 +70,9 @@ export default function ExpensesTab() {
     const row: Record<string, any> = { label: format(new Date(`${month}-01T00:00:00`), "MMM yy") };
     expenseCategories.forEach((cat) => {
       const entry = byCategoryMonth.get(cat.id)?.get(month);
-      row[cat.id] = entry && !entry.isProjected ? entry.actual : 0;
+      row[`${cat.id}_actual`] = entry && !entry.isProjected ? entry.actual : 0;
+      row[`${cat.id}_forecast`] = hasExpenseDataForYear(month) ? (entry?.budget ?? 0) : 0;
     });
-    return row;
-  });
-  const forecastChartData = months.map((month) => {
-    const row: Record<string, any> = { label: format(new Date(`${month}-01T00:00:00`), "MMM yy") };
-    row.forecast = hasExpenseDataForYear(month)
-      ? expenseCategories.reduce((s, cat) => s + (byCategoryMonth.get(cat.id)?.get(month)?.budget ?? 0), 0)
-      : null;
     return row;
   });
 
@@ -124,9 +118,11 @@ export default function ExpensesTab() {
       </div>
 
       <div>
-        <h3 className="text-sm font-medium mb-2">Actual expenses by month, by category</h3>
-        <p className="text-xs text-muted-foreground mb-2">Closed months only — no bar for months that haven't happened yet.</p>
-        <ResponsiveContainer width="100%" height={300}>
+        <h3 className="text-sm font-medium mb-2">Expenses by month, by category</h3>
+        <p className="text-xs text-muted-foreground mb-2">
+          Solid = actual (closed months only). Faded = forecast/budget ({calendarYear1} reforecast — {calendarYear1 + 1} has no budget loaded, shown as $0).
+        </p>
+        <ResponsiveContainer width="100%" height={320}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
@@ -139,7 +135,7 @@ export default function ExpensesTab() {
                   return (
                     <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
                       <p className="font-medium mb-0.5">{label}</p>
-                      <p className="text-muted-foreground">No closed-month expenses</p>
+                      <p className="text-muted-foreground">No expenses this month</p>
                     </div>
                   );
                 }
@@ -150,10 +146,13 @@ export default function ExpensesTab() {
                       <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
                     </p>
                     {nonZero.map((entry: any) => {
-                      const cat = expenseCategories.find((c) => c.id === entry.dataKey);
+                      const dataKey = entry.dataKey as string;
+                      const kind = dataKey.endsWith("_forecast") ? "forecast" : "actual";
+                      const catId = dataKey.replace(/_(actual|forecast)$/, "");
+                      const cat = expenseCategories.find((c) => c.id === catId);
                       return (
-                        <p key={entry.dataKey} className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">{cat?.name ?? entry.dataKey}</span>
+                        <p key={dataKey} className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{cat?.name ?? catId}{kind === "forecast" ? " (forecast)" : ""}</span>
                           <span>{fmtFull(Number(entry.value))}</span>
                         </p>
                       );
@@ -162,37 +161,13 @@ export default function ExpensesTab() {
                 );
               }}
             />
-            <Legend wrapperStyle={{ fontSize: 11 }} formatter={(value) => expenseCategories.find((c) => c.id === value)?.name ?? value} />
+            <Legend wrapperStyle={{ fontSize: 11 }} payload={expenseCategories.map((cat, i) => ({ value: cat.name, type: "square", color: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }))} />
             {expenseCategories.map((cat, i) => (
-              <Bar key={cat.id} dataKey={cat.id} name={cat.id} stackId="expenses" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} radius={[0, 0, 0, 0]} />
+              <Bar key={`${cat.id}_actual`} dataKey={`${cat.id}_actual`} stackId="expenses" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />
             ))}
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      <div>
-        <h3 className="text-sm font-medium mb-2">Expense forecast by month</h3>
-        <p className="text-xs text-muted-foreground mb-2">
-          From the {calendarYear1} reforecast (company_budget) — {calendarYear1 + 1} has no expense budget loaded, shown as no data.
-        </p>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={forecastChartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-            <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-            <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
-            <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
-            <Tooltip
-              content={({ active, payload, label }) => {
-                if (!active || !payload || payload.length === 0) return null;
-                const entry = payload[0];
-                return (
-                  <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
-                    <p className="font-semibold mb-0.5">{label}</p>
-                    <p className="text-muted-foreground">{entry.value == null ? "No data" : fmtFull(Number(entry.value))}</p>
-                  </div>
-                );
-              }}
-            />
-            <Bar dataKey="forecast" name="Expense forecast" fill="#c0392b" radius={[3, 3, 0, 0]} />
+            {expenseCategories.map((cat, i) => (
+              <Bar key={`${cat.id}_forecast`} dataKey={`${cat.id}_forecast`} stackId="expenses" fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} fillOpacity={0.35} />
+            ))}
           </BarChart>
         </ResponsiveContainer>
       </div>

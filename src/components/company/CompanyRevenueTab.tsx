@@ -48,14 +48,15 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
   }
 
   const projectIds = projectTotals.map((p) => p.projectId);
+  // Actual and forecast combined into one chart — each month/project pair
+  // only ever has one of the two nonzero, so stacking an actual segment
+  // and a forecast segment together never double-counts height.
   const chartData = monthlyTotals.map((m) => {
     const row: Record<string, any> = { label: format(new Date(`${m.month}-01T00:00:00`), "MMM yy") };
-    projectIds.forEach((pid) => { row[pid] = m.byProject[pid] ?? 0; });
-    return row;
-  });
-  const forecastChartData = monthlyTotals.map((m) => {
-    const row: Record<string, any> = { label: format(new Date(`${m.month}-01T00:00:00`), "MMM yy") };
-    projectIds.forEach((pid) => { row[pid] = m.byProjectForecast[pid] ?? 0; });
+    projectIds.forEach((pid) => {
+      row[`${pid}_actual`] = m.byProject[pid] ?? 0;
+      row[`${pid}_forecast`] = m.byProjectForecast[pid] ?? 0;
+    });
     return row;
   });
   const hasForecast = forecastTotal > 0;
@@ -74,7 +75,8 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
 
       <div>
         <h3 className="text-sm font-medium mb-2">Revenue by month, by project</h3>
-        <ResponsiveContainer width="100%" height={280}>
+        <p className="text-xs text-muted-foreground mb-2">Solid = actual. Faded = forecast, not yet billed.</p>
+        <ResponsiveContainer width="100%" height={300}>
           <BarChart data={chartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
             <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
             <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
@@ -98,11 +100,11 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
                       <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
                     </p>
                     {nonZero.map((entry: any) => {
-                      const pid = entry.dataKey as string;
+                      const [pid, kind] = (entry.dataKey as string).split("_");
                       const projectName = projectTotals.find((p) => p.projectId === pid)?.projectName ?? pid;
                       return (
-                        <p key={pid} className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">{projectName}</span>
+                        <p key={entry.dataKey} className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">{projectName}{kind === "forecast" ? " (forecast)" : ""}</span>
                           <span>{fmtFull(Number(entry.value))}</span>
                         </p>
                       );
@@ -112,62 +114,14 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
               }}
             />
             {projectIds.map((pid, i) => (
-              <Bar key={pid} dataKey={pid} stackId="revenue" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} radius={[0, 0, 0, 0]} />
+              <Bar key={`${pid}_actual`} dataKey={`${pid}_actual`} stackId="revenue" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} />
+            ))}
+            {projectIds.map((pid, i) => (
+              <Bar key={`${pid}_forecast`} dataKey={`${pid}_forecast`} stackId="revenue" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={0.35} />
             ))}
           </BarChart>
         </ResponsiveContainer>
       </div>
-
-      {hasForecast && (
-        <div>
-          <h3 className="text-sm font-medium mb-2">Forecast (not yet billed), by project</h3>
-          <p className="text-xs text-muted-foreground mb-2">
-            Projected, not real — see each project's forecast note for how the figure was derived.
-          </p>
-          <ResponsiveContainer width="100%" height={240}>
-            <BarChart data={forecastChartData} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-              <CartesianGrid vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} interval={1} />
-              <YAxis tickFormatter={fmtK} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={44} />
-              <Tooltip
-                content={({ active, payload, label }) => {
-                  if (!active || !payload || payload.length === 0) return null;
-                  const nonZero = payload.filter((entry: any) => Number(entry.value) > 0);
-                  if (nonZero.length === 0) {
-                    return (
-                      <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
-                        <p className="font-medium mb-0.5">{label}</p>
-                        <p className="text-muted-foreground">No forecast this month</p>
-                      </div>
-                    );
-                  }
-                  return (
-                    <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
-                      <p className="font-semibold mb-1 flex items-center justify-between gap-3">
-                        <span>{label}</span>
-                        <span>{fmtFull(nonZero.reduce((s: number, e: any) => s + Number(e.value), 0))}</span>
-                      </p>
-                      {nonZero.map((entry: any) => {
-                        const pid = entry.dataKey as string;
-                        const projectName = projectTotals.find((p) => p.projectId === pid)?.projectName ?? pid;
-                        return (
-                          <p key={pid} className="flex items-center justify-between gap-3">
-                            <span className="text-muted-foreground">{projectName}</span>
-                            <span>{fmtFull(Number(entry.value))}</span>
-                          </p>
-                        );
-                      })}
-                    </div>
-                  );
-                }}
-              />
-              {projectIds.map((pid, i) => (
-                <Bar key={pid} dataKey={pid} stackId="forecast" fill={PROJECT_COLORS[i % PROJECT_COLORS.length]} fillOpacity={0.5} radius={[0, 0, 0, 0]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
 
       <div>
         <h3 className="text-sm font-medium mb-2">By project</h3>
