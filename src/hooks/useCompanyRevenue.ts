@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
+import { formatProjectLabel } from "@/lib/projectLabel";
 
 export interface RevenueMonthTotal {
   month: string;
@@ -36,14 +37,14 @@ export function useCompanyRevenue(revenueType: string) {
     try {
       const { data, error: err } = await supabase
         .from("revenue_qb_actuals")
-        .select("project_id, month, amount, projects(name)")
+        .select("project_id, month, amount, projects(name, hotel_name)")
         .eq("org_id", organizationId)
         .eq("revenue_type", revenueType)
         .order("month");
       if (err) throw err;
 
       const rows = (data ?? []).map((r: any) => ({
-        projectId: r.project_id, projectName: r.projects?.name ?? "Unknown",
+        projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
         month: r.month, amount: Number(r.amount),
       }));
 

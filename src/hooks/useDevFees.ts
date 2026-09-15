@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
+import { formatProjectLabel } from "@/lib/projectLabel";
 
 export interface DevFeeProject {
   projectId: string;
@@ -46,8 +47,8 @@ export function useDevFees() {
     setError(null);
     try {
       const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }] = await Promise.all([
-        supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name)").eq("org_id", organizationId),
-        supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name)").eq("org_id", organizationId).order("month"),
+        supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name, hotel_name)").eq("org_id", organizationId),
+        supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name, hotel_name)").eq("org_id", organizationId).order("month"),
         supabase.from("revenue_qb_actuals").select("project_id, month, amount").eq("org_id", organizationId).eq("revenue_type", "development_fee").order("month"),
       ]);
       if (feeErr) throw feeErr;
@@ -72,7 +73,7 @@ export function useDevFees() {
         const totalBilled = billedByProject.get(r.project_id) ?? 0;
         return {
           projectId: r.project_id,
-          projectName: r.projects?.name ?? "Unknown",
+          projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
           devFee, totalFee, totalBilled,
           remaining: totalFee - totalBilled,
           notes: r.notes,
@@ -101,10 +102,10 @@ export function useDevFees() {
           return !qbMonthsByProject.get(r.project_id)?.has(r.month);
         })
         .map((r: any) => ({
-          projectId: r.project_id, projectName: r.projects?.name ?? "Unknown",
+          projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
           month: r.month, amount: Number(r.amount), isBilled: r.is_billed,
         }));
-      const projectNameById = new Map((feeRows ?? []).map((r: any) => [r.project_id, r.projects?.name ?? "Unknown"]));
+      const projectNameById = new Map((feeRows ?? []).map((r: any) => [r.project_id, formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name)]));
       const qbActualRows = (qbRows ?? []).map((r: any) => ({
         projectId: r.project_id, projectName: projectNameById.get(r.project_id) ?? "Unknown",
         month: r.month, amount: Number(r.amount), isBilled: true,
