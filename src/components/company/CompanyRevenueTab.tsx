@@ -147,20 +147,46 @@ export default function CompanyRevenueTab({ revenueType, title }: CompanyRevenue
       <div>
         <h3 className="text-sm font-medium mb-2">By project</h3>
         <div className="space-y-1.5">
-          {projectTotals.map((p, i) => (
-            <div key={p.projectId} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
-              <span className="flex items-center gap-2">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }} />
-                {p.projectName}
-              </span>
-              <span className="flex items-center gap-3">
-                {p.forecastTotal > 0 && <span className="text-xs text-muted-foreground">+{fmtFull(p.forecastTotal)} forecast</span>}
-                <span className="font-medium">{fmtFull(p.total)}</span>
-              </span>
-            </div>
-          ))}
+          {projectTotals.filter((p) => !p.isUnlinked).map((p) => {
+            const i = projectIds.indexOf(p.projectId);
+            return (
+              <div key={p.projectId} className="flex items-center justify-between text-sm border rounded-md px-3 py-2">
+                <span className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }} />
+                  {p.projectName}
+                </span>
+                <span className="flex items-center gap-3">
+                  {p.forecastTotal > 0 && <span className="text-xs text-muted-foreground">+{fmtFull(p.forecastTotal)} forecast</span>}
+                  <span className="font-medium">{fmtFull(p.total)}</span>
+                </span>
+              </div>
+            );
+          })}
         </div>
       </div>
+
+      {projectTotals.some((p) => p.isUnlinked) && (
+        <div>
+          <h3 className="text-sm font-medium mb-2">Other properties</h3>
+          <p className="text-xs text-muted-foreground mb-2">
+            Real revenue from QuickBooks entities not tracked as Innsights projects (and not expected to be).
+          </p>
+          <div className="space-y-1.5">
+            {projectTotals.filter((p) => p.isUnlinked).map((p) => {
+              const i = projectIds.indexOf(p.projectId);
+              return (
+                <div key={p.projectId} className="flex items-center justify-between text-sm border border-dashed rounded-md px-3 py-2">
+                  <span className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PROJECT_COLORS[i % PROJECT_COLORS.length] }} />
+                    {p.projectName}
+                  </span>
+                  <span className="font-medium">{fmtFull(p.total)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
