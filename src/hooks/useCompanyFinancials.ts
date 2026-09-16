@@ -91,8 +91,18 @@ export function useCompanyFinancials(year: number) {
     const revActual = revenueSeries.reduce((s, c) => s + c.months[i].actual, 0);
     const expBudget = expenseSeries.reduce((s, c) => s + c.months[i].budget, 0);
     const expActual = expenseSeries.reduce((s, c) => s + c.months[i].actual, 0);
-    const isProjected = series.some((c) => c.months[i]?.is_projected);
-    return { month, revBudget, revActual, expBudget, expActual, isProjected };
+    // Revenue and expenses close out independently — a month's books can
+    // be current on the revenue side (e.g. QuickBooks-synced) while the
+    // expense side still carries budget-copy placeholders, or vice versa.
+    // Treating "isProjected" as a single flag requiring both sides to
+    // agree meant a real revenue update for a month got silently ignored
+    // in toDateRevenue as long as that month's expenses were still
+    // projected (found 2026-09-15, when a from Revenue-tab reconciliation
+    // didn't move the Company Financials KPI at all).
+    const isRevenueProjected = revenueSeries.some((c) => c.months[i]?.is_projected);
+    const isExpenseProjected = expenseSeries.some((c) => c.months[i]?.is_projected);
+    const isProjected = isRevenueProjected || isExpenseProjected; // kept for existing chart-dimming behavior
+    return { month, revBudget, revActual, expBudget, expActual, isProjected, isRevenueProjected, isExpenseProjected };
   });
 
   const revenueBudgetTotal = revenueSeries.reduce((s, c) => s + c.budgetTotal, 0);
@@ -102,12 +112,12 @@ export function useCompanyFinancials(year: number) {
 
   // "To-date" is deliberately restricted to closed (non-projected) months —
   // a projected month hasn't happened yet, so including it here would
-  // misrepresent a forecast as something that's already occurred. This
-  // reads directly off each month's own is_projected flag rather than a
-  // fixed month cutoff, so it stays correct automatically as months close
-  // and new actuals get entered.
-  const toDateRevenue = monthlyTotals.filter((m) => !m.isProjected).reduce((s, m) => s + m.revActual, 0);
-  const toDateExpenses = monthlyTotals.filter((m) => !m.isProjected).reduce((s, m) => s + m.expActual, 0);
+  // misrepresent a forecast as something that's already occurred. Revenue
+  // and expenses are evaluated against their own closed-month flag
+  // independently (see isRevenueProjected/isExpenseProjected above), not a
+  // combined one.
+  const toDateRevenue = monthlyTotals.filter((m) => !m.isRevenueProjected).reduce((s, m) => s + m.revActual, 0);
+  const toDateExpenses = monthlyTotals.filter((m) => !m.isExpenseProjected).reduce((s, m) => s + m.expActual, 0);
   const toDateNetIncome = toDateRevenue - toDateExpenses;
   // No Depreciation & Amortization category exists in this business's real
   // chart of accounts (no fixed assets being depreciated), and Interest is

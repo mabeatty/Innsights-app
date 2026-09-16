@@ -68,11 +68,11 @@ export default function CompanyFinancialsTab() {
 
   const revChartData = monthlyTotals.map((m) => ({
     label: format(new Date(`${m.month}T00:00:00`), "MMM"),
-    actual: m.isProjected ? 0 : m.revActual, budget: m.revBudget, isProjected: m.isProjected,
+    actual: m.isRevenueProjected ? 0 : m.revActual, budget: m.revBudget, isProjected: m.isRevenueProjected,
   }));
   const expChartData = monthlyTotals.map((m) => ({
     label: format(new Date(`${m.month}T00:00:00`), "MMM"),
-    actual: m.isProjected ? 0 : m.expActual, budget: m.expBudget, isProjected: m.isProjected,
+    actual: m.isExpenseProjected ? 0 : m.expActual, budget: m.expBudget, isProjected: m.isExpenseProjected,
   }));
 
   return (
