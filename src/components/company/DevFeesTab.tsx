@@ -88,7 +88,13 @@ export default function DevFeesTab() {
             <Tooltip
               content={({ active, payload, label }) => {
                 if (!active || !payload || payload.length === 0) return null;
-                const nonZero = payload.filter((entry: any) => Number(entry.value) > 0);
+                const allNonZero = payload.filter((entry: any) => Number(entry.value) > 0);
+                // If this month has any real actual, drop forecast entries
+                // from the tooltip entirely — mixing "here's what actually
+                // happened" with "here's what's still projected elsewhere
+                // this month" reads as confusing clutter, not useful detail.
+                const hasActual = allNonZero.some((entry: any) => (entry.dataKey as string).endsWith("_actual"));
+                const nonZero = hasActual ? allNonZero.filter((entry: any) => (entry.dataKey as string).endsWith("_actual")) : allNonZero;
                 if (nonZero.length === 0) {
                   return (
                     <div className="rounded-md border bg-background px-2.5 py-1.5 text-xs shadow-sm">
