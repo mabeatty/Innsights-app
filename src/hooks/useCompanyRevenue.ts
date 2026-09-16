@@ -46,14 +46,16 @@ export function useCompanyRevenue(revenueType: string) {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: actualData, error: actualErr }, { data: forecastData, error: forecastErr }] = await Promise.all([
+      const [{ data: actualData, error: actualErr }, { data: forecastData, error: forecastErr }, { data: adjustmentData, error: adjustErr }] = await Promise.all([
         supabase.from("revenue_qb_actuals").select("project_id, external_label, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", revenueType).order("month"),
         supabase.from("revenue_forecast").select("project_id, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", revenueType).order("month"),
+        supabase.from("revenue_manual_adjustments").select("project_id, external_label, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", revenueType),
       ]);
       if (actualErr) throw actualErr;
       if (forecastErr) throw forecastErr;
+      if (adjustErr) throw adjustErr;
 
-      const rows = (actualData ?? []).map((r: any) => {
+      const mapRow = (r: any) => {
         const isUnlinked = !r.project_id;
         return {
           projectId: isUnlinked ? `ext:${r.external_label}` : r.project_id,
@@ -61,7 +63,12 @@ export function useCompanyRevenue(revenueType: string) {
           isUnlinked,
           month: r.month, amount: Number(r.amount),
         };
-      });
+      };
+      // Manual adjustments (revenue_manual_adjustments) are durable
+      // corrections the automated sync would otherwise silently overwrite —
+      // see that table's comment. Merged in additively alongside the raw
+      // synced actuals, same treatment as revenue_qb_actuals rows.
+      const rows = [...(actualData ?? []).map(mapRow), ...(adjustmentData ?? []).map(mapRow)];
       // revenue_forecast doesn't (yet) support external_label — no forecast
       // has been loaded for any unlinked property.
       const forecastRows = (forecastData ?? []).map((r: any) => ({

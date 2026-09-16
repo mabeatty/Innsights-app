@@ -46,16 +46,18 @@ export function useDevFees() {
     setLoading(true);
     setError(null);
     try {
-      const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }, { data: extraForecastRows, error: forecastErr }] = await Promise.all([
+      const [{ data: feeRows, error: feeErr }, { data: schedRows, error: schedErr }, { data: qbRows, error: qbErr }, { data: extraForecastRows, error: forecastErr }, { data: adjustmentRows, error: adjustErr }] = await Promise.all([
         supabase.from("dev_fee_projects").select("project_id, dev_fee, notes, projects(name, hotel_name)").eq("org_id", organizationId),
         supabase.from("dev_fee_schedule").select("project_id, month, amount, is_billed, projects(name, hotel_name)").eq("org_id", organizationId).order("month"),
         supabase.from("revenue_qb_actuals").select("project_id, month, amount").eq("org_id", organizationId).eq("revenue_type", "development_fee").order("month"),
         supabase.from("revenue_forecast").select("project_id, month, amount, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", "development_fee").order("month"),
+        supabase.from("revenue_manual_adjustments").select("project_id, month, amount, note, projects(name, hotel_name)").eq("org_id", organizationId).eq("revenue_type", "development_fee"),
       ]);
       if (feeErr) throw feeErr;
       if (schedErr) throw schedErr;
       if (qbErr) throw qbErr;
       if (forecastErr) throw forecastErr;
+      if (adjustErr) throw adjustErr;
 
       const qbProjectIds = new Set((qbRows ?? []).map((r: any) => r.project_id));
 
@@ -66,6 +68,15 @@ export function useDevFees() {
         }
       });
       (qbRows ?? []).forEach((r: any) => {
+        billedByProject.set(r.project_id, (billedByProject.get(r.project_id) ?? 0) + Number(r.amount));
+      });
+      // Manual adjustments (revenue_manual_adjustments) are always additive
+      // on top, for any project — durable corrections that survive the
+      // automated sync overwriting revenue_qb_actuals (see that table's
+      // comment). Without this, a reclassification like "this Owner's Rep
+      // transaction actually counts as Development Fee" gets silently
+      // erased the next time the nightly sync runs.
+      (adjustmentRows ?? []).forEach((r: any) => {
         billedByProject.set(r.project_id, (billedByProject.get(r.project_id) ?? 0) + Number(r.amount));
       });
 
@@ -121,7 +132,11 @@ export function useDevFees() {
         projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
         month: r.month, amount: Number(r.amount), isBilled: false,
       }));
-      setScheduleRows([...nonQbRows, ...qbActualRows, ...extraForecastMapped]);
+      const adjustmentMapped = (adjustmentRows ?? []).map((r: any) => ({
+        projectId: r.project_id, projectName: formatProjectLabel(r.projects?.name ?? "Unknown", r.projects?.hotel_name),
+        month: r.month, amount: Number(r.amount), isBilled: true,
+      }));
+      setScheduleRows([...nonQbRows, ...qbActualRows, ...extraForecastMapped, ...adjustmentMapped]);
     } catch (e: any) {
       setError(e?.message || "Failed to load development fee data.");
     } finally {
