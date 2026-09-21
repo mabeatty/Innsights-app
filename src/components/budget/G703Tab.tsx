@@ -102,14 +102,22 @@ export default function G703Tab({
 
   const buildRow = (div: BudgetRow) => {
     const divTxns = approvedTxns.filter((t) => t.division_number === div.division_number);
+    // "Previous" = already claimed by an earlier closed draw (draw_id set,
+    // written only when that draw was closed — see EditDrawTransactionsDialog
+    // and ProjectAccountingModule's draw-closing flow). "This Period" =
+    // everything else approved but not yet claimed by any draw (draw_id
+    // null), regardless of the transaction's own invoice date — a late
+    // invoice for August work that comes in after August's draw already
+    // closed is still part of the CURRENT open draw, not invisible from it.
+    // Previously this compared each transaction's date against the period
+    // date pickers, which silently dropped late-dated-but-unclaimed
+    // transactions into "Previous" even though no draw had actually billed
+    // them yet (found on Intech's Draw 10, 2026-09-21).
     const previous = divTxns
-      .filter((t) => new Date(t.date) < periodStart)
+      .filter((t) => t.draw_id != null)
       .reduce((s, t) => s + Number(t.amount), 0);
     const thisPeriod = divTxns
-      .filter((t) => {
-        const d = new Date(t.date);
-        return d >= periodStart && d <= periodEnd;
-      })
+      .filter((t) => t.draw_id == null)
       .reduce((s, t) => s + Number(t.amount), 0);
     const materials = materialsStored[div.division_number] ?? 0;
     const totalCompleted = previous + thisPeriod + materials;

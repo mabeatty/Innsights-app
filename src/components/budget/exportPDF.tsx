@@ -58,10 +58,10 @@ export function exportBudgetPDF({
   const contractSumToDate = originalContractSum + netChangeOrders;
   const totalMaterials = Object.values(materialsStored).reduce((s, v) => s + v, 0);
   const totalPreviousCompleted = approvedTxns
-    .filter((t) => new Date(t.date) < periodStart)
+    .filter((t) => t.draw_id != null)
     .reduce((s, t) => s + Number(t.amount), 0);
   const totalThisPeriod = approvedTxns
-    .filter((t) => { const d = new Date(t.date); return d >= periodStart && d <= periodEnd; })
+    .filter((t) => t.draw_id == null)
     .reduce((s, t) => s + Number(t.amount), 0);
   const totalCompletedStored = totalPreviousCompleted + totalThisPeriod + totalMaterials;
   const totalRetainage = approvedTxns.reduce((s, t) => s + Number(t.retainage_amount), 0);
@@ -228,8 +228,8 @@ export function exportBudgetPDF({
   // SOV Table
   const buildRow = (div: BudgetRow) => {
     const dTxns = approvedTxns.filter((t) => t.division_number === div.division_number);
-    const prev = dTxns.filter((t) => new Date(t.date) < periodStart).reduce((s, t) => s + Number(t.amount), 0);
-    const tp = dTxns.filter((t) => { const d = new Date(t.date); return d >= periodStart && d <= periodEnd; }).reduce((s, t) => s + Number(t.amount), 0);
+    const prev = dTxns.filter((t) => t.draw_id != null).reduce((s, t) => s + Number(t.amount), 0);
+    const tp = dTxns.filter((t) => t.draw_id == null).reduce((s, t) => s + Number(t.amount), 0);
     const mat = materialsStored[div.division_number] ?? 0;
     const sched = Number(div.scheduled_value);
     const tc = prev + tp + mat;
@@ -243,8 +243,8 @@ export function exportBudgetPDF({
     let sS = 0, sP = 0, sT = 0, sM = 0, sC = 0, sB = 0, sR = 0;
     divs.forEach((div) => {
       const dTxns = approvedTxns.filter((t) => t.division_number === div.division_number);
-      const p = dTxns.filter((t) => new Date(t.date) < periodStart).reduce((s, t) => s + Number(t.amount), 0);
-      const tp = dTxns.filter((t) => { const d = new Date(t.date); return d >= periodStart && d <= periodEnd; }).reduce((s, t) => s + Number(t.amount), 0);
+      const p = dTxns.filter((t) => t.draw_id != null).reduce((s, t) => s + Number(t.amount), 0);
+      const tp = dTxns.filter((t) => t.draw_id == null).reduce((s, t) => s + Number(t.amount), 0);
       const mat = materialsStored[div.division_number] ?? 0;
       const s = Number(div.scheduled_value);
       sS += s; sP += p; sT += tp; sM += mat; sC += p + tp + mat; sB += s - (p + tp + mat);
@@ -340,10 +340,7 @@ export function exportBudgetPDF({
   // ═══════════════════════════════════════
   // PAGE 3: Detail
   // ═══════════════════════════════════════
-  const periodTxns = transactions.filter((t) => {
-    const d = new Date(t.date);
-    return d >= periodStart && d <= periodEnd;
-  });
+  const periodTxns = transactions.filter((t) => t.draw_id == null);
 
   if (periodTxns.length > 0) {
     doc.addPage("letter", "landscape");
