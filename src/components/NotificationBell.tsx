@@ -104,7 +104,7 @@ export function NotificationBell() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-96 p-0 flex flex-col max-h-[var(--radix-popover-content-available-height)]"
+        className="w-96 p-0 flex flex-col max-h-[var(--radix-popover-content-available-height)] overscroll-contain"
       >
         <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
           <h4 className="text-sm font-semibold text-foreground">Notifications</h4>
