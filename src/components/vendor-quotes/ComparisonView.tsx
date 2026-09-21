@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { AlertTriangle, Sparkles, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { type BidItem, type VendorQuote, type Adjustment, fmt, ADJUSTMENT_CATEGORIES, categoryNet } from "./types";
+import { type BidItem, type VendorQuote, type Adjustment, fmt, num, ADJUSTMENT_CATEGORIES, categoryNet } from "./types";
 import BidLevelingReportDialog from "./BidLevelingReportDialog";
 
 interface Props {
@@ -151,7 +151,7 @@ export default function ComparisonView({ projectId, bidItems, quotesForItem, adj
                   <td className="px-4 py-2 text-muted-foreground sticky left-0 bg-card">Scope Adjustments</td>
                   {vqs.map((vq) => {
                     const adj = adjustmentsForQuote(vq.id);
-                    const sum = adj.reduce((s, a) => s + a.amount, 0);
+                    const sum = adj.reduce((s, a) => s + num(a.amount), 0);
                     return (
                       <td key={vq.id} className="text-right px-4 py-2" title={adjTitle(adj)}>
                         {adj.length === 0 ? "—" : `${sum >= 0 ? "+" : ""}${fmt(sum)}`}

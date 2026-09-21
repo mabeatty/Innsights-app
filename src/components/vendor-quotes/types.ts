@@ -59,22 +59,34 @@ export interface Adjustment {
   created_at: string;
 }
 
+// Postgres `numeric` columns come back from Supabase as strings, not JS
+// numbers (a well-known PostgREST behavior, to avoid float precision loss).
+// Every numeric DB field in this module must be coerced through this before
+// arithmetic — JS's `+` operator does string concatenation, not addition,
+// when either operand is a string, which silently corrupted leveledTotal()
+// and fmt() (e.g. "1283829.21" + 500 -> "1283829.21500", not 1284329.21).
+export function num(n: number | string | null | undefined): number {
+  if (n == null) return 0;
+  const v = typeof n === "string" ? parseFloat(n) : n;
+  return Number.isFinite(v) ? v : 0;
+}
+
 // The leveled total is the true apples-to-apples comparison basis: the
 // vendor's raw final quote plus/minus scope adjustments that normalize for
 // what they included or excluded relative to the requested scope.
 export function leveledTotal(quote: VendorQuote, adjustments: Adjustment[]): number {
-  const base = quote.final_quote_amount ?? 0;
-  const adjSum = adjustments.reduce((s, a) => s + a.amount, 0);
+  const base = num(quote.final_quote_amount);
+  const adjSum = adjustments.reduce((s, a) => s + num(a.amount), 0);
   return base + adjSum;
 }
 
 // Net adjustment amount for one category, e.g. "how much did we add/deduct
 // for Freight" — used for the per-vendor Normalized Price quick view.
 export function categoryNet(adjustments: Adjustment[], category: string): number {
-  return adjustments.filter((a) => a.category === category).reduce((s, a) => s + a.amount, 0);
+  return adjustments.filter((a) => a.category === category).reduce((s, a) => s + num(a.amount), 0);
 }
 
-export function fmt(n: number | null | undefined): string {
+export function fmt(n: number | string | null | undefined): string {
   if (n == null) return "—";
-  return n.toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return num(n).toLocaleString("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
