@@ -513,7 +513,12 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   <div><span className="text-muted-foreground">Amount:</span><br/>{formatCurrency(invoice.amount)}</div>
                   <div><span className="text-muted-foreground">Budget line:</span><br/>{invoice.budget_line_item || "—"}</div>
                   <div className="col-span-2"><span className="text-muted-foreground">Submitted by:</span><br/>{invoice.submitted_by_email || "—"} · {format(new Date(invoice.submitted_at), "MMM d, yyyy")}</div>
-                  {invoice.notes && <div className="col-span-2"><span className="text-muted-foreground">Notes:</span><br/>{invoice.notes}</div>}
+                  {invoice.notes && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground">Notes:</span><br/>
+                      <mark className="bg-yellow-200 dark:bg-yellow-300/80 text-foreground px-0.5 rounded-sm">{invoice.notes}</mark>
+                    </div>
+                  )}
                 </div>
               )}
 
