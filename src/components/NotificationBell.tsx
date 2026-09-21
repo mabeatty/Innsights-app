@@ -82,10 +82,15 @@ export function NotificationBell() {
     onClick: () => { markNotif(n.id); if (n.link) navigate(n.link); },
   }));
 
-  const items = [...alertItems, ...notifItems].sort(
+  const allItems = [...alertItems, ...notifItems].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
   );
-  const unreadCount = items.filter((i) => i.unread).length;
+  // Read items are removed from view entirely, not just dimmed — clicking
+  // an item marks it read (and navigates, for alerts), and it should
+  // disappear rather than linger as a dimmed entry the person has to keep
+  // scrolling past.
+  const items = allItems.filter((i) => i.unread);
+  const unreadCount = items.length;
 
   const markAll = () => { markAllAlerts(); markAllNotifs(); };
 
@@ -104,7 +109,7 @@ export function NotificationBell() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-96 p-0 flex flex-col max-h-[var(--radix-popover-content-available-height)] overscroll-contain"
+        className="w-96 p-0 flex flex-col max-h-[min(70vh,28rem)] overscroll-contain"
       >
         <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
           <h4 className="text-sm font-semibold text-foreground">Notifications</h4>
