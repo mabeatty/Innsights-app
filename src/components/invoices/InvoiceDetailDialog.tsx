@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen, Pencil } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ import {
   Invoice, InvoiceApproval, InvoiceLineItem, ApproverRole, APPROVER_ROLES,
   statusBadgeClasses, formatCurrency, COST_TYPES,
 } from "./types";
+import { naturalDivisionSort } from "@/components/budget/types";
 import LienWaiverPanel from "./LienWaiverPanel";
 import PdfPreview from "./PdfPreview";
 
@@ -53,6 +54,13 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     amount: "", retainage_amount: "", cost_type: "", budget_line_item: "", notes: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  // Editable division line items (invoice_line_items) — a pay app can span
+  // multiple budget divisions, and until now the Edit button only touched
+  // top-level invoice fields, with no way to fix a wrong division/amount
+  // split after the fact.
+  interface EditLineItem { id: string | null; category: string; amount: string; retainage_amount: string }
+  const [editLineItems, setEditLineItems] = useState<EditLineItem[]>([]);
+  const [projectDivisions, setProjectDivisions] = useState<{ label: string }[]>([]);
 
   const isAdmin = accessLevel === "admin";
   const canEdit = accessLevel !== "view";
@@ -69,7 +77,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
       supabase.from("invoice_line_items").select("*").eq("invoice_id", invoiceId).order("category"),
     ]);
     setInvoice(inv as Invoice);
-    setLineItems((li as InvoiceLineItem[]) ?? []);
+    setLineItems((((li as InvoiceLineItem[]) ?? [])).sort((a, b) => naturalDivisionSort(a.category ?? "", b.category ?? "")));
     setApprovals((appr as InvoiceApproval[]) ?? []);
     setComments((c as Comment[]) ?? []);
   }, [invoiceId]);
@@ -199,7 +207,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     setNewComment(""); load();
   };
 
-  const startEditing = () => {
+  const startEditing = async () => {
     if (!invoice) return;
     setEditForm({
       vendor_name: invoice.vendor_name ?? "",
@@ -212,15 +220,52 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
       budget_line_item: invoice.budget_line_item ?? "",
       notes: invoice.notes ?? "",
     });
+    setEditLineItems(lineItems.map((li) => ({
+      id: li.id, category: li.category ?? "",
+      amount: li.amount != null ? String(li.amount) : "",
+      retainage_amount: li.retainage_amount != null ? String(li.retainage_amount) : "0",
+    })));
+    if (invoice.project_id) {
+      const { data } = await supabase
+        .from("project_budget")
+        .select("division_number, division_name")
+        .eq("project_id", invoice.project_id)
+        .order("division_number");
+      const sorted = ((data ?? []) as { division_number: string; division_name: string }[])
+        .sort((a, b) => naturalDivisionSort(a.division_number, b.division_number));
+      setProjectDivisions(sorted.map((d) => ({ label: `${d.division_number} — ${d.division_name}` })));
+    }
     setIsEditing(true);
   };
 
+  const addEditLineItem = () => {
+    setEditLineItems((rows) => [...rows, { id: null, category: projectDivisions[0]?.label ?? "", amount: "", retainage_amount: "0" }]);
+  };
+  const removeEditLineItem = (idx: number) => {
+    setEditLineItems((rows) => rows.filter((_, i) => i !== idx));
+  };
+  const updateEditLineItem = (idx: number, patch: Partial<EditLineItem>) => {
+    setEditLineItems((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  };
+  const editLineItemsTotal = editLineItems.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const editLineItemsRetainageTotal = editLineItems.reduce((s, r) => s + (Number(r.retainage_amount) || 0), 0);
+
   const saveInvoiceEdit = async () => {
     if (!invoice) return;
-    const amount = editForm.amount.trim() ? Number(editForm.amount) : null;
-    const retainage = editForm.retainage_amount.trim() ? Number(editForm.retainage_amount) : null;
-    if (editForm.amount.trim() && Number.isNaN(amount)) { toast.error("Amount must be a number."); return; }
-    if (editForm.retainage_amount.trim() && Number.isNaN(retainage)) { toast.error("Retainage must be a number."); return; }
+    const hasLineItems = editLineItems.length > 0;
+    // With line items present, they're the source of truth for amount and
+    // retainage — the top-level fields just mirror the sum, so the two can
+    // never silently disagree. Without line items, the top-level fields
+    // stay directly editable (a simple single-division invoice).
+    const amount = hasLineItems ? editLineItemsTotal : (editForm.amount.trim() ? Number(editForm.amount) : null);
+    const retainage = hasLineItems ? editLineItemsRetainageTotal : (editForm.retainage_amount.trim() ? Number(editForm.retainage_amount) : null);
+    if (!hasLineItems && editForm.amount.trim() && Number.isNaN(amount)) { toast.error("Amount must be a number."); return; }
+    if (!hasLineItems && editForm.retainage_amount.trim() && Number.isNaN(retainage)) { toast.error("Retainage must be a number."); return; }
+    for (const li of editLineItems) {
+      if (li.amount.trim() && Number.isNaN(Number(li.amount))) { toast.error(`Line item amount for "${li.category}" must be a number.`); return; }
+      if (li.retainage_amount.trim() && Number.isNaN(Number(li.retainage_amount))) { toast.error(`Line item retainage for "${li.category}" must be a number.`); return; }
+      if (!li.category) { toast.error("Every line item needs a division."); return; }
+    }
     setSavingEdit(true);
     try {
       const netAmount = amount != null ? amount - (retainage ?? 0) : null;
@@ -235,7 +280,34 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
         notes: editForm.notes.trim() || null,
       }).eq("id", invoice.id);
       if (error) throw error;
-      await recordAudit("Edited invoice details");
+
+      if (hasLineItems) {
+        const originalIds = new Set(lineItems.map((li) => li.id));
+        const keptIds = new Set(editLineItems.filter((r) => r.id).map((r) => r.id as string));
+        const deletedIds = [...originalIds].filter((id) => !keptIds.has(id));
+        if (deletedIds.length > 0) {
+          const { error: delErr } = await supabase.from("invoice_line_items").delete().in("id", deletedIds);
+          if (delErr) throw delErr;
+        }
+        for (const r of editLineItems) {
+          const rAmount = r.amount.trim() ? Number(r.amount) : 0;
+          const rRetainage = r.retainage_amount.trim() ? Number(r.retainage_amount) : 0;
+          const rNet = rAmount - rRetainage;
+          if (r.id) {
+            const { error: updErr } = await supabase.from("invoice_line_items").update({
+              category: r.category, amount: rAmount, retainage_amount: rRetainage, net_amount: rNet,
+            }).eq("id", r.id);
+            if (updErr) throw updErr;
+          } else {
+            const { error: insErr } = await supabase.from("invoice_line_items").insert({
+              invoice_id: invoice.id, category: r.category, amount: rAmount, retainage_amount: rRetainage, net_amount: rNet,
+            });
+            if (insErr) throw insErr;
+          }
+        }
+      }
+
+      await recordAudit(hasLineItems ? "Edited invoice details and line items" : "Edited invoice details");
       toast.success("Invoice updated.");
       setIsEditing(false);
       await load(); onChange();
@@ -311,14 +383,31 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                       <Label className="text-xs">Due date</Label>
                       <Input type="date" value={editForm.due_date} onChange={(e) => setEditForm((f) => ({ ...f, due_date: e.target.value }))} />
                     </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Amount</Label>
-                      <Input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Retainage amount</Label>
-                      <Input type="number" step="0.01" value={editForm.retainage_amount} onChange={(e) => setEditForm((f) => ({ ...f, retainage_amount: e.target.value }))} />
-                    </div>
+                    {editLineItems.length === 0 ? (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Amount</Label>
+                          <Input type="number" step="0.01" value={editForm.amount} onChange={(e) => setEditForm((f) => ({ ...f, amount: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Retainage amount</Label>
+                          <Input type="number" step="0.01" value={editForm.retainage_amount} onChange={(e) => setEditForm((f) => ({ ...f, retainage_amount: e.target.value }))} />
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Amount</Label>
+                          <div className="h-9 flex items-center px-3 rounded-md border bg-muted/40 text-sm">{formatCurrency(editLineItemsTotal)}</div>
+                          <p className="text-[10px] text-muted-foreground">Sum of line items below</p>
+                        </div>
+                        <div className="space-y-1">
+                          <Label className="text-xs">Retainage amount</Label>
+                          <div className="h-9 flex items-center px-3 rounded-md border bg-muted/40 text-sm">{formatCurrency(editLineItemsRetainageTotal)}</div>
+                          <p className="text-[10px] text-muted-foreground">Sum of line items below</p>
+                        </div>
+                      </>
+                    )}
                     <div className="space-y-1">
                       <Label className="text-xs">Budget line</Label>
                       <Input value={editForm.budget_line_item} onChange={(e) => setEditForm((f) => ({ ...f, budget_line_item: e.target.value }))} />
@@ -327,6 +416,81 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   <div className="space-y-1">
                     <Label className="text-xs">Notes</Label>
                     <Textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} />
+                  </div>
+
+                  {/* Division line items — a pay app can span multiple
+                      budget divisions; this is the actual editing surface
+                      for that, not the top-level fields above. */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs">Division line items</Label>
+                      <Button variant="outline" size="sm" className="h-7 text-xs" onClick={addEditLineItem}>
+                        <Plus className="h-3 w-3 mr-1" /> Add line item
+                      </Button>
+                    </div>
+                    {editLineItems.length === 0 ? (
+                      <p className="text-xs text-muted-foreground border rounded-md px-3 py-2">
+                        No division breakdown — this invoice's Amount above applies to a single division/category.
+                      </p>
+                    ) : (
+                      <div className="rounded-md border overflow-x-auto">
+                        <table className="w-full text-xs">
+                          <thead>
+                            <tr className="bg-muted/50 text-muted-foreground text-left">
+                              <th className="px-2 py-1.5">Division</th>
+                              <th className="px-2 py-1.5 text-right">Amount</th>
+                              <th className="px-2 py-1.5 text-right">Retainage</th>
+                              <th className="px-2 py-1.5 text-right">Net</th>
+                              <th className="px-2 py-1.5 w-8" />
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {editLineItems.map((li, idx) => {
+                              const net = (Number(li.amount) || 0) - (Number(li.retainage_amount) || 0);
+                              return (
+                                <tr key={idx} className="border-t">
+                                  <td className="px-2 py-1.5">
+                                    <Select value={li.category} onValueChange={(v) => updateEditLineItem(idx, { category: v })}>
+                                      <SelectTrigger className="h-7 text-xs"><SelectValue placeholder="Select division" /></SelectTrigger>
+                                      <SelectContent>
+                                        {projectDivisions.map((d) => <SelectItem key={d.label} value={d.label}>{d.label}</SelectItem>)}
+                                        {/* keep a stale/custom category selectable even if it's not in the current division list */}
+                                        {li.category && !projectDivisions.some((d) => d.label === li.category) && (
+                                          <SelectItem value={li.category}>{li.category}</SelectItem>
+                                        )}
+                                      </SelectContent>
+                                    </Select>
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <Input type="number" step="0.01" className="h-7 text-xs text-right" value={li.amount}
+                                      onChange={(e) => updateEditLineItem(idx, { amount: e.target.value })} />
+                                  </td>
+                                  <td className="px-2 py-1.5">
+                                    <Input type="number" step="0.01" className="h-7 text-xs text-right" value={li.retainage_amount}
+                                      onChange={(e) => updateEditLineItem(idx, { retainage_amount: e.target.value })} />
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right">{formatCurrency(net)}</td>
+                                  <td className="px-2 py-1.5">
+                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:text-destructive" onClick={() => removeEditLineItem(idx)}>
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t bg-muted/50 font-semibold">
+                              <td className="px-2 py-1.5">Totals</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(editLineItemsTotal)}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(editLineItemsRetainageTotal)}</td>
+                              <td className="px-2 py-1.5 text-right">{formatCurrency(editLineItemsTotal - editLineItemsRetainageTotal)}</td>
+                              <td />
+                            </tr>
+                          </tfoot>
+                        </table>
+                      </div>
+                    )}
                   </div>
                   {(invoice.status === "Approved" || invoice.status === "Routed for Payment") && (
                     <p className="text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
