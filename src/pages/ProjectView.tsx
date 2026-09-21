@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,29 @@ export default function ProjectView() {
   const { user, isConsultant, accessLevel, organizationId } = useAuth();
   const { getProjectAlerts, dismissAlert } = useAlerts();
   const navigate = useNavigate();
+  // Tabs are synced to ?tab=/&subtab= so a link (e.g. from an alert in the
+  // notification bell) can land directly on the relevant tab, not just the
+  // project's default Summary view. Clicking a tab manually also updates
+  // the URL, which is a side benefit — the URL becomes shareable/bookmarkable.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get("tab") || "executive-summary";
+  const activeSubTab = searchParams.get("subtab") || "project-accounting";
+  const setActiveTab = (tab: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tab);
+      if (tab !== "accounting") next.delete("subtab");
+      return next;
+    });
+  };
+  const setActiveSubTab = (subtab: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", "accounting");
+      next.set("subtab", subtab);
+      return next;
+    });
+  };
   const [project, setProject] = useState<Project | null>(null);
   const combinedBrandName = project
     ? project.secondary_brand?.name
@@ -232,7 +255,7 @@ export default function ProjectView() {
       {/* Tabs — hidden while the Project Info panel is open so its content
           (Executive Summary, etc.) doesn't render beneath the panel. */}
       {!infoOpen && (
-      <Tabs defaultValue="executive-summary">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">
           <TabsTrigger value="executive-summary" className="gap-1.5">
             <BarChart3 className="h-3.5 w-3.5" /> Summary
@@ -269,7 +292,7 @@ export default function ProjectView() {
         </TabsContent>
 
         <TabsContent value="accounting">
-          <Tabs defaultValue="project-accounting">
+          <Tabs value={activeSubTab} onValueChange={setActiveSubTab}>
             <TabsList>
               <TabsTrigger value="project-accounting" className="gap-1.5">
                 <Receipt className="h-3.5 w-3.5" /> Project Accounting

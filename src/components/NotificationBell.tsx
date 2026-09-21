@@ -20,6 +20,28 @@ const ALERT_TYPE_ICONS: Record<string, typeof AlertTriangle> = {
   no_draw_activity: FileWarning,
 };
 
+// Where clicking an alert should land, matching ProjectView's ?tab=/&subtab=
+// URL scheme. Falls back to the project's Summary tab for any alert_type
+// not explicitly mapped, rather than not navigating at all.
+const ALERT_TYPE_ROUTES: Record<string, { tab: string; subtab?: string }> = {
+  contract_over_budget: { tab: "accounting", subtab: "contracts" },
+  line_item_over_budget: { tab: "accounting", subtab: "project-accounting" },
+  spend_threshold: { tab: "accounting", subtab: "project-accounting" },
+  no_draw_activity: { tab: "accounting", subtab: "project-accounting" },
+  milestone_overdue: { tab: "schedule" },
+  completion_date_changed: { tab: "schedule" },
+  no_weekly_report: { tab: "notes" },
+  equity_over_commitment: { tab: "accounting", subtab: "capital" },
+  debt_over_commitment: { tab: "accounting", subtab: "capital" },
+};
+function alertLink(projectId: string | undefined, alertType: string): string | null {
+  if (!projectId) return null;
+  const route = ALERT_TYPE_ROUTES[alertType] ?? { tab: "executive-summary" };
+  const params = new URLSearchParams({ tab: route.tab });
+  if (route.subtab) params.set("subtab", route.subtab);
+  return `/project/${projectId}?${params.toString()}`;
+}
+
 interface BellItem {
   id: string;
   Icon: typeof AlertTriangle;
@@ -43,7 +65,11 @@ export function NotificationBell() {
     message: alert.message,
     created_at: alert.created_at,
     unread: !alert.read_by?.includes(user?.id ?? ""),
-    onClick: () => markAlert(alert.id),
+    onClick: () => {
+      markAlert(alert.id);
+      const link = alertLink(alert.project_id, alert.alert_type);
+      if (link) navigate(link);
+    },
   }));
 
   const notifItems: BellItem[] = notifications.map((n) => ({
@@ -75,8 +101,12 @@ export function NotificationBell() {
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-0" sideOffset={8}>
-        <div className="flex items-center justify-between border-b px-4 py-3">
+      <PopoverContent
+        align="end"
+        sideOffset={8}
+        className="w-96 p-0 flex flex-col max-h-[var(--radix-popover-content-available-height)]"
+      >
+        <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
           <h4 className="text-sm font-semibold text-foreground">Notifications</h4>
           {unreadCount > 0 && (
             <Button variant="ghost" size="sm" className="text-xs h-auto py-1 gap-1 text-muted-foreground" onClick={markAll}>
@@ -84,7 +114,7 @@ export function NotificationBell() {
             </Button>
           )}
         </div>
-        <ScrollArea className="max-h-[400px]">
+        <ScrollArea className="flex-1 min-h-0">
           {items.length === 0 ? (
             <div className="py-8 text-center text-sm text-muted-foreground">No notifications</div>
           ) : (
