@@ -11,10 +11,11 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { ExternalLink, Pencil, Trash2, ListChecks } from "lucide-react";
+import { ExternalLink, Pencil, Trash2, ListChecks, Download } from "lucide-react";
 import { toast } from "sonner";
 import { fmt } from "./types";
 import EditDrawTransactionsDialog from "./EditDrawTransactionsDialog";
+import { downloadDrawZip } from "./downloadDrawZip";
 
 export interface DrawRecord {
   id: string;
@@ -44,13 +45,32 @@ function toMonthInput(dateStr: string): string {
 
 interface Props {
   projectId: string;
+  projectName: string;
   draws: DrawRecord[];
   onRefresh: () => void;
 }
 
-export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
+export default function DrawHistoryTab({ projectId, projectName, draws, onRefresh }: Props) {
   const [viewDraw, setViewDraw] = useState<DrawRecord | null>(null);
   const [editTransactionsDraw, setEditTransactionsDraw] = useState<DrawRecord | null>(null);
+  const [zippingDrawId, setZippingDrawId] = useState<string | null>(null);
+
+  const handleDownloadZip = async (draw: DrawRecord) => {
+    setZippingDrawId(draw.id);
+    try {
+      const result = await downloadDrawZip(draw, projectName);
+      let msg = `${result.fileName} — ${result.invoiceCount} invoice${result.invoiceCount === 1 ? "" : "s"}`;
+      if (result.supportingDocCount > 0) msg += `, ${result.supportingDocCount} supporting doc${result.supportingDocCount === 1 ? "" : "s"}`;
+      toast.success(msg);
+      if (result.missingPdfCount > 0) {
+        toast.warning(`${result.missingPdfCount} invoice${result.missingPdfCount === 1 ? "" : "s"} had no downloadable PDF — check them individually.`);
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to build the ZIP.");
+    } finally {
+      setZippingDrawId(null);
+    }
+  };
 
   // Edit state
   const [editDraw, setEditDraw] = useState<DrawRecord | null>(null);
@@ -232,6 +252,16 @@ export default function DrawHistoryTab({ projectId, draws, onRefresh }: Props) {
                       <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit transactions in this draw" onClick={() => setEditTransactionsDraw(d)}>
                         <ListChecks className="h-3.5 w-3.5" />
                       </Button>
+                      {d.status === "Approved" && (
+                        <Button
+                          variant="ghost" size="icon" className="h-7 w-7"
+                          title="Download invoices + supporting documents as a ZIP"
+                          disabled={zippingDrawId === d.id}
+                          onClick={() => handleDownloadZip(d)}
+                        >
+                          <Download className={`h-3.5 w-3.5 ${zippingDrawId === d.id ? "animate-pulse" : ""}`} />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(d)}>
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>

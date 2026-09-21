@@ -264,7 +264,7 @@ export default function ProjectAccountingModule({
         </TabsContent>
 
         <TabsContent value="draw-history">
-          <DrawHistoryTab projectId={projectId} draws={draws} onRefresh={() => { loadDraws(); onTransactionsReload(); }} />
+          <DrawHistoryTab projectId={projectId} projectName={projectName} draws={draws} onRefresh={() => { loadDraws(); onTransactionsReload(); }} />
         </TabsContent>
       </Tabs>
 
