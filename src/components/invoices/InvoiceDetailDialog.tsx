@@ -415,7 +415,12 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs">Notes</Label>
-                    <Textarea rows={2} value={editForm.notes} onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))} />
+                    <Textarea
+                      rows={2}
+                      value={editForm.notes}
+                      onChange={(e) => setEditForm((f) => ({ ...f, notes: e.target.value }))}
+                      className="bg-yellow-100 dark:bg-yellow-300/20 border-yellow-300 dark:border-yellow-300/40 focus-visible:ring-yellow-400"
+                    />
                   </div>
 
                   {/* Division line items — a pay app can span multiple
