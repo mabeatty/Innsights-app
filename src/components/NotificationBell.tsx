@@ -79,7 +79,16 @@ export function NotificationBell() {
     message: n.body ?? "",
     created_at: n.created_at,
     unread: !n.is_read,
-    onClick: () => { markNotif(n.id); if (n.link) navigate(n.link); },
+    onClick: () => {
+      markNotif(n.id);
+      // Every notification's stored `link` is the same generic "/invoices"
+      // list — navigating there when already on that page (or after it's
+      // already loaded) produces no visible change, which read as "nothing
+      // happened, it just disappeared." Build a link to the specific
+      // invoice instead, using invoice_id, when one is attached.
+      const link = n.invoice_id ? `/invoices?open=${n.invoice_id}` : n.link;
+      if (link) navigate(link);
+    },
   }));
 
   const allItems = [...alertItems, ...notifItems].sort(
@@ -109,7 +118,8 @@ export function NotificationBell() {
       <PopoverContent
         align="end"
         sideOffset={8}
-        className="w-96 p-0 flex flex-col max-h-[min(70vh,28rem)] overscroll-contain"
+        className="w-96 p-0 flex flex-col overscroll-contain"
+        style={{ maxHeight: "min(70vh, 28rem)" }}
       >
         <div className="flex items-center justify-between border-b px-4 py-3 shrink-0">
           <h4 className="text-sm font-semibold text-foreground">Notifications</h4>
