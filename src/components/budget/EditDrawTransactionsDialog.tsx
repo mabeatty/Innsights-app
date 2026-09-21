@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import { ALL_DIVISIONS, TRANSACTION_STATUSES, fmtDecimal, BudgetTransaction } from "./types";
+import { ALL_DIVISIONS, TRANSACTION_STATUSES, fmtDecimal, BudgetTransaction, naturalDivisionSort } from "./types";
 import { DrawRecord } from "./DrawHistoryTab";
 
 interface Row {
@@ -72,7 +72,7 @@ export default function EditDrawTransactionsDialog({ draw, projectId, onOpenChan
       .eq("draw_id", draw.id)
       .order("division_number");
     if (error) { toast.error(error.message); setLoading(false); return; }
-    setRows(((data ?? []) as BudgetTransaction[]).map(toRow));
+    setRows(((data ?? []) as BudgetTransaction[]).map(toRow).sort((a, b) => naturalDivisionSort(a.division_number, b.division_number)));
     setLoading(false);
   }, [draw]);
 

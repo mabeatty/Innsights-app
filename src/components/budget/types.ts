@@ -1,3 +1,21 @@
+// Division numbers aren't stored zero-padded ("1", "2", ... "10", "11",
+// with decimal/letter suffixes like "14.1", "1b", "72c") — a plain string
+// sort (localeCompare, or a raw SQL ORDER BY on a text column) puts "10"
+// right after "1" and before "2", which is exactly the "bizarrely
+// organized" G703 ordering found on Cleveland (2026-09-21). Every place
+// that orders division rows must re-sort client-side with this after
+// fetching, regardless of what any DB-level .order() clause did.
+export function naturalDivisionSort(a: string, b: string): number {
+  const leadingInt = (s: string) => {
+    const m = s.match(/^(\d+)/);
+    return m ? parseInt(m[1], 10) : Number.POSITIVE_INFINITY;
+  };
+  const na = leadingInt(a);
+  const nb = leadingInt(b);
+  if (na !== nb) return na - nb;
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
+
 export interface BudgetRow {
   id: string;
   division_number: string;

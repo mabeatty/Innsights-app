@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { APPROVER_ROLES } from "./types";
-import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
+import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal, naturalDivisionSort } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
 import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
 import DriveFolderPicker from "./DriveFolderPicker";
@@ -181,7 +181,9 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         .select("division_number, division_name")
         .eq("project_id", pid)
         .order("division_number");
-      for (const r of (budget ?? []) as { division_number: string; division_name: string }[]) {
+      const sortedBudget = ((budget ?? []) as { division_number: string; division_name: string }[])
+        .sort((a, b) => naturalDivisionSort(a.division_number, b.division_number));
+      for (const r of sortedBudget) {
         const label = `${r.division_number} — ${r.division_name}`;
         categories.push(label);
         catToDivision.set(label.toLowerCase().trim(), r.division_number);

@@ -9,13 +9,13 @@ import ExcelJS from "exceljs";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
-import { BudgetRow } from "./types";
+import { BudgetRow, naturalDivisionSort } from "./types";
 
 const fmtCur = (v: number) =>
   `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function sortedRows(budgetRows: BudgetRow[]) {
-  return [...budgetRows].sort((a, b) => a.division_number.localeCompare(b.division_number));
+  return [...budgetRows].sort((a, b) => naturalDivisionSort(a.division_number, b.division_number));
 }
 
 function buildSections(budgetRows: BudgetRow[]) {

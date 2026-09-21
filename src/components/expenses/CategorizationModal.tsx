@@ -12,6 +12,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { naturalDivisionSort } from "@/components/budget/types";
 import { format } from "date-fns";
 import type { PlaidTransaction } from "./ExpenseInbox";
 import { ALL_DIVISIONS } from "@/components/budget/types";
@@ -60,7 +61,7 @@ export default function CategorizationModal({ transaction, open, onClose, onSave
       .select("division_number, division_name")
       .eq("project_id", projectId)
       .order("division_number")
-      .then(({ data }) => setProjectDivisions(data ?? []));
+      .then(({ data }) => setProjectDivisions((data ?? []).sort((a: any, b: any) => naturalDivisionSort(a.division_number, b.division_number))));
   }, [projectId]);
 
   const getOrCreateReport = async (): Promise<string | null> => {

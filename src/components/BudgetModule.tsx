@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { startOfMonth, endOfMonth } from "date-fns";
-import { BudgetRow, BudgetTransaction, ALL_DIVISIONS } from "./budget/types";
+import { BudgetRow, BudgetTransaction, ALL_DIVISIONS, naturalDivisionSort } from "./budget/types";
 import BudgetSummaryTab from "./budget/BudgetSummaryTab";
 import ProjectAccountingModule from "./ProjectAccountingModule";
 
@@ -35,7 +35,7 @@ export default function BudgetModule({ projectId, projectName, projectInfo, acti
     }
 
     if (data && data.length > 0) {
-      setRows(data as BudgetRow[]);
+      setRows((data as BudgetRow[]).sort((a, b) => naturalDivisionSort(a.division_number, b.division_number)));
       setLoading(false);
       return;
     }
@@ -55,7 +55,7 @@ export default function BudgetModule({ projectId, projectName, projectInfo, acti
       .select();
 
     if (insertErr) toast.error("Failed to initialize budget.");
-    else setRows((inserted as BudgetRow[]).sort((a, b) => a.division_number.localeCompare(b.division_number)));
+    else setRows((inserted as BudgetRow[]).sort((a, b) => naturalDivisionSort(a.division_number, b.division_number)));
     setLoading(false);
   }, [projectId]);
 

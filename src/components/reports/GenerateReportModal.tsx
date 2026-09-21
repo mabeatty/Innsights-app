@@ -10,6 +10,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { Download, Send, Loader2, X, Plus } from "lucide-react";
+import { naturalDivisionSort } from "@/components/budget/types";
 import { toast } from "sonner";
 import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
 import { generateMonthlyPDF, MonthlyReportData } from "./generateMonthlyPDF";
@@ -101,7 +102,9 @@ export default function GenerateReportModal({
       const approvedTxns = (transactions ?? []).filter(
         (t) => t.status === "Approved" || t.status === "Paid" || t.status === "Deferred"
       );
-      const budgetLines = (budgetRows ?? []).map((row) => {
+      const budgetLines = [...(budgetRows ?? [])]
+        .sort((a, b) => naturalDivisionSort(a.division_number, b.division_number))
+        .map((row) => {
         const divTxns = approvedTxns.filter((t) => t.division_number === row.division_number);
         const actual_spent = divTxns.reduce((s, t) => s + Number(t.amount), 0);
         const scheduled = Number(row.scheduled_value);
