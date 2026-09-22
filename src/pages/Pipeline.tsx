@@ -21,6 +21,16 @@ import { PROJECT_STATUSES } from "@/lib/projectStatus";
 
 const FRANCHISORS = ["Hilton", "IHG", "Marriott", "Hyatt"];
 
+function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg bg-muted/40 p-4">
+      <p className="text-xs text-muted-foreground mb-1">{label}</p>
+      <p className="text-xl font-medium">{value}</p>
+      {sub && <p className="text-xs text-muted-foreground mt-1">{sub}</p>}
+    </div>
+  );
+}
+
 function statusBadgeClasses(status: string) {
   switch (status) {
     case "Prospecting": return "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/40 dark:text-slate-300 dark:border-slate-700";
@@ -221,6 +231,11 @@ export default function Pipeline() {
     </TableHead>
   );
 
+  const totalProjects = entries.length;
+  const totalKeyMoney = entries.reduce((s, e) => s + (e.key_money ?? 0), 0);
+  const totalDevFees = entries.reduce((s, e) => s + (e.development_fee ?? 0), 0);
+  const fmtUsd = (n: number) => `$${n.toLocaleString("en-US")}`;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -231,6 +246,14 @@ export default function Pipeline() {
         <Button onClick={openAdd} className="gap-1.5">
           <Plus className="h-4 w-4" /> Add to Pipeline
         </Button>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <KpiCard label="Projects" value={String(totalProjects)} />
+        <KpiCard label="Key Money" value={fmtUsd(totalKeyMoney)} />
+        <KpiCard label="Dev Fees" value={fmtUsd(totalDevFees)} />
+        <KpiCard label="2027 Dev Fees" value="—" sub="Not available yet" />
+        <KpiCard label="2028 Dev Fees" value="—" sub="Not available yet" />
       </div>
 
       <div className="rounded-lg border overflow-hidden">
