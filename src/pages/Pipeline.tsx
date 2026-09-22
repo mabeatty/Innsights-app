@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Plus, Pencil, Trash2, Link2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Link2, ArrowUp, ArrowDown, ArrowUpDown } from "lucide-react";
 import { PROJECT_STATUSES } from "@/lib/projectStatus";
 
 const FRANCHISORS = ["Hilton", "IHG", "Marriott", "Hyatt"];
@@ -58,6 +58,8 @@ export default function Pipeline() {
   const { user, organizationId } = useAuth();
   const navigate = useNavigate();
   const [entries, setEntries] = useState<PipelineEntry[]>([]);
+  const [sortColumn, setSortColumn] = useState<string>("property_name");
+  const [sortAsc, setSortAsc] = useState(true);
   const [brands, setBrands] = useState<BrandOption[]>([]);
   const [projects, setProjects] = useState<ProjectOption[]>([]);
   const [loading, setLoading] = useState(true);
@@ -181,6 +183,44 @@ export default function Pipeline() {
     load();
   };
 
+  const toggleSort = (column: string) => {
+    if (sortColumn === column) {
+      setSortAsc((a) => !a);
+    } else {
+      setSortColumn(column);
+      setSortAsc(true);
+    }
+  };
+
+  const getSortValue = (e: PipelineEntry, column: string): string | number => {
+    switch (column) {
+      case "property_name": return e.property_name?.toLowerCase() ?? "";
+      case "brand": return e.brands?.name?.toLowerCase() ?? "";
+      case "franchisor": return e.franchisor?.toLowerCase() ?? "";
+      case "key_money": return e.key_money ?? -Infinity;
+      case "development_fee": return e.development_fee ?? -Infinity;
+      case "projected_start_date": return e.projected_start_date ?? "";
+      case "status": return e.status?.toLowerCase() ?? "";
+      default: return "";
+    }
+  };
+
+  const sortedEntries = [...entries].sort((a, b) => {
+    const va = getSortValue(a, sortColumn);
+    const vb = getSortValue(b, sortColumn);
+    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+    return sortAsc ? cmp : -cmp;
+  });
+
+  const SortableHead = ({ column, children }: { column: string; children: ReactNode }) => (
+    <TableHead>
+      <button className="flex items-center gap-1 hover:text-foreground" onClick={() => toggleSort(column)}>
+        {children}
+        {sortColumn === column ? (sortAsc ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 opacity-30" />}
+      </button>
+    </TableHead>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -197,13 +237,13 @@ export default function Pipeline() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Property</TableHead>
-              <TableHead>Brand</TableHead>
-              <TableHead>Franchisor</TableHead>
-              <TableHead>Key Money</TableHead>
-              <TableHead>Development Fee</TableHead>
-              <TableHead>Projected Start</TableHead>
-              <TableHead>Status</TableHead>
+              <SortableHead column="property_name">Property</SortableHead>
+              <SortableHead column="brand">Brand</SortableHead>
+              <SortableHead column="franchisor">Franchisor</SortableHead>
+              <SortableHead column="key_money">Key Money</SortableHead>
+              <SortableHead column="development_fee">Development Fee</SortableHead>
+              <SortableHead column="projected_start_date">Projected Start</SortableHead>
+              <SortableHead column="status">Status</SortableHead>
               <TableHead className="w-28" />
             </TableRow>
           </TableHeader>
@@ -214,7 +254,7 @@ export default function Pipeline() {
                 No signed franchises in the pipeline yet.
               </TableCell></TableRow>
             )}
-            {entries.map((e) => (
+            {sortedEntries.map((e) => (
               <TableRow key={e.id}>
                 <TableCell className="font-medium text-sm">
                   {e.converted_project_id ? (
