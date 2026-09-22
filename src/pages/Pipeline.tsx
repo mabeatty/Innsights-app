@@ -226,9 +226,11 @@ export default function Pipeline() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => openEdit(e)}>
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove" onClick={() => setDeleteTarget(e)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {!e.converted_project_id && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Remove" onClick={() => setDeleteTarget(e)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -245,24 +247,30 @@ export default function Pipeline() {
             <DialogDescription>A property with a signed franchise agreement, not yet an active Innsights project.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {editing?.converted_project_id && (
+              <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
+                Linked to a project — property, location, and brand are read-only here and reflect the project record.
+                Franchisor, dates, status, and notes are still pipeline-specific and editable.
+              </p>
+            )}
             <div className="space-y-1.5">
               <Label>Property name</Label>
-              <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} placeholder="e.g. Springfield HGI" />
+              <Input value={propertyName} onChange={(e) => setPropertyName(e.target.value)} placeholder="e.g. Springfield HGI" disabled={!!editing?.converted_project_id} />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>City</Label>
-                <Input value={city} onChange={(e) => setCity(e.target.value)} />
+                <Input value={city} onChange={(e) => setCity(e.target.value)} disabled={!!editing?.converted_project_id} />
               </div>
               <div className="space-y-1.5">
                 <Label>State</Label>
-                <Input value={state} onChange={(e) => setState(e.target.value)} maxLength={2} placeholder="OH" />
+                <Input value={state} onChange={(e) => setState(e.target.value)} maxLength={2} placeholder="OH" disabled={!!editing?.converted_project_id} />
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>Brand</Label>
-                <Select value={brandId} onValueChange={setBrandId}>
+                <Select value={brandId} onValueChange={setBrandId} disabled={!!editing?.converted_project_id}>
                   <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
                   <SelectContent>
                     {brands.map((b) => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}

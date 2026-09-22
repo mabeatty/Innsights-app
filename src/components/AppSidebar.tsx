@@ -23,7 +23,7 @@ const STORAGE_KEY = "innsights-sidebar-order";
 const defaultDraggableItems = [
   { title: "Company Dashboard", url: "/company", icon: DollarSign, requiresInvestmentAccess: true },
   { title: "Prospecting", url: "/prospecting", icon: Compass, requiresInvestmentAccess: false },
-  { title: "Pipeline", url: "/pipeline", icon: Workflow, requiresInvestmentAccess: false },
+  { title: "Pipeline", url: "/pipeline", icon: Workflow, requiresInvestmentAccess: true },
   { title: "Document Library", url: "/internal-documents", icon: FolderOpen, requiresInvestmentAccess: false },
   { title: "Vendors", url: "/vendors", icon: Building2, requiresInvestmentAccess: false },
   { title: "Invoices", url: "/invoices", icon: FileCheck, requiresInvestmentAccess: false },
