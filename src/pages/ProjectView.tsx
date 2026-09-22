@@ -96,6 +96,7 @@ export default function ProjectView() {
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
+  const [editBrandId, setEditBrandId] = useState<string>("");
   const [editProjectType, setEditProjectType] = useState<"Development" | "Asset Management">("Development");
   const [editStatus, setEditStatus] = useState<"Draft" | "Complete">("Draft");
   const [editSecondaryBrandId, setEditSecondaryBrandId] = useState<string>("");
@@ -145,6 +146,7 @@ export default function ProjectView() {
   const openEditDialog = () => {
     if (!project) return;
     setEditName(project.name);
+    setEditBrandId(project.brand_id ?? "");
     setEditProjectType(project.project_type);
     setEditStatus(project.status);
     setEditSecondaryBrandId(project.secondary_brand_id ?? "");
@@ -152,13 +154,14 @@ export default function ProjectView() {
   };
 
   const handleSaveEdit = async () => {
-    if (!project || !editName) {
+    if (!project || !editName || !editBrandId) {
       toast.error("Please fill in all fields.");
       return;
     }
     setSaving(true);
     const { error } = await supabase.from("projects").update({
       name: editName,
+      brand_id: editBrandId,
       project_type: editProjectType,
       status: editStatus,
       secondary_brand_id: editSecondaryBrandId || null,
@@ -384,8 +387,15 @@ export default function ProjectView() {
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
             </div>
             <div className="space-y-1.5">
-              <Label className="text-muted-foreground">Brand</Label>
-              <p className="text-sm py-2 px-3 rounded-md bg-muted">{project.brands?.name ?? "—"}</p>
+              <Label>Brand</Label>
+              <Select value={editBrandId} onValueChange={setEditBrandId}>
+                <SelectTrigger><SelectValue placeholder="Select brand" /></SelectTrigger>
+                <SelectContent>
+                  {availableBrands.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>Secondary Brand</Label>
@@ -394,7 +404,7 @@ export default function ProjectView() {
                 <SelectTrigger><SelectValue placeholder="None" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__none__">None — single brand</SelectItem>
-                  {availableBrands.filter((b) => b.id !== project.brand_id).map((b) => (
+                  {availableBrands.filter((b) => b.id !== editBrandId).map((b) => (
                     <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
                   ))}
                 </SelectContent>
