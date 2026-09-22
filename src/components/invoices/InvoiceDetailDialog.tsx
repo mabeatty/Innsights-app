@@ -19,6 +19,7 @@ import {
   statusBadgeClasses, formatCurrency, COST_TYPES,
 } from "./types";
 import { naturalDivisionSort } from "@/components/budget/types";
+import { formatProjectLabel } from "@/lib/projectLabel";
 import LienWaiverPanel from "./LienWaiverPanel";
 import PdfPreview from "./PdfPreview";
 
@@ -72,7 +73,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
   const load = useCallback(async () => {
     if (!invoiceId) return;
     const [{ data: inv }, { data: appr }, { data: c }, { data: li }] = await Promise.all([
-      supabase.from("invoices").select("*, projects(id, name)").eq("id", invoiceId).single(),
+      supabase.from("invoices").select("*, projects(id, name, hotel_name)").eq("id", invoiceId).single(),
       supabase.from("invoice_approvals").select("*").eq("invoice_id", invoiceId),
       supabase.from("invoice_comments").select("*").eq("invoice_id", invoiceId).order("created_at"),
       supabase.from("invoice_line_items").select("*").eq("invoice_id", invoiceId).order("category"),
@@ -543,7 +544,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                 </div>
               ) : (
                 <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div><span className="text-muted-foreground">Project:</span><br/>{invoice.projects?.name || "—"}</div>
+                  <div><span className="text-muted-foreground">Project:</span><br/>{invoice.projects ? formatProjectLabel(invoice.projects.name, invoice.projects.hotel_name) : "—"}</div>
                   <div><span className="text-muted-foreground">Cost type:</span><br/>{(invoice as any).cost_type || "—"}</div>
                   <div><span className="text-muted-foreground">Invoice #:</span><br/>{invoice.invoice_number || "—"}</div>
                   <div><span className="text-muted-foreground">Invoice date:</span><br/>{invoice.invoice_date ? format(new Date(invoice.invoice_date), "MMM d, yyyy") : "—"}</div>

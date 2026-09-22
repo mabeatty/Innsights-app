@@ -118,7 +118,7 @@ export interface Invoice {
   updated_at: string;
   due_date: string | null;
   lienable_amount: number | null;
-  projects?: { id: string; name: string } | null;
+  projects?: { id: string; name: string; hotel_name?: string | null } | null;
 }
 
 export function statusBadgeClasses(status: string): string {

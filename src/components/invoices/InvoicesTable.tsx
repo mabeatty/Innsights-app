@@ -15,6 +15,7 @@ import { Invoice, statusBadgeClasses, formatCurrency } from "./types";
 import { computeLienWaiverStatus, lienWaiverStatusBadgeClasses, lienWaiverStatusLabel, LienWaiverStatus } from "./LienWaiverPanel";
 import UploadInvoiceModal from "./UploadInvoiceModal";
 import InvoiceDetailDialog from "./InvoiceDetailDialog";
+import { formatProjectLabel } from "@/lib/projectLabel";
 
 const STATUS_OPTIONS = ["Pending Review", "In Approval", "Approved", "Rejected"];
 
@@ -28,7 +29,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
   const { accessLevel, isConsultant } = useAuth();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [lienWaiverStatusByInvoice, setLienWaiverStatusByInvoice] = useState<Record<string, LienWaiverStatus>>({});
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; hotel_name: string | null }[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -56,7 +57,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
 
   const load = useCallback(async () => {
     setLoading(true);
-    let q = supabase.from("invoices").select("*, projects(id, name)").order("submitted_at", { ascending: false });
+    let q = supabase.from("invoices").select("*, projects(id, name, hotel_name)").order("submitted_at", { ascending: false });
     if (projectId) q = q.eq("project_id", projectId);
     const { data } = await q;
     const invs = (data as Invoice[]) ?? [];
@@ -81,7 +82,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
     if (projectId) return;
-    supabase.from("projects").select("id, name").order("name").then(({ data }) => setProjects(data ?? []));
+    supabase.from("projects").select("id, name, hotel_name").order("name").then(({ data }) => setProjects(data ?? []));
   }, [projectId]);
 
   const filtered = useMemo(() => {
@@ -137,7 +138,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
             <SelectTrigger className="w-[170px] h-9"><SelectValue placeholder="Project" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All projects</SelectItem>
-              {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+              {projects.map((p) => <SelectItem key={p.id} value={p.id}>{formatProjectLabel(p.name, p.hotel_name)}</SelectItem>)}
             </SelectContent>
           </Select>
         )}
@@ -172,7 +173,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
             {!loading && filtered.length === 0 && <TableRow><TableCell colSpan={12} className="text-center text-muted-foreground py-6 text-sm">No invoices.</TableCell></TableRow>}
             {filtered.map((i) => (
               <TableRow key={i.id} className="cursor-pointer" onClick={() => setSelectedId(i.id)}>
-                {!hideProjectColumn && <TableCell className="text-xs">{i.projects?.name || "—"}</TableCell>}
+                {!hideProjectColumn && <TableCell className="text-xs">{i.projects ? formatProjectLabel(i.projects.name, i.projects.hotel_name) : "—"}</TableCell>}
                 <TableCell className="text-xs font-medium">
                   <span className="flex items-center gap-1.5">
                     {i.vendor_name || "—"}

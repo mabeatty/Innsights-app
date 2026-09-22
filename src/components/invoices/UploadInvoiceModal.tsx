@@ -18,8 +18,9 @@ import { createNotifications } from "@/lib/notify";
 import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
 import DriveFolderPicker from "./DriveFolderPicker";
 import { format } from "date-fns";
+import { formatProjectLabel } from "@/lib/projectLabel";
 
-interface Project { id: string; name: string }
+interface Project { id: string; name: string; hotel_name: string | null }
 
 interface LineItem {
   id: string;
@@ -114,7 +115,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   useEffect(() => {
     if (!open) return;
-    supabase.from("projects").select("id, name").order("name").then(({ data }) => setProjects(data ?? []));
+    supabase.from("projects").select("id, name, hotel_name").order("name").then(({ data }) => setProjects(data ?? []));
     supabase.from("project_info").select("project_id, entity_name").then(({ data }) => {
       const m: Record<string, string> = {};
       (data ?? []).forEach((r: any) => { if (r.entity_name) m[r.project_id] = r.entity_name; });
@@ -585,7 +586,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
               <Select value={projectId} onValueChange={setProjectId} disabled={!!defaultProjectId}>
                 <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
                 <SelectContent>
-                  {projects.map((p) => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
+                  {projects.map((p) => <SelectItem key={p.id} value={p.id}>{formatProjectLabel(p.name, p.hotel_name)}</SelectItem>)}
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">Select a project to auto-match line item categories</p>
