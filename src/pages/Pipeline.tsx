@@ -45,6 +45,7 @@ interface PipelineEntry {
   brands: { name: string } | null;
   franchisor: string | null;
   franchise_agreement_date: string | null;
+  key_money: number | null;
   projected_opening_date: string | null;
   status: string;
   notes: string | null;
@@ -66,7 +67,7 @@ export default function Pipeline() {
   const [state, setState] = useState("");
   const [brandId, setBrandId] = useState<string>("");
   const [franchisor, setFranchisor] = useState("");
-  const [agreementDate, setAgreementDate] = useState("");
+  const [keyMoney, setKeyMoney] = useState("");
   const [openingDate, setOpeningDate] = useState("");
   const [status, setStatus] = useState("Franchise Signed");
   const [notes, setNotes] = useState("");
@@ -81,9 +82,9 @@ export default function Pipeline() {
     setLoading(true);
     const [{ data: pipelineData }, { data: brandData }, { data: projectData }] = await Promise.all([
       supabase.from("franchise_pipeline")
-        .select("id, property_name, city, state, brand_id, brands(name), franchisor, franchise_agreement_date, projected_opening_date, status, notes, converted_project_id")
+        .select("id, property_name, city, state, brand_id, brands(name), franchisor, projected_opening_date, key_money, status, notes, converted_project_id")
         .eq("organization_id", organizationId)
-        .order("franchise_agreement_date", { ascending: false }),
+        .order("created_at", { ascending: false }),
       supabase.from("brands").select("id, name").order("name"),
       supabase.from("projects").select("id, name").order("name"),
     ]);
@@ -98,7 +99,7 @@ export default function Pipeline() {
   const resetForm = () => {
     setEditing(null);
     setPropertyName(""); setCity(""); setState(""); setBrandId(""); setFranchisor("");
-    setAgreementDate(""); setOpeningDate(""); setStatus("Franchise Signed"); setNotes("");
+    setKeyMoney(""); setOpeningDate(""); setStatus("Franchise Signed"); setNotes("");
   };
 
   const openAdd = () => { resetForm(); setDialogOpen(true); };
@@ -106,13 +107,14 @@ export default function Pipeline() {
     setEditing(e);
     setPropertyName(e.property_name); setCity(e.city ?? ""); setState(e.state ?? "");
     setBrandId(e.brand_id ?? ""); setFranchisor(e.franchisor ?? "");
-    setAgreementDate(e.franchise_agreement_date ?? ""); setOpeningDate(e.projected_opening_date ?? "");
+    setKeyMoney(e.key_money != null ? String(e.key_money) : ""); setOpeningDate(e.projected_opening_date ?? "");
     setStatus(e.status); setNotes(e.notes ?? "");
     setDialogOpen(true);
   };
 
   const save = async () => {
     if (!propertyName.trim()) { toast.error("Property name is required."); return; }
+    if (keyMoney.trim() && Number.isNaN(Number(keyMoney))) { toast.error("Key money must be a number."); return; }
     setSaving(true);
     try {
       const payload = {
@@ -122,7 +124,7 @@ export default function Pipeline() {
         state: state.trim() || null,
         brand_id: brandId || null,
         franchisor: franchisor.trim() || null,
-        franchise_agreement_date: agreementDate || null,
+        key_money: keyMoney.trim() ? Number(keyMoney) : null,
         projected_opening_date: openingDate || null,
         status,
         notes: notes.trim() || null,
@@ -188,7 +190,7 @@ export default function Pipeline() {
               <TableHead>Location</TableHead>
               <TableHead>Brand</TableHead>
               <TableHead>Franchisor</TableHead>
-              <TableHead>Franchise Signed</TableHead>
+              <TableHead>Key Money</TableHead>
               <TableHead>Projected Opening</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-28" />
@@ -214,7 +216,7 @@ export default function Pipeline() {
                 <TableCell className="text-sm text-muted-foreground">{[e.city, e.state].filter(Boolean).join(", ") || "—"}</TableCell>
                 <TableCell className="text-sm">{e.brands?.name || "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.franchisor || "—"}</TableCell>
-                <TableCell className="text-sm">{e.franchise_agreement_date ? format(new Date(e.franchise_agreement_date), "MMM d, yyyy") : "—"}</TableCell>
+                <TableCell className="text-sm">{e.key_money != null ? `$${Number(e.key_money).toLocaleString("en-US")}` : "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.projected_opening_date ? format(new Date(e.projected_opening_date), "MMM d, yyyy") : "—"}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={`text-[10px] ${statusBadgeClasses(e.status)}`}>{e.status}</Badge>
@@ -290,8 +292,8 @@ export default function Pipeline() {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Franchise signed date</Label>
-                <Input type="date" value={agreementDate} onChange={(e) => setAgreementDate(e.target.value)} />
+                <Label>Key money</Label>
+                <Input type="number" step="0.01" value={keyMoney} onChange={(e) => setKeyMoney(e.target.value)} placeholder="e.g. 50000" />
               </div>
               <div className="space-y-1.5">
                 <Label>Projected opening date</Label>
