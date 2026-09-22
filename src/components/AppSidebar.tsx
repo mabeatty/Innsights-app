@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { LayoutDashboard, FolderPlus, LogOut, FileText, Settings, Users, ChevronRight, Receipt, TrendingUp, GripVertical, AlertTriangle, FolderOpen, Building2, FileCheck, Banknote, Compass, DollarSign } from "lucide-react";
+import { LayoutDashboard, FolderPlus, LogOut, FileText, Settings, Users, ChevronRight, Receipt, TrendingUp, GripVertical, AlertTriangle, FolderOpen, Building2, FileCheck, Banknote, Compass, DollarSign, Workflow } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNavigate, useLocation } from "react-router-dom";
@@ -22,13 +22,11 @@ const STORAGE_KEY = "innsights-sidebar-order";
 
 const defaultDraggableItems = [
   { title: "Company Dashboard", url: "/company", icon: DollarSign, requiresInvestmentAccess: true },
-  { title: "Investment Management", url: "/investments", icon: TrendingUp, requiresInvestmentAccess: true },
   { title: "Prospecting", url: "/prospecting", icon: Compass, requiresInvestmentAccess: false },
+  { title: "Pipeline", url: "/pipeline", icon: Workflow, requiresInvestmentAccess: false },
   { title: "Document Library", url: "/internal-documents", icon: FolderOpen, requiresInvestmentAccess: false },
   { title: "Vendors", url: "/vendors", icon: Building2, requiresInvestmentAccess: false },
-  { title: "Expense Reporting", url: "/expenses", icon: Receipt, requiresInvestmentAccess: false },
   { title: "Invoices", url: "/invoices", icon: FileCheck, requiresInvestmentAccess: false },
-  { title: "Payments", url: "/payments", icon: Banknote, requiresInvestmentAccess: false },
 ];
 
 const iconMap: Record<string, typeof LayoutDashboard> = {

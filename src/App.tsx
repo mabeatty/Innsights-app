@@ -26,6 +26,7 @@ import InvestmentManagement from "./pages/InvestmentManagement";
 import InternalDocuments from "./pages/InternalDocuments";
 import Vendors from "./pages/Vendors";
 import Prospecting from "./pages/Prospecting";
+import Pipeline from "./pages/Pipeline";
 import VendorPriceLibrary from "./pages/VendorPriceLibrary";
 import VendorDetail from "./pages/VendorDetail";
 import ResetPassword from "./pages/ResetPassword";
@@ -105,6 +106,7 @@ const App = () => (
             <Route path="/internal-documents" element={<ProtectedRoute><InternalDocuments /></ProtectedRoute>} />
             <Route path="/vendors" element={<ProtectedRoute><Vendors /></ProtectedRoute>} />
             <Route path="/prospecting" element={<ProtectedRoute><Prospecting /></ProtectedRoute>} />
+            <Route path="/pipeline" element={<ProtectedRoute><Pipeline /></ProtectedRoute>} />
             <Route path="/vendors/pricing" element={<ProtectedRoute><VendorPriceLibrary /></ProtectedRoute>} />
             <Route path="/vendors/:vendorId" element={<ProtectedRoute><VendorDetail /></ProtectedRoute>} />
             <Route path="/expenses" element={<ProtectedRoute><ExpenseReporting /></ProtectedRoute>} />
