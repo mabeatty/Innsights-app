@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { CheckCircle2, XCircle, Clock, MessageCircle, Mail, ExternalLink, FolderOpen, Pencil, Plus, Trash2, Stamp } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,7 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     amount: "", retainage_amount: "", cost_type: "", budget_line_item: "", notes: "",
   });
   const [savingEdit, setSavingEdit] = useState(false);
+  const [togglingTaxExempt, setTogglingTaxExempt] = useState(false);
   // Editable division line items (invoice_line_items) — a pay app can span
   // multiple budget divisions, and until now the Edit button only touched
   // top-level invoice fields, with no way to fix a wrong division/amount
@@ -207,6 +208,27 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
     setNewComment(""); load();
   };
 
+  const toggleTaxExempt = async () => {
+    if (!invoice) return;
+    setTogglingTaxExempt(true);
+    try {
+      const next = !invoice.tax_exempt;
+      const { error } = await supabase.from("invoices").update({
+        tax_exempt: next,
+        tax_exempt_by: next ? user?.id ?? null : null,
+        tax_exempt_at: next ? new Date().toISOString() : null,
+      }).eq("id", invoice.id);
+      if (error) throw error;
+      await recordAudit(next ? "Marked tax exempt" : "Removed tax exempt mark");
+      toast.success(next ? "Marked as tax exempt." : "Tax exempt mark removed.");
+      await load(); onChange();
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update.");
+    } finally {
+      setTogglingTaxExempt(false);
+    }
+  };
+
   const startEditing = async () => {
     if (!invoice) return;
     setEditForm({
@@ -328,10 +350,20 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
             <span>{invoice?.vendor_name || "Invoice"}</span>
             {invoice && <Badge className={statusBadgeClasses(invoice.status)} variant="outline">{invoice.status}</Badge>}
             {invoice?.source === "email" && <Badge variant="outline" className="gap-1 text-[10px]"><Mail className="h-2.5 w-2.5" />Via Email</Badge>}
+            {invoice?.tax_exempt && (
+              <Badge variant="outline" className="gap-1 text-[10px] border-2 border-emerald-600 text-emerald-700 dark:text-emerald-400 font-bold uppercase tracking-wide -rotate-3">
+                <Stamp className="h-2.5 w-2.5" /> Tax Exempt
+              </Badge>
+            )}
             {invoice && canEdit && !isEditing && (
-              <Button variant="outline" size="sm" className="ml-auto gap-1.5" onClick={startEditing}>
-                <Pencil className="h-3.5 w-3.5" /> Edit
-              </Button>
+              <div className="ml-auto flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={toggleTaxExempt} disabled={togglingTaxExempt}>
+                  <Stamp className="h-3.5 w-3.5" /> {invoice.tax_exempt ? "Remove Tax Exempt" : "Mark Tax Exempt"}
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={startEditing}>
+                  <Pencil className="h-3.5 w-3.5" /> Edit
+                </Button>
+              </div>
             )}
           </DialogTitle>
         </DialogHeader>

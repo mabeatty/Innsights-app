@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Plus, Search, Mail } from "lucide-react";
+import { Plus, Search, Mail, Stamp } from "lucide-react";
 import { format } from "date-fns";
 import { Invoice, statusBadgeClasses, formatCurrency } from "./types";
 import { computeLienWaiverStatus, lienWaiverStatusBadgeClasses, lienWaiverStatusLabel, LienWaiverStatus } from "./LienWaiverPanel";
@@ -173,7 +173,12 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
             {filtered.map((i) => (
               <TableRow key={i.id} className="cursor-pointer" onClick={() => setSelectedId(i.id)}>
                 {!hideProjectColumn && <TableCell className="text-xs">{i.projects?.name || "—"}</TableCell>}
-                <TableCell className="text-xs font-medium">{i.vendor_name || "—"}</TableCell>
+                <TableCell className="text-xs font-medium">
+                  <span className="flex items-center gap-1.5">
+                    {i.vendor_name || "—"}
+                    {i.tax_exempt && <Stamp className="h-3 w-3 text-emerald-600 shrink-0" aria-label="Tax exempt" />}
+                  </span>
+                </TableCell>
                 <TableCell className="text-xs">{i.invoice_number || "—"}</TableCell>
                 <TableCell className="text-xs">{i.invoice_date ? format(new Date(i.invoice_date), "MMM d, yyyy") : "—"}</TableCell>
                 <TableCell className="text-xs text-right">{formatCurrency(i.amount)}</TableCell>

@@ -102,6 +102,9 @@ export interface Invoice {
   rejection_reason: string | null;
   more_info_request: string | null;
   notes: string | null;
+  tax_exempt: boolean;
+  tax_exempt_by: string | null;
+  tax_exempt_at: string | null;
   pdf_url: string | null;
   pdf_path: string | null;
   drive_url: string | null;

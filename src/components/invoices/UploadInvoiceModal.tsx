@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -89,6 +90,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
   const [projectId, setProjectId] = useState<string>(defaultProjectId || "");
   const [transactionType, setTransactionType] = useState<string>("Vendor Invoice");
   const [supportingDocsLink, setSupportingDocsLink] = useState("");
+  const [taxExempt, setTaxExempt] = useState(false);
   const [notes, setNotes] = useState("");
   const [lineItems, setLineItems] = useState<LineItem[]>([newLine()]);
 
@@ -436,6 +438,9 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         submitted_by_email: user.email,
         notes: notes || null,
         drive_url: supportingDocsLink || null,
+        tax_exempt: taxExempt,
+        tax_exempt_by: taxExempt ? user.id : null,
+        tax_exempt_at: taxExempt ? new Date().toISOString() : null,
         pdf_url: pdfUrl,
         pdf_path: path,
         source: "manual",
@@ -627,6 +632,16 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
               <Label>Supporting Documents (Google Drive)</Label>
               <DriveFolderPicker value={supportingDocsLink} onChange={setSupportingDocsLink} />
               <p className="text-[11px] text-muted-foreground">Optional — link a folder for lien waivers, backup invoices, or other documents that support a pay application.</p>
+            </div>
+            <div className="col-span-2 flex items-start gap-2 rounded-md border border-amber-300 dark:border-amber-300/40 bg-amber-50 dark:bg-amber-300/10 px-3 py-2.5">
+              <Checkbox id="tax-exempt" checked={taxExempt} onCheckedChange={(v) => setTaxExempt(v === true)} className="mt-0.5" />
+              <div>
+                <Label htmlFor="tax-exempt" className="cursor-pointer">This invoice contains tax-exempt materials</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Check this if you believe the invoice includes tax-exempt items. This is a whole-invoice flag for now — an
+                  invoice with a mix of exempt and non-exempt items isn't broken out yet.
+                </p>
+              </div>
             </div>
           </div>
 
