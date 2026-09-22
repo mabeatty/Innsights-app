@@ -1,15 +1,8 @@
-// Formats a project's display label to include its hotel/brand reference,
-// e.g. "Dayton — Dayton SHS", since QuickBooks references properties by
-// hotel name/brand ("SHS Dayton", "HGI West Chester") rather than
-// Innsights' internal project codename ("Dayton", "West Chester") — this
-// makes it much easier to eyeball a QuickBooks transaction and know which
-// Innsights project it belongs to.
-//
-// Omits the hotel name when it's blank/whitespace-only, or identical to the
-// project name (a few projects have hotel_name duplicating name — nothing
-// useful to add there).
-export function formatProjectLabel(name: string, hotelName: string | null | undefined): string {
-  const trimmedHotel = (hotelName ?? "").trim();
-  if (!trimmedHotel || trimmedHotel.toLowerCase() === name.trim().toLowerCase()) return name;
-  return `${name} — ${trimmedHotel}`;
+// Project Name is the single source of truth for how a project is
+// identified and displayed everywhere — hotel_name was retired as a
+// separate concept (per direction 2026-09-21). Signature kept as-is
+// (accepting hotelName, unused) so every existing call site across Revenue
+// tabs, invoicing, and Pipeline didn't need to be touched individually.
+export function formatProjectLabel(name: string, _hotelName?: string | null): string {
+  return name;
 }

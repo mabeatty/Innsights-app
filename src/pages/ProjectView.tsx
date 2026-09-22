@@ -96,7 +96,6 @@ export default function ProjectView() {
   // Edit dialog state
   const [editOpen, setEditOpen] = useState(false);
   const [editName, setEditName] = useState("");
-  const [editHotelName, setEditHotelName] = useState("");
   const [editProjectType, setEditProjectType] = useState<"Development" | "Asset Management">("Development");
   const [editStatus, setEditStatus] = useState<"Draft" | "Complete">("Draft");
   const [editSecondaryBrandId, setEditSecondaryBrandId] = useState<string>("");
@@ -146,7 +145,6 @@ export default function ProjectView() {
   const openEditDialog = () => {
     if (!project) return;
     setEditName(project.name);
-    setEditHotelName(project.hotel_name);
     setEditProjectType(project.project_type);
     setEditStatus(project.status);
     setEditSecondaryBrandId(project.secondary_brand_id ?? "");
@@ -154,14 +152,13 @@ export default function ProjectView() {
   };
 
   const handleSaveEdit = async () => {
-    if (!project || !editName || !editHotelName) {
+    if (!project || !editName) {
       toast.error("Please fill in all fields.");
       return;
     }
     setSaving(true);
     const { error } = await supabase.from("projects").update({
       name: editName,
-      hotel_name: editHotelName,
       project_type: editProjectType,
       status: editStatus,
       secondary_brand_id: editSecondaryBrandId || null,
@@ -214,7 +211,7 @@ export default function ProjectView() {
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <h1 className="text-xl font-semibold text-foreground">{project.name}</h1>
-          <p className="text-sm text-muted-foreground">{entityName || project.hotel_name}</p>
+          <p className="text-sm text-muted-foreground">{entityName || project.name}</p>
           <ProjectInfoSummary info={projectInfo} />
         </div>
         <div className="flex items-center gap-3">
@@ -367,7 +364,7 @@ export default function ProjectView() {
           <ReportsModule
             projectId={id!}
             projectName={project.name}
-            entityName={entityName || project.hotel_name}
+            entityName={entityName || project.name}
             brandName={combinedBrandName}
             projectType={project.project_type}
           />
@@ -385,10 +382,6 @@ export default function ProjectView() {
             <div className="space-y-1.5">
               <Label>Project Name</Label>
               <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Hotel Name</Label>
-              <Input value={editHotelName} onChange={(e) => setEditHotelName(e.target.value)} />
             </div>
             <div className="space-y-1.5">
               <Label className="text-muted-foreground">Brand</Label>
