@@ -17,18 +17,18 @@ import {
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Plus, Pencil, Trash2, Link2 } from "lucide-react";
+import { PROJECT_STATUSES } from "@/lib/projectStatus";
 
-const STATUSES = ["Franchise Signed", "Site Control", "PIP In Progress", "Financing", "Under Construction", "Converted to Project"];
 const FRANCHISORS = ["Hilton", "IHG", "Marriott", "Hyatt"];
 
 function statusBadgeClasses(status: string) {
   switch (status) {
-    case "Franchise Signed": return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900";
-    case "Site Control": return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900";
-    case "PIP In Progress": return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900";
-    case "Financing": return "bg-orange-50 text-orange-700 border-orange-200 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-900";
+    case "Prospecting": return "bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800/40 dark:text-slate-300 dark:border-slate-700";
+    case "Design": return "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900";
+    case "Pre-Construction": return "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900";
     case "Under Construction": return "bg-cyan-50 text-cyan-700 border-cyan-200 dark:bg-cyan-950/40 dark:text-cyan-300 dark:border-cyan-900";
-    case "Converted to Project": return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900";
+    case "On Hold": return "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900";
+    case "Open": return "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900";
     default: return "bg-muted text-muted-foreground";
   }
 }
@@ -46,7 +46,9 @@ interface PipelineEntry {
   franchisor: string | null;
   franchise_agreement_date: string | null;
   key_money: number | null;
+  development_fee: number | null;
   projected_opening_date: string | null;
+  projected_start_date: string | null;
   status: string;
   notes: string | null;
   converted_project_id: string | null;
@@ -68,8 +70,9 @@ export default function Pipeline() {
   const [brandId, setBrandId] = useState<string>("");
   const [franchisor, setFranchisor] = useState("");
   const [keyMoney, setKeyMoney] = useState("");
-  const [openingDate, setOpeningDate] = useState("");
-  const [status, setStatus] = useState("Franchise Signed");
+  const [developmentFee, setDevelopmentFee] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [status, setStatus] = useState<string>(PROJECT_STATUSES[0]);
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -82,7 +85,7 @@ export default function Pipeline() {
     setLoading(true);
     const [{ data: pipelineData }, { data: brandData }, { data: projectData }] = await Promise.all([
       supabase.from("franchise_pipeline")
-        .select("id, property_name, city, state, brand_id, brands(name), franchisor, projected_opening_date, key_money, status, notes, converted_project_id")
+        .select("id, property_name, city, state, brand_id, brands(name), franchisor, projected_start_date, key_money, development_fee, status, notes, converted_project_id")
         .eq("organization_id", organizationId)
         .order("created_at", { ascending: false }),
       supabase.from("brands").select("id, name").order("name"),
@@ -99,7 +102,7 @@ export default function Pipeline() {
   const resetForm = () => {
     setEditing(null);
     setPropertyName(""); setCity(""); setState(""); setBrandId(""); setFranchisor("");
-    setKeyMoney(""); setOpeningDate(""); setStatus("Franchise Signed"); setNotes("");
+    setKeyMoney(""); setDevelopmentFee(""); setStartDate(""); setStatus(PROJECT_STATUSES[0]); setNotes("");
   };
 
   const openAdd = () => { resetForm(); setDialogOpen(true); };
@@ -107,7 +110,8 @@ export default function Pipeline() {
     setEditing(e);
     setPropertyName(e.property_name); setCity(e.city ?? ""); setState(e.state ?? "");
     setBrandId(e.brand_id ?? ""); setFranchisor(e.franchisor ?? "");
-    setKeyMoney(e.key_money != null ? String(e.key_money) : ""); setOpeningDate(e.projected_opening_date ?? "");
+    setKeyMoney(e.key_money != null ? String(e.key_money) : ""); setDevelopmentFee(e.development_fee != null ? String(e.development_fee) : "");
+    setStartDate(e.projected_start_date ?? "");
     setStatus(e.status); setNotes(e.notes ?? "");
     setDialogOpen(true);
   };
@@ -115,6 +119,7 @@ export default function Pipeline() {
   const save = async () => {
     if (!propertyName.trim()) { toast.error("Property name is required."); return; }
     if (keyMoney.trim() && Number.isNaN(Number(keyMoney))) { toast.error("Key money must be a number."); return; }
+    if (developmentFee.trim() && Number.isNaN(Number(developmentFee))) { toast.error("Development fee must be a number."); return; }
     setSaving(true);
     try {
       const payload = {
@@ -125,7 +130,8 @@ export default function Pipeline() {
         brand_id: brandId || null,
         franchisor: franchisor.trim() || null,
         key_money: keyMoney.trim() ? Number(keyMoney) : null,
-        projected_opening_date: openingDate || null,
+        development_fee: developmentFee.trim() ? Number(developmentFee) : null,
+        projected_start_date: startDate || null,
         status,
         notes: notes.trim() || null,
       };
@@ -160,9 +166,14 @@ export default function Pipeline() {
   const openLink = (e: PipelineEntry) => { setLinkTarget(e); setLinkProjectId(e.converted_project_id ?? ""); };
   const saveLink = async () => {
     if (!linkTarget) return;
+    let newStatus = linkTarget.status;
+    if (linkProjectId) {
+      const { data: info } = await supabase.from("project_info").select("project_status").eq("project_id", linkProjectId).maybeSingle();
+      if (info?.project_status) newStatus = info.project_status;
+    }
     const { error } = await supabase.from("franchise_pipeline").update({
       converted_project_id: linkProjectId || null,
-      status: linkProjectId ? "Converted to Project" : linkTarget.status,
+      status: newStatus,
     }).eq("id", linkTarget.id);
     if (error) { toast.error(error.message); return; }
     toast.success(linkProjectId ? "Linked to project." : "Link removed.");
@@ -187,11 +198,11 @@ export default function Pipeline() {
           <TableHeader>
             <TableRow>
               <TableHead>Property</TableHead>
-              <TableHead>Location</TableHead>
               <TableHead>Brand</TableHead>
               <TableHead>Franchisor</TableHead>
               <TableHead>Key Money</TableHead>
-              <TableHead>Projected Opening</TableHead>
+              <TableHead>Development Fee</TableHead>
+              <TableHead>Projected Start</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="w-28" />
             </TableRow>
@@ -213,11 +224,11 @@ export default function Pipeline() {
                   ) : e.property_name}
                   {e.notes && <p className="text-xs text-muted-foreground line-clamp-1 font-normal mt-0.5">{e.notes}</p>}
                 </TableCell>
-                <TableCell className="text-sm text-muted-foreground">{[e.city, e.state].filter(Boolean).join(", ") || "—"}</TableCell>
                 <TableCell className="text-sm">{e.brands?.name || "—"}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{e.franchisor || "—"}</TableCell>
                 <TableCell className="text-sm">{e.key_money != null ? `$${Number(e.key_money).toLocaleString("en-US")}` : "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{e.projected_opening_date ? format(new Date(e.projected_opening_date), "MMM d, yyyy") : "—"}</TableCell>
+                <TableCell className="text-sm">{e.development_fee != null ? `$${Number(e.development_fee).toLocaleString("en-US")}` : "—"}</TableCell>
+                <TableCell className="text-sm text-muted-foreground">{e.projected_start_date ? format(new Date(e.projected_start_date), "MMM d, yyyy") : "—"}</TableCell>
                 <TableCell>
                   <Badge variant="outline" className={`text-[10px] ${statusBadgeClasses(e.status)}`}>{e.status}</Badge>
                 </TableCell>
@@ -252,8 +263,9 @@ export default function Pipeline() {
           <div className="space-y-3">
             {editing?.converted_project_id && (
               <p className="text-xs text-muted-foreground bg-muted/50 rounded-md px-3 py-2">
-                Linked to a project — property, location, and brand are read-only here and reflect the project record.
-                Franchisor, dates, status, and notes are still pipeline-specific and editable.
+                Linked to a project — property, location, brand, and status are read-only here and reflect the project
+                record. Franchisor, key money, development fee, start date, and notes are still pipeline-specific and
+                editable.
               </p>
             )}
             <div className="space-y-1.5">
@@ -296,18 +308,25 @@ export default function Pipeline() {
                 <Input type="number" step="0.01" value={keyMoney} onChange={(e) => setKeyMoney(e.target.value)} placeholder="e.g. 50000" />
               </div>
               <div className="space-y-1.5">
-                <Label>Projected opening date</Label>
-                <Input type="date" value={openingDate} onChange={(e) => setOpeningDate(e.target.value)} />
+                <Label>Development fee</Label>
+                <Input type="number" step="0.01" value={developmentFee} onChange={(e) => setDevelopmentFee(e.target.value)} placeholder="e.g. 75000" />
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label>Projected start date</Label>
+              <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
               <Label>Status</Label>
-              <Select value={status} onValueChange={setStatus}>
+              <Select value={status} onValueChange={setStatus} disabled={!!editing?.converted_project_id}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                  {PROJECT_STATUSES.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
+              {editing?.converted_project_id && (
+                <p className="text-[11px] text-muted-foreground">Tracks this project's real status automatically — edit it on the project itself.</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label>Notes</Label>
