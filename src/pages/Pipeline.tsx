@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import { Plus, Pencil, Trash2, Link2 } from "lucide-react";
 
 const STATUSES = ["Franchise Signed", "Site Control", "PIP In Progress", "Financing", "Under Construction", "Converted to Project"];
+const FRANCHISORS = ["Hilton", "IHG", "Marriott", "Hyatt"];
 
 function statusBadgeClasses(status: string) {
   switch (status) {
@@ -279,7 +280,12 @@ export default function Pipeline() {
               </div>
               <div className="space-y-1.5">
                 <Label>Franchisor</Label>
-                <Input value={franchisor} onChange={(e) => setFranchisor(e.target.value)} placeholder="e.g. Marriott" />
+                <Select value={franchisor} onValueChange={setFranchisor}>
+                  <SelectTrigger><SelectValue placeholder="Select franchisor" /></SelectTrigger>
+                  <SelectContent>
+                    {FRANCHISORS.map((f) => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
