@@ -20,6 +20,7 @@ export interface CategorySeries {
   category: FinancialCategory;
   months: MonthlyValue[];
   budgetTotal: number;
+  budgetToDateTotal: number;
   actualTotal: number;
 }
 
@@ -69,8 +70,16 @@ export function useCompanyFinancials(year: number) {
           return { month: m, budget, actual: actualEntry?.amount ?? 0, is_projected: actualEntry?.is_projected ?? false };
         });
         const budgetTotal = months.reduce((s, m) => s + m.budget, 0);
+        // Comparing actuals (which only cover closed months) against a
+        // full 12-month budget understates performance for most of the
+        // year by construction — e.g. 8 months of real revenue always
+        // looks "behind" a full annual target, even on a month that's
+        // running exactly on plan. budgetToDateTotal sums budget only for
+        // the same months that have real (non-projected) actuals, so the
+        // comparison is apples-to-apples (found 2026-09-23).
+        const budgetToDateTotal = months.reduce((s, m) => s + (m.is_projected ? 0 : m.budget), 0);
         const actualTotal = months.reduce((s, m) => s + m.actual, 0);
-        return { category: cat, months, budgetTotal, actualTotal };
+        return { category: cat, months, budgetTotal, budgetToDateTotal, actualTotal };
       });
       setSeries(builtSeries);
     } catch (e: any) {
@@ -106,8 +115,10 @@ export function useCompanyFinancials(year: number) {
   });
 
   const revenueBudgetTotal = revenueSeries.reduce((s, c) => s + c.budgetTotal, 0);
+  const revenueBudgetToDateTotal = revenueSeries.reduce((s, c) => s + c.budgetToDateTotal, 0);
   const revenueActualTotal = revenueSeries.reduce((s, c) => s + c.actualTotal, 0);
   const expenseBudgetTotal = expenseSeries.reduce((s, c) => s + c.budgetTotal, 0);
+  const expenseBudgetToDateTotal = expenseSeries.reduce((s, c) => s + c.budgetToDateTotal, 0);
   const expenseActualTotal = expenseSeries.reduce((s, c) => s + c.actualTotal, 0);
 
   // "To-date" is deliberately restricted to closed (non-projected) months —
@@ -137,8 +148,14 @@ export function useCompanyFinancials(year: number) {
   return {
     loading, error, refetch: load,
     categories, series, revenueSeries, expenseSeries, monthlyTotals,
-    revenueBudgetTotal, revenueActualTotal, expenseBudgetTotal, expenseActualTotal,
-    netIncomeBudget: revenueBudgetTotal - expenseBudgetTotal,
+    revenueBudgetTotal, revenueBudgetToDateTotal, revenueActualTotal,
+    expenseBudgetTotal, expenseBudgetToDateTotal, expenseActualTotal,
+    // Full-year budget totals are kept too (for "here's what we're pacing
+    // toward" context), but net income vs. budget compares against the
+    // to-date figure — comparing partial-year actuals to a full annual
+    // target always looks artificially behind, regardless of how the
+    // year's actually going.
+    netIncomeBudget: revenueBudgetToDateTotal - expenseBudgetToDateTotal,
     netIncomeActual: revenueActualTotal - expenseActualTotal,
     toDateRevenue, toDateExpenses, toDateNetIncome, toDateEbitdaApprox, toDateNetMarginPct,
   };

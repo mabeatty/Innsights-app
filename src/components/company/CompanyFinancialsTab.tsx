@@ -50,7 +50,7 @@ export default function CompanyFinancialsTab() {
   const year = 2026;
   const {
     loading, error, categories, series, monthlyTotals,
-    revenueBudgetTotal, revenueActualTotal, expenseBudgetTotal, expenseActualTotal,
+    revenueBudgetToDateTotal, revenueActualTotal, expenseBudgetToDateTotal, expenseActualTotal,
     netIncomeBudget, netIncomeActual,
     toDateRevenue, toDateExpenses, toDateEbitdaApprox, toDateNetMarginPct,
   } = useCompanyFinancials(year);
@@ -112,20 +112,20 @@ export default function CompanyFinancialsTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard
           label="Revenue vs. budget"
-          value={fmtK(revenueActualTotal - revenueBudgetTotal)}
-          sub={`${fmtFull(revenueActualTotal)} actual of ${fmtFull(revenueBudgetTotal)}`}
-          negative={revenueActualTotal < revenueBudgetTotal}
+          value={fmtK(revenueActualTotal - revenueBudgetToDateTotal)}
+          sub={`${fmtFull(revenueActualTotal)} actual of ${fmtFull(revenueBudgetToDateTotal)} budgeted through closed months`}
+          negative={revenueActualTotal < revenueBudgetToDateTotal}
         />
         <KpiCard
           label="Expenses vs. budget"
-          value={fmtK(expenseActualTotal - expenseBudgetTotal)}
-          sub={`${fmtFull(expenseActualTotal)} actual of ${fmtFull(expenseBudgetTotal)}`}
-          negative={expenseActualTotal > expenseBudgetTotal}
+          value={fmtK(expenseActualTotal - expenseBudgetToDateTotal)}
+          sub={`${fmtFull(expenseActualTotal)} actual of ${fmtFull(expenseBudgetToDateTotal)} budgeted through closed months`}
+          negative={expenseActualTotal > expenseBudgetToDateTotal}
         />
         <KpiCard
           label="Net income vs. budget"
           value={fmtK(netIncomeActual - netIncomeBudget)}
-          sub={`${fmtFull(netIncomeActual)} actual vs. ${fmtFull(netIncomeBudget)} budgeted`}
+          sub={`${fmtFull(netIncomeActual)} actual vs. ${fmtFull(netIncomeBudget)} budgeted through closed months`}
           negative={netIncomeActual < netIncomeBudget}
         />
       </div>
@@ -142,20 +142,20 @@ export default function CompanyFinancialsTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">Category detail</h3>
-        <p className="text-xs text-muted-foreground mb-2">Full-year actual vs. budget by category — click a row for the monthly breakdown.</p>
+        <p className="text-xs text-muted-foreground mb-2">Actual vs. budget through closed months, by category — click a row for the monthly breakdown.</p>
         <div className="rounded-lg border overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-2 text-left">Category</th>
-                <th className="px-3 py-2 text-right">Budget</th>
+                <th className="px-3 py-2 text-right">Budget (to date)</th>
                 <th className="px-3 py-2 text-right">Actual</th>
                 <th className="px-3 py-2 text-right">Variance</th>
               </tr>
             </thead>
             <tbody>
               {series.map((s) => {
-                const variance = s.actualTotal - s.budgetTotal;
+                const variance = s.actualTotal - s.budgetToDateTotal;
                 const isBad = s.category.type === "revenue" ? variance < 0 : variance > 0;
                 const expanded = expandedCategoryId === s.category.id;
                 return (
@@ -170,7 +170,7 @@ export default function CompanyFinancialsTab() {
                           {s.category.name}
                         </span>
                       </td>
-                      <td className="px-3 py-2 text-right text-muted-foreground">{fmtFull(s.budgetTotal)}</td>
+                      <td className="px-3 py-2 text-right text-muted-foreground">{fmtFull(s.budgetToDateTotal)}</td>
                       <td className="px-3 py-2 text-right">{fmtFull(s.actualTotal)}</td>
                       <td className={cn("px-3 py-2 text-right", isBad ? "text-destructive" : "text-emerald-600 dark:text-emerald-500")}>
                         {variance >= 0 ? "+" : ""}{fmtFull(variance)}
