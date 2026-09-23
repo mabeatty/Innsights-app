@@ -70,15 +70,19 @@ export function useCompanyFinancials(year: number) {
           return { month: m, budget, actual: actualEntry?.amount ?? 0, is_projected: actualEntry?.is_projected ?? false };
         });
         const budgetTotal = months.reduce((s, m) => s + m.budget, 0);
-        // Comparing actuals (which only cover closed months) against a
-        // full 12-month budget understates performance for most of the
-        // year by construction — e.g. 8 months of real revenue always
-        // looks "behind" a full annual target, even on a month that's
-        // running exactly on plan. budgetToDateTotal sums budget only for
-        // the same months that have real (non-projected) actuals, so the
-        // comparison is apples-to-apples (found 2026-09-23).
         const budgetToDateTotal = months.reduce((s, m) => s + (m.is_projected ? 0 : m.budget), 0);
-        const actualTotal = months.reduce((s, m) => s + m.actual, 0);
+        // company_actuals stores a real dollar value in .amount even for
+        // months that haven't closed yet (a budget-copy placeholder, kept
+        // there so charts have continuity before a month goes live) —
+        // is_projected is what actually marks whether that value is real.
+        // Summing .actual without this filter silently counted every
+        // future month's placeholder as if it already happened, inflating
+        // every consumer of actualTotal (both KPI aggregates and the
+        // category detail table) by the full remainder of the year (found
+        // 2026-09-23 — the budget-side version of this exact bug was fixed
+        // already; this is the matching actual-side bug that was still
+        // there underneath it).
+        const actualTotal = months.reduce((s, m) => s + (m.is_projected ? 0 : m.actual), 0);
         return { category: cat, months, budgetTotal, budgetToDateTotal, actualTotal };
       });
       setSeries(builtSeries);
