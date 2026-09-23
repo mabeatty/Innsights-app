@@ -10,6 +10,12 @@ const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.round(Math.abs(n) / 1000)}K`;
 };
+// The per-month detail cells previously used fmtK too, which rounds to the
+// nearest $1,000 — any expense under ~$500 rounds down to "$0K", making a
+// real (if small) expense look like there's nothing there at all. Below
+// $1,000, show the actual dollar amount instead of a misleading rounded-to-
+// zero figure (found 2026-09-23).
+const fmtDetail = (n: number) => (Math.abs(n) < 1000 ? fmtFull(n) : fmtK(n));
 const fmtFull = (n: number) => {
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.round(Math.abs(n)).toLocaleString()}`;
@@ -245,8 +251,8 @@ export default function ExpensesTab() {
                             {monthDetail.map((m) => (
                               <div key={m.month} className="text-center">
                                 <p className="text-muted-foreground">{format(new Date(`${m.month}-01T00:00:00`), "MMM yy")}</p>
-                                <p>{m.isProjected || m.actual === 0 ? "—" : fmtK(m.actual)}</p>
-                                <p className="text-muted-foreground">{m.budget > 0 ? fmtK(m.budget) : "—"}</p>
+                                <p>{m.isProjected || m.actual === 0 ? "—" : fmtDetail(m.actual)}</p>
+                                <p className="text-muted-foreground">{m.budget > 0 ? fmtDetail(m.budget) : "—"}</p>
                               </div>
                             ))}
                           </div>
