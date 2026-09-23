@@ -21,6 +21,17 @@ import { PROJECT_STATUSES } from "@/lib/projectStatus";
 
 const FRANCHISORS = ["Hilton", "IHG", "Marriott", "Hyatt"];
 
+// Status sorts by pipeline-relevant construction progress, not
+// alphabetically — Under Construction first, On Hold last. Any status
+// outside this set (e.g. Prospecting, Open — not really applicable to a
+// signed-franchise pipeline entry) sorts after all four of these.
+const STATUS_SORT_ORDER: Record<string, number> = {
+  "Under Construction": 0,
+  "Pre-Construction": 1,
+  "Design": 2,
+  "On Hold": 3,
+};
+
 function KpiCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
     <div className="rounded-lg bg-muted/40 p-4">
@@ -210,7 +221,7 @@ export default function Pipeline() {
       case "key_money": return e.key_money ?? -Infinity;
       case "development_fee": return e.development_fee ?? -Infinity;
       case "projected_start_date": return e.projected_start_date ?? "";
-      case "status": return e.status?.toLowerCase() ?? "";
+      case "status": return STATUS_SORT_ORDER[e.status] ?? 999;
       default: return "";
     }
   };
