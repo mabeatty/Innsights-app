@@ -78,7 +78,12 @@ export default function ExpensesTab() {
   });
 
   const totalActual = financialsYear1.toDateExpenses + financialsYear2.toDateExpenses;
-  const totalBudget2026 = financialsYear1.expenseBudgetTotal;
+  // Same bug as Company Financials, independently reimplemented here:
+  // comparing to-date actuals against a full 12-month budget always looks
+  // artificially behind. expenseBudgetToDateTotal (added to the hook
+  // alongside this fix) sums budget only for months with real closed
+  // actuals, so this is now apples-to-apples (found 2026-09-23).
+  const totalBudget2026 = financialsYear1.expenseBudgetToDateTotal;
   const totalActualToDate2026 = financialsYear1.toDateExpenses;
   const variance = totalActualToDate2026 - totalBudget2026;
 
@@ -90,10 +95,15 @@ export default function ExpensesTab() {
     months.forEach((month) => {
       const entry = monthMap.get(month);
       const actual = entry && !entry.isProjected ? entry.actual : 0;
-      const budget = hasExpenseDataForYear(month) ? (entry?.budget ?? 0) : 0;
+      // Budget only counts toward the to-date total for months this
+      // category actually has closed actuals for — not just any month in
+      // the target year, which is what silently reintroduced the
+      // full-year-vs-partial-year mismatch here even after the hook fix.
+      const isClosedForYear = hasExpenseDataForYear(month) && entry && !entry.isProjected;
+      const budget = isClosedForYear ? (entry?.budget ?? 0) : 0;
       actualTotal += actual;
       budgetTotal += budget;
-      monthDetail.push({ month, actual, budget, isProjected: entry?.isProjected ?? false });
+      monthDetail.push({ month, actual, budget: hasExpenseDataForYear(month) ? (entry?.budget ?? 0) : 0, isProjected: entry?.isProjected ?? false });
     });
     return { category: cat, actualTotal, budgetTotal, monthDetail };
   }).sort((a, b) => b.actualTotal - a.actualTotal);
@@ -110,7 +120,7 @@ export default function ExpensesTab() {
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard label="Total expenses to date" value={fmtFull(totalActual)} sub="Closed months, both years" />
-        <KpiCard label={`${calendarYear1} budget`} value={fmtFull(totalBudget2026)} sub="Full-year reforecast" />
+        <KpiCard label={`${calendarYear1} budget`} value={fmtFull(totalBudget2026)} sub="Through closed months" />
         <KpiCard
           label={`${calendarYear1} variance (to date)`}
           value={`${variance >= 0 ? "+" : ""}${fmtFull(variance)}`}
@@ -207,7 +217,7 @@ export default function ExpensesTab() {
               <tr>
                 <th className="px-3 py-2 text-left">Category</th>
                 <th className="px-3 py-2 text-right">Actual to date</th>
-                <th className="px-3 py-2 text-right">{calendarYear1} budget</th>
+                <th className="px-3 py-2 text-right">{calendarYear1} budget (to date)</th>
               </tr>
             </thead>
             <tbody>
