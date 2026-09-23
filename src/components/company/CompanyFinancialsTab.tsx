@@ -13,6 +13,13 @@ const fmtFull = (n: number) => {
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.round(Math.abs(n)).toLocaleString()}`;
 };
+// fmtK rounds to the nearest $1,000 — fine for chart axis labels, but a
+// real value (a KPI variance figure, a month's actual/budget in the detail
+// breakdown) under ~$500 rounds down to "$0K", reading as if there's
+// nothing there. Same fix as ExpensesTab, applied everywhere this module
+// shows an actual data value rather than an axis label (found 2026-09-23,
+// isolated to ExpensesTab at first — this tab has the identical pattern).
+const fmtDetail = (n: number) => (Math.abs(n) < 1000 ? fmtFull(n) : fmtK(n));
 
 function KpiCard({ label, value, sub, negative }: { label: string; value: string; sub: string; negative?: boolean }) {
   return (
@@ -112,19 +119,19 @@ export default function CompanyFinancialsTab() {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard
           label="Revenue vs. budget"
-          value={fmtK(revenueActualTotal - revenueBudgetToDateTotal)}
+          value={fmtDetail(revenueActualTotal - revenueBudgetToDateTotal)}
           sub={`${fmtFull(revenueActualTotal)} actual of ${fmtFull(revenueBudgetToDateTotal)} budgeted through closed months`}
           negative={revenueActualTotal < revenueBudgetToDateTotal}
         />
         <KpiCard
           label="Expenses vs. budget"
-          value={fmtK(expenseActualTotal - expenseBudgetToDateTotal)}
+          value={fmtDetail(expenseActualTotal - expenseBudgetToDateTotal)}
           sub={`${fmtFull(expenseActualTotal)} actual of ${fmtFull(expenseBudgetToDateTotal)} budgeted through closed months`}
           negative={expenseActualTotal > expenseBudgetToDateTotal}
         />
         <KpiCard
           label="Net income vs. budget"
-          value={fmtK(netIncomeActual - netIncomeBudget)}
+          value={fmtDetail(netIncomeActual - netIncomeBudget)}
           sub={`${fmtFull(netIncomeActual)} actual vs. ${fmtFull(netIncomeBudget)} budgeted through closed months`}
           negative={netIncomeActual < netIncomeBudget}
         />
@@ -183,8 +190,8 @@ export default function CompanyFinancialsTab() {
                             {s.months.map((m) => (
                               <div key={m.month} className="text-center">
                                 <p className="text-muted-foreground">{format(new Date(`${m.month}T00:00:00`), "MMM")}</p>
-                                <p>{m.is_projected ? "—" : fmtK(m.actual)}</p>
-                                <p className="text-muted-foreground">{fmtK(m.budget)}</p>
+                                <p>{m.is_projected ? "—" : fmtDetail(m.actual)}</p>
+                                <p className="text-muted-foreground">{fmtDetail(m.budget)}</p>
                               </div>
                             ))}
                           </div>
