@@ -2,6 +2,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format } from "date-fns";
 import { useDevFees } from "@/hooks/useDevFees";
 import { useCompanyRevenue } from "@/hooks/useCompanyRevenue";
+import { useCompanyFinancials } from "@/hooks/useCompanyFinancials";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
 import { makeStackedBarShape } from "@/lib/stackedBarShape";
 
@@ -42,9 +43,10 @@ export default function RevenueSummaryTab() {
   const devFees = useDevFees();
   const constructionFees = useCompanyRevenue("construction_fee");
   const consultingFees = useCompanyRevenue("consulting_fee");
+  const financials = useCompanyFinancials(2026);
 
-  const loading = devFees.loading || constructionFees.loading || consultingFees.loading;
-  const error = devFees.error || constructionFees.error || consultingFees.error;
+  const loading = devFees.loading || constructionFees.loading || consultingFees.loading || financials.loading;
+  const error = devFees.error || constructionFees.error || consultingFees.error || financials.error;
 
   if (loading) return <p className="text-sm text-muted-foreground py-8">Loading revenue summary…</p>;
   if (error) return <p className="text-sm text-destructive py-8">{error}</p>;
@@ -107,12 +109,17 @@ export default function RevenueSummaryTab() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
         <KpiCard label="Total revenue" value={fmtFull(totalRevenue)} sub="All fee types, 24-month calendar" />
         <KpiCard label="Development Fees" value={fmtFull(totalDev)} />
         <KpiCard label="Owner's Rep" value={fmtFull(totalConstruction)} />
         <KpiCard label="Consulting Fees" value={fmtFull(totalConsulting)} />
         <KpiCard label="Total forecast" value={fmtFull(totalRevenueForecast)} sub="Development Fees only" />
+        <KpiCard
+          label="Revenue vs. budget"
+          value={fmtFull(financials.toDateRevenue - financials.revenueBudgetToDateTotal)}
+          sub={`${fmtFull(financials.toDateRevenue)} actual of ${fmtFull(financials.revenueBudgetToDateTotal)} budgeted through closed months`}
+        />
       </div>
 
       <div>
