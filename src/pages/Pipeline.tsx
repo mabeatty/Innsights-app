@@ -229,7 +229,16 @@ export default function Pipeline() {
   const sortedEntries = [...entries].sort((a, b) => {
     const va = getSortValue(a, sortColumn);
     const vb = getSortValue(b, sortColumn);
-    const cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+    let cmp = typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb));
+    if (cmp === 0 && sortColumn === "status") {
+      // Within the same status, rows with a construction start date come
+      // first (earliest on top), rows with no date last — and this
+      // secondary ordering flips along with the primary direction below,
+      // rather than staying fixed while the status groups themselves reverse.
+      const da = a.projected_start_date ?? "9999-99-99";
+      const db = b.projected_start_date ?? "9999-99-99";
+      cmp = da.localeCompare(db);
+    }
     return sortAsc ? cmp : -cmp;
   });
 
