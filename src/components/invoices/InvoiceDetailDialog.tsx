@@ -550,6 +550,12 @@ export default function InvoiceDetailDialog({ invoiceId, onClose, onChange }: Pr
                   <div><span className="text-muted-foreground">Invoice date:</span><br/>{invoice.invoice_date ? format(new Date(invoice.invoice_date), "MMM d, yyyy") : "—"}</div>
                   <div><span className="text-muted-foreground">Amount:</span><br/>{formatCurrency(invoice.amount)}</div>
                   <div><span className="text-muted-foreground">Budget line:</span><br/>{invoice.budget_line_item || "—"}</div>
+                  {invoice.status === "Paid" && (
+                    <>
+                      <div><span className="text-muted-foreground">Check #:</span><br/>{invoice.check_number || "—"}</div>
+                      <div><span className="text-muted-foreground">Paid date:</span><br/>{invoice.paid_date ? format(new Date(invoice.paid_date), "MMM d, yyyy") : "—"}</div>
+                    </>
+                  )}
                   <div className="col-span-2"><span className="text-muted-foreground">Submitted by:</span><br/>{invoice.submitted_by_email || "—"} · {format(new Date(invoice.submitted_at), "MMM d, yyyy")}</div>
                   {invoice.notes && (
                     <div className="col-span-2">

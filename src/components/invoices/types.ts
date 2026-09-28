@@ -5,7 +5,8 @@ export type InvoiceStatus =
   | "Rejected"
   | "More Info Requested"
   | "Partially Approved"
-  | "Routed for Payment";
+  | "Routed for Payment"
+  | "Paid";
 
 export const INVOICE_STATUSES: InvoiceStatus[] = [
   "Pending",
@@ -15,6 +16,7 @@ export const INVOICE_STATUSES: InvoiceStatus[] = [
   "Rejected",
   "More Info Requested",
   "Routed for Payment",
+  "Paid",
 ];
 
 export const INVOICE_TYPES = [
@@ -105,6 +107,8 @@ export interface Invoice {
   tax_exempt: boolean;
   tax_exempt_by: string | null;
   tax_exempt_at: string | null;
+  check_number: string | null;
+  paid_date: string | null;
   pdf_url: string | null;
   pdf_path: string | null;
   drive_url: string | null;
@@ -137,6 +141,8 @@ export function statusBadgeClasses(status: string): string {
       return "bg-purple-100 text-purple-800 border-purple-200";
     case "Routed for Payment":
       return "bg-slate-200 text-slate-800 border-slate-300";
+    case "Paid":
+      return "bg-emerald-100 text-emerald-800 border-emerald-300";
     case "Pending — Needs Review":
       return "bg-amber-100 text-amber-900 border-amber-200";
     default:
