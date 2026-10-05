@@ -9,11 +9,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Plus, Search, Mail, Stamp } from "lucide-react";
+import { Plus, Search, Mail, Stamp, Files } from "lucide-react";
 import { format } from "date-fns";
 import { Invoice, statusBadgeClasses, formatCurrency } from "./types";
 import { computeLienWaiverStatus, lienWaiverStatusBadgeClasses, lienWaiverStatusLabel, LienWaiverStatus } from "./LienWaiverPanel";
 import UploadInvoiceModal from "./UploadInvoiceModal";
+import BatchUploadModal from "./BatchUploadModal";
 import InvoiceDetailDialog from "./InvoiceDetailDialog";
 import { formatProjectLabel } from "@/lib/projectLabel";
 
@@ -33,6 +34,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
   const [loading, setLoading] = useState(true);
 
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [batchOpen, setBatchOpen] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
@@ -145,7 +147,10 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
         <DatePickerInput value={from} onChange={setFrom} placeholder="From" />
         <DatePickerInput value={to} onChange={setTo} placeholder="To" />
         {canUpload && (
-          <Button onClick={() => setUploadOpen(true)} className="gap-1.5 h-9 ml-auto"><Plus className="h-3.5 w-3.5" />Upload Invoice</Button>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" onClick={() => setBatchOpen(true)} className="gap-1.5 h-9"><Files className="h-3.5 w-3.5" />Upload Multiple</Button>
+            <Button onClick={() => setUploadOpen(true)} className="gap-1.5 h-9"><Plus className="h-3.5 w-3.5" />Upload Invoice</Button>
+          </div>
         )}
       </div>
 
@@ -208,6 +213,7 @@ export default function InvoicesTable({ projectId, hideProjectColumn }: Props) {
       </div>
 
       <UploadInvoiceModal open={uploadOpen} onOpenChange={setUploadOpen} defaultProjectId={projectId} onCreated={load} />
+      <BatchUploadModal open={batchOpen} onOpenChange={setBatchOpen} defaultProjectId={projectId} onCreated={load} />
       <InvoiceDetailDialog invoiceId={selectedId} onClose={() => setSelectedId(null)} onChange={load} />
     </div>
   );

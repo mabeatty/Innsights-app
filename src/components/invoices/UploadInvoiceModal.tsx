@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,14 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import DatePickerInput from "@/components/ui/date-picker-input";
-import { Sparkles, Upload, Loader2, Plus, Trash2 } from "lucide-react";
+import { Sparkles, Upload, Loader2, Plus, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { APPROVER_ROLES } from "./types";
-import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal, naturalDivisionSort } from "../budget/types";
+import { ALL_DIVISIONS, TRANSACTION_TYPES, fmtDecimal } from "../budget/types";
 import { createNotifications } from "@/lib/notify";
-import { parseAIAExcel, type AIADetailRow } from "./aiaExcel";
+import type { AIADetailRow } from "./aiaExcel";
+import { buildBudgetMatcher, extractInvoiceFile, fileKind, type ExtractionResult } from "./invoiceExtraction";
 import DriveFolderPicker from "./DriveFolderPicker";
 import { format } from "date-fns";
 import { formatProjectLabel } from "@/lib/projectLabel";
@@ -71,14 +72,34 @@ function identifyProject(
   return confident ? { match: hit } : { suggestion: hit };
 }
 
+export interface BatchSaveInfo {
+  invoiceId: string;
+  vendor: string;
+  amount: number;
+  approverIds: string[];
+}
+
+// Batch mode: the batch uploader drives this same form one file at a time, so
+// there is exactly one save path (and one set of validation/approval/budget
+// side effects) for single and batch uploads alike.
+export interface BatchModeProps {
+  resetKey: string;                       // changes per file → form resets and re-applies
+  file: File;
+  prefetched: ExtractionResult | null;    // background extraction result (null = enter manually)
+  position: { index: number; total: number; hasNext: boolean };
+  onSkip: () => void;
+  onSaved: (info: BatchSaveInfo) => void; // replaces per-invoice notifications + modal close
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   defaultProjectId?: string | null;
   onCreated?: () => void;
+  batch?: BatchModeProps;
 }
 
-export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectId, onCreated }: Props) {
+export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectId, onCreated, batch }: Props) {
   const { user, organizationId } = useAuth();
 
   const [file, setFile] = useState<File | null>(null);
@@ -111,7 +132,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     setDueDate(undefined); setDueDateTouched(false);
     setTransactionType("Vendor Invoice"); setSupportingDocsLink(""); setNotes("");
     setLineItems([newLine()]); setExtracted({}); setDocType(null); setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); setProjectId(defaultProjectId || "");
-  } }, [open, defaultProjectId]);
+    // Was never reset: a tax-exempt flag set on one upload silently carried
+    // into the next one (this modal stays mounted between opens, and batch
+    // mode reuses it for every file).
+    setTaxExempt(false);
+  } }, [open, defaultProjectId, batch?.resetKey]);
 
   useEffect(() => {
     if (!open) return;
@@ -170,58 +195,6 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     return () => { cancelled = true; };
   }, [open, vendor, projectId, invoiceDate, dueDateTouched]);
 
-  // Fetch a project's budget categories and return both the category labels (to
-  // send to the edge function) and a resolver that maps an AI category/description
-  // to a budget division number. Used at extraction time AND when the project
-  // changes afterwards, so matching works regardless of upload order.
-  const buildBudgetMatcher = useCallback(async (pid: string) => {
-    const catToDivision = new Map<string, string>();
-    const budgetCats: { number: string; name: string }[] = [];
-    const categories: string[] = [];
-    if (pid) {
-      const { data: budget } = await supabase
-        .from("project_budget")
-        .select("division_number, division_name")
-        .eq("project_id", pid)
-        .order("division_number");
-      const sortedBudget = ((budget ?? []) as { division_number: string; division_name: string }[])
-        .sort((a, b) => naturalDivisionSort(a.division_number, b.division_number));
-      for (const r of sortedBudget) {
-        const label = `${r.division_number} — ${r.division_name}`;
-        categories.push(label);
-        catToDivision.set(label.toLowerCase().trim(), r.division_number);
-        budgetCats.push({ number: r.division_number, name: r.division_name });
-      }
-    }
-    const tokenize = (s: string) =>
-      s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter((w) => w.length > 2);
-    const fuzzy = (textRaw: string): string => {
-      const text = (textRaw || "").toLowerCase().trim();
-      if (!text) return "";
-      if (catToDivision.has(text)) return catToDivision.get(text)!;
-      const numHit = text.match(/^(\d{1,2})\b/);
-      if (numHit) {
-        const padded = numHit[1].padStart(2, "0");
-        const c = budgetCats.find((b) => b.number === padded);
-        if (c) return c.number;
-      }
-      const words = tokenize(text);
-      let best = ""; let bestScore = 0;
-      for (const c of budgetCats) {
-        const name = c.name.toLowerCase();
-        const score = words.filter((w) => name.includes(w)).length;
-        if (score > bestScore) { bestScore = score; best = c.number; }
-      }
-      return bestScore > 0 ? best : "";
-    };
-    const resolve = (category: string | null | undefined, description: string): string => {
-      const cat = typeof category === "string" ? category : "";
-      const fromCat = cat ? (catToDivision.get(cat.toLowerCase().trim()) || fuzzy(cat)) : "";
-      return fromCat || fuzzy(description || "");
-    };
-    return { categories, resolve };
-  }, []);
-
   // Re-run category matching whenever the project changes (e.g. a PDF was dropped
   // before a project was chosen, or the user switches projects after extraction).
   useEffect(() => {
@@ -236,107 +209,79 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       );
     })();
     return () => { cancelled = true; };
-  }, [projectId, buildBudgetMatcher]);
+  }, [projectId]);
 
   const totalAmount = lineItems.reduce((s, li) => s + li.amount, 0);
   const totalRetainage = lineItems.reduce((s, li) => s + li.retainageAmount, 0);
   const totalNet = totalAmount - totalRetainage;
 
-  // Deterministically parse an AIA workbook (.xlsx with a Detail tab + 702/703).
-  const handleExcel = async (f: File) => {
-    setExtracting(true);
-    try {
-      const buf = await f.arrayBuffer();
-      const res = parseAIAExcel(buf);
-      if (!res.isAIA) {
+  // Apply an extraction result (from the shared extractor) to the form. Used
+  // for a file picked in this form AND for results the batch uploader already
+  // computed in the background. `pid` is passed explicitly because in batch
+  // mode this runs in the same tick as the reset, before projectId state settles.
+  const applyExtraction = async (f: File, result: ExtractionResult, pid: string) => {
+    switch (result.kind) {
+      case "excel-unrecognized":
         toast.message("Not a recognized AIA Excel (needs a Detail or 703 sheet) — fill in fields manually");
         return;
-      }
-      setExcelFallback(res.source === "703");
-      const flagged: Record<string, boolean> = {};
-      if (res.vendor_name) { setVendor(res.vendor_name); flagged.vendor = true; }
-      if (res.invoice_number) { setInvoiceNumber(String(res.invoice_number)); flagged.invoice_number = true; }
-      if (res.invoice_date) {
-        const d = new Date(res.invoice_date);
-        if (!isNaN(d.getTime())) { setInvoiceDate(d); flagged.invoice_date = true; }
-      }
-      setDocType("aia_pay_app");
-      setTransactionType("Contractor Pay Application");
-      setAiaDetailRows(res.detail_rows);
+      case "excel-error":
+        console.warn("[invoice] Excel parse error:", result.message);
+        toast.message("Couldn't parse this Excel file — fill in fields manually");
+        return;
+      case "pdf-error":
+        console.warn("[invoice] AI extraction unavailable:", result.message);
+        toast.error(result.message ? `AI extraction failed: ${result.message}` : "AI extraction unavailable — please fill in fields manually");
+        return;
+      case "unsupported":
+        return;
+      case "excel": {
+        const res = result.res;
+        setExcelFallback(res.source === "703");
+        const flagged: Record<string, boolean> = {};
+        if (res.vendor_name) { setVendor(res.vendor_name); flagged.vendor = true; }
+        if (res.invoice_number) { setInvoiceNumber(String(res.invoice_number)); flagged.invoice_number = true; }
+        if (res.invoice_date) {
+          const d = new Date(res.invoice_date);
+          if (!isNaN(d.getTime())) { setInvoiceDate(d); flagged.invoice_date = true; }
+        }
+        setDocType("aia_pay_app");
+        setTransactionType("Contractor Pay Application");
+        setAiaDetailRows(res.detail_rows);
 
-      // Auto-identify the project from the file name + 702 PROJECT field, unless
-      // the modal is already scoped to a project. A confident, unique match is
-      // selected (which also triggers the category re-matcher); otherwise we
-      // surface a one-click suggestion.
-      if (!defaultProjectId) {
-        const searchProjects = projects.map((p) => ({
-          id: p.id, name: p.name, search: `${p.name} ${projectEntities[p.id] ?? ""}`,
-        }));
-        const { match, suggestion } = identifyProject([f.name, res.project_name ?? ""], searchProjects);
-        if (match) { setProjectId(match.id); setSuggestedProject(null); }
-        else if (suggestion) { setSuggestedProject(suggestion); }
-        console.log("[aia] project match:", { file: f.name, projectField: res.project_name, match, suggestion });
-      }
+        // Auto-identify the project from the file name + 702 PROJECT field, unless
+        // the modal is already scoped to a project (always the case in batch mode).
+        if (!defaultProjectId) {
+          const searchProjects = projects.map((p) => ({
+            id: p.id, name: p.name, search: `${p.name} ${projectEntities[p.id] ?? ""}`,
+          }));
+          const { match, suggestion } = identifyProject([f.name, res.project_name ?? ""], searchProjects);
+          if (match) { setProjectId(match.id); setSuggestedProject(null); }
+          else if (suggestion) { setSuggestedProject(suggestion); }
+          console.log("[aia] project match:", { file: f.name, projectField: res.project_name, match, suggestion });
+        }
 
-      if (res.line_items.length > 0) {
-        // The dropdown value IS the division number, which matches the AIA item
-        // number — so set it directly for a guaranteed auto-select (no fuzzy
-        // matching, and no need for a project to be selected first). Not flagged
-        // fromAI, so the project-change re-matcher leaves these exact matches alone.
-        lineCounter = 0;
-        const rows: LineItem[] = res.line_items.map((li) => ({
-          ...newLine(),
-          division: li.aia_item,
-          amount: li.amount,
-          retainageAmount: li.retainage || 0,
-          description: li.description,
-        }));
-        setLineItems(rows);
-        flagged.amount = true;
-      }
-      setExtracted(flagged);
-      toast.success(`AIA Excel parsed — ${res.line_items.length} divisions for draw ${res.application_number ?? ""} (net ${fmtDecimal(res.totals.net)})`);
-    } catch (e: any) {
-      console.warn("[invoice] Excel parse error:", e?.message);
-      toast.message("Couldn't parse this Excel file — fill in fields manually");
-    } finally {
-      setExtracting(false);
-    }
-  };
-
-  const handleFile = async (f: File) => {
-    setFile(f);
-    setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); // reset; set again only for AIA Excel
-    const name = f.name.toLowerCase();
-    if (name.endsWith(".xlsx") || f.type.includes("spreadsheetml")) {
-      // Prefer deterministic Excel parsing when the GC provides the AIA as .xlsx.
-      await handleExcel(f);
-      return;
-    }
-    if (f.type !== "application/pdf") return;
-    setExtracting(true);
-    try {
-      const b64 = await new Promise<string>((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve((reader.result as string).split(",")[1] || "");
-        reader.onerror = reject;
-        reader.readAsDataURL(f);
-      });
-      // Send the selected project's budget categories so Claude can map each
-      // line item to a real category. If no project is selected yet, categories
-      // is empty and matching is deferred until the user picks one.
-      const { categories, resolve: resolveDivision } = await buildBudgetMatcher(projectId);
-
-      const { data, error: invokeError } = await supabase.functions.invoke("extract-invoice-claude", {
-        body: { pdfBase64: b64, mimeType: "application/pdf", categories },
-      });
-      if (invokeError) {
-        console.warn("[invoice] AI extraction invoke error:", invokeError.message);
-        toast.error(`AI extraction failed: ${invokeError.message}`);
+        if (res.line_items.length > 0) {
+          // The dropdown value IS the division number, which matches the AIA item
+          // number — so set it directly for a guaranteed auto-select. Not flagged
+          // fromAI, so the project-change re-matcher leaves these exact matches alone.
+          lineCounter = 0;
+          const rows: LineItem[] = res.line_items.map((li) => ({
+            ...newLine(),
+            division: li.aia_item,
+            amount: li.amount,
+            retainageAmount: li.retainage || 0,
+            description: li.description,
+          }));
+          setLineItems(rows);
+          flagged.amount = true;
+        }
+        setExtracted(flagged);
+        toast.success(`AIA Excel parsed — ${res.line_items.length} divisions for draw ${res.application_number ?? ""} (net ${fmtDecimal(res.totals.net)})`);
         return;
       }
-      if (data?.ok && data.fields) {
-        const fields = data.fields;
+      case "pdf": {
+        const fields = result.fields;
+        const { resolve: resolveDivision } = await buildBudgetMatcher(pid);
         const flagged: Record<string, boolean> = {};
         if (fields.vendor_name) { setVendor(fields.vendor_name); flagged.vendor = true; }
         if (fields.invoice_number) { setInvoiceNumber(String(fields.invoice_number)); flagged.invoice_number = true; }
@@ -374,21 +319,68 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
           toast.success("AI extracted header fields — please add line items and categories");
         }
         setExtracted(flagged);
-      } else {
-        // Extraction failed for some reason — don't block the upload, but
-        // show the real reason so this is diagnosable instead of a silent
-        // "nothing happened."
-        console.warn("[invoice] AI extraction unavailable:", data?.error);
-        toast.error(data?.error ? `AI extraction failed: ${data.error}` : "AI extraction unavailable — please fill in fields manually");
+        return;
       }
+    }
+  };
+
+  const handleFile = async (f: File) => {
+    setFile(f);
+    setAiaDetailRows([]); setExcelFallback(false); setSuggestedProject(null); // reset; set again only for AIA Excel
+    if (fileKind(f) === "unsupported") return;
+    setExtracting(true);
+    try {
+      // Send the selected project's budget categories so Claude can map each
+      // line item to a real category. If no project is selected yet, categories
+      // is empty and matching is deferred until the user picks one.
+      const { categories } = await buildBudgetMatcher(projectId);
+      const result = await extractInvoiceFile(f, categories);
+      await applyExtraction(f, result, projectId);
     } catch (e: any) {
-      // Network/unexpected failure: still let the user continue manually.
-      console.warn("[invoice] AI extraction error:", e?.message);
+      console.warn("[invoice] extraction error:", e?.message);
       toast.error(e?.message ? `AI extraction failed: ${e.message}` : "AI extraction unavailable — please fill in fields manually");
     } finally {
       setExtracting(false);
     }
   };
+
+  // Batch mode: when the batch uploader hands this form a file, load it and
+  // apply the extraction it already ran in the background. Declared after the
+  // reset effect so the reset happens first for each new file.
+  const appliedBatchKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (!open || !batch) { appliedBatchKey.current = null; return; }
+    if (appliedBatchKey.current === batch.resetKey) return;
+    appliedBatchKey.current = batch.resetKey;
+    setFile(batch.file);
+    if (batch.prefetched) void applyExtraction(batch.file, batch.prefetched, defaultProjectId || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, batch?.resetKey]);
+
+  // Flag a likely duplicate before submitting. Same vendor on this project with
+  // the same invoice number — or, with no invoice number, the same date and
+  // amount. Advisory only: recurring same-amount charges are legitimate.
+  const [duplicate, setDuplicate] = useState<{ vendor_name: string | null; invoice_number: string | null; amount: number | null; status: string; invoice_date: string | null } | null>(null);
+  useEffect(() => {
+    const invNo = invoiceNumber.trim();
+    const dateStr = invoiceDate ? format(invoiceDate, "yyyy-MM-dd") : null;
+    if (!open || !projectId || !vendor.trim() || (!invNo && !(dateStr && totalAmount > 0))) {
+      setDuplicate(null);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      let q = supabase
+        .from("invoices")
+        .select("vendor_name, invoice_number, amount, status, invoice_date")
+        .eq("project_id", projectId)
+        .ilike("vendor_name", vendor.trim().replace(/[%_]/g, "\\$&"));
+      q = invNo ? q.eq("invoice_number", invNo) : q.eq("invoice_date", dateStr!).eq("amount", totalAmount);
+      const { data } = await q.limit(1);
+      if (!cancelled) setDuplicate(data && data.length ? (data[0] as any) : null);
+    }, 500);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [open, projectId, vendor, invoiceNumber, invoiceDate, totalAmount]);
 
   const handleSave = async () => {
     if (!file) return toast.error("Please upload a PDF.");
@@ -398,7 +390,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
     if (!organizationId || !user) return toast.error("Not authenticated.");
     setSaving(true);
     try {
-      const path = `${projectId}/${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      const path = `${projectId}/${Date.now()}-${crypto.randomUUID().slice(0, 8)}-${file.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
       const up = await supabase.storage.from("invoices").upload(path, file, { contentType: file.type, upsert: false });
       if (up.error) throw up.error;
       const { data: signed } = await supabase.storage.from("invoices").createSignedUrl(path, 60 * 60 * 24 * 30);
@@ -511,20 +503,33 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         performed_by_name: user.email, notes: `Vendor: ${vendor}${invoiceNumber ? ` · ${invoiceNumber}` : ""}`,
       });
 
-      if (hasApprovers) {
-        const projName = projects.find((p) => p.id === projectId)?.name || "a project";
-        await createNotifications(APPROVER_ROLES.map((r) => ({
-          user_id: approverMap[r.key] ?? undefined, invoice_id: inv!.id,
-          title: "New invoice to approve",
-          body: `${vendor} · ${fmtDecimal(totalAmount)} on ${projName} needs your approval.`,
-        })));
-      }
+      if (batch) {
+        // Batch: the uploader collapses notifications into one per approver
+        // for the whole batch, and decides what to show next.
+        batch.onSaved({
+          invoiceId: inv!.id,
+          vendor,
+          amount: totalAmount,
+          approverIds: hasApprovers
+            ? Array.from(new Set(APPROVER_ROLES.map((r) => approverMap[r.key]).filter((v): v is string => !!v)))
+            : [],
+        });
+      } else {
+        if (hasApprovers) {
+          const projName = projects.find((p) => p.id === projectId)?.name || "a project";
+          await createNotifications(APPROVER_ROLES.map((r) => ({
+            user_id: approverMap[r.key] ?? undefined, invoice_id: inv!.id,
+            title: "New invoice to approve",
+            body: `${vendor} · ${fmtDecimal(totalAmount)} on ${projName} needs your approval.`,
+          })));
+        }
 
-      toast.success(hasApprovers
-        ? "Invoice submitted — routed to approvers and added to the project's transactions."
-        : "Invoice submitted. Assign approvers in Project Info to start the approval chain.");
-      onOpenChange(false);
-      onCreated?.();
+        toast.success(hasApprovers
+          ? "Invoice submitted — routed to approvers and added to the project's transactions."
+          : "Invoice submitted. Assign approvers in Project Info to start the approval chain.");
+        onOpenChange(false);
+        onCreated?.();
+      }
     } catch (e: any) {
       toast.error(e?.message || "Failed to save invoice.");
     } finally {
@@ -539,7 +544,8 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
       <DialogContent className="max-w-[57.6rem] w-[95vw] max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            Upload Invoice
+            {batch ? `Invoice ${batch.position.index} of ${batch.position.total}` : "Upload Invoice"}
+            {batch && <span className="text-sm font-normal text-muted-foreground truncate max-w-[24rem]">{batch.file.name}</span>}
             {docType && (
               <Badge variant="outline" className="text-[10px] gap-1 bg-blue-50 text-blue-700 border-blue-200">
                 <Sparkles className="h-2.5 w-2.5" />
@@ -550,6 +556,16 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {duplicate && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 dark:bg-amber-300/10 px-3 py-2 text-xs">
+              <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+              <p>
+                <span className="font-semibold">Possible duplicate:</span>{" "}
+                {duplicate.vendor_name}{duplicate.invoice_number ? ` #${duplicate.invoice_number}` : ""} · {fmtDecimal(Number(duplicate.amount ?? 0))} is
+                already on this project ({duplicate.status}{duplicate.invoice_date ? `, ${duplicate.invoice_date}` : ""}). Check before submitting.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="flex items-center">Vendor Name * {extracted.vendor && <AIBadge />}</Label>
@@ -718,8 +734,11 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
-          <Button onClick={handleSave} disabled={saving}>{saving ? "Saving…" : "Submit Invoice"}</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>{batch ? "Back to queue" : "Cancel"}</Button>
+          {batch && <Button variant="outline" onClick={batch.onSkip} disabled={saving}>Skip</Button>}
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? "Saving…" : batch ? (batch.position.hasNext ? "Submit & Next" : "Submit & Finish") : "Submit Invoice"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
