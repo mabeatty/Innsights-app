@@ -79,6 +79,30 @@ export function projectSpan(segments: PhaseSegment[]): { start: Date; end: Date;
   };
 }
 
+export type FinishSort = "earliest" | "latest";
+
+// When a project finishes: the end of its bar, or its target opening if it has no
+// phase dates. Null when it has neither.
+export function projectFinish(segments: PhaseSegment[], opening: Date | null): Date | null {
+  return projectSpan(segments)?.end ?? opening;
+}
+
+// Sort by finish date. Projects with no finish date always go last (in either
+// direction), alphabetically; ties break on name so the order is stable.
+export function sortByFinish<T extends { name: string }>(items: T[], dir: FinishSort, finishOf: (item: T) => Date | null): T[] {
+  const keyed = items.map((item) => ({ item, finish: finishOf(item) }));
+  keyed.sort((a, b) => {
+    if (a.finish && b.finish) {
+      const diff = a.finish.getTime() - b.finish.getTime();
+      if (diff !== 0) return dir === "earliest" ? diff : -diff;
+    } else if (a.finish || b.finish) {
+      return a.finish ? -1 : 1;
+    }
+    return a.item.name.localeCompare(b.item.name);
+  });
+  return keyed.map((k) => k.item);
+}
+
 // Visible range: every date on the chart plus today, padded so bars aren't flush
 // against the edges, and never narrower than a year.
 export function computeRange(dates: Date[], today: Date): { start: Date; end: Date } {

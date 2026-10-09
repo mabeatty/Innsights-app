@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  buildPhaseSegments, buildTicks, buildYears, computeRange, makeScale, parseDay, projectSpan, resolvePxPerMonth,
+  buildPhaseSegments, buildTicks, buildYears, computeRange, makeScale, parseDay, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish,
   type PhaseRow,
 } from "./masterCalendar";
 
@@ -139,5 +139,31 @@ describe("resolvePxPerMonth", () => {
   });
   it("never shrinks below the preset in a narrow container (it scrolls instead)", () => {
     expect(resolvePxPerMonth(64, range, 500, 220)).toBe(64);
+  });
+});
+
+describe("projectFinish / sortByFinish", () => {
+  const segs = (end: string) => buildPhaseSegments([row("p", 4, "2026-01-01", end)]).get("p")!;
+  const proj = (name: string, finish: string | null) => ({ name, finish: finish ? d(finish) : null });
+  const names = (xs: { name: string }[]) => xs.map((x) => x.name);
+  const items = [proj("Late", "2028-03-15"), proj("None B", null), proj("Early", "2027-02-05"), proj("Mid", "2027-07-31"), proj("None A", null)];
+
+  it("finishes at the end of the bar, falling back to target opening, else null", () => {
+    expect(projectFinish(segs("2027-07-31"), d("2027-04-30"))).toEqual(d("2027-07-31")); // bar wins over opening
+    expect(projectFinish([], d("2027-04-30"))).toEqual(d("2027-04-30"));
+    expect(projectFinish([], null)).toBeNull();
+  });
+  it("earliest first, with undated projects last", () => {
+    expect(names(sortByFinish(items, "earliest", (i) => i.finish))).toEqual(["Early", "Mid", "Late", "None A", "None B"]);
+  });
+  it("latest first, but undated projects STILL last", () => {
+    expect(names(sortByFinish(items, "latest", (i) => i.finish))).toEqual(["Late", "Mid", "Early", "None A", "None B"]);
+  });
+  it("breaks ties on name and doesn't mutate its input", () => {
+    const tied = [proj("B", "2027-01-01"), proj("A", "2027-01-01")];
+    const copy = [...tied];
+    expect(names(sortByFinish(tied, "earliest", (i) => i.finish))).toEqual(["A", "B"]);
+    expect(names(sortByFinish(tied, "latest", (i) => i.finish))).toEqual(["A", "B"]);
+    expect(tied).toEqual(copy);
   });
 });

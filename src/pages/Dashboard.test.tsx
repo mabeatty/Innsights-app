@@ -90,15 +90,16 @@ describe("Dashboard tabs", () => {
     expect(screen.getByTestId("where").textContent).toBe("");
   });
 
-  it("shares collapse state between the two tabs", async () => {
+  it("lists every project on the calendar in one flat list, regardless of the summary's collapsed sections", async () => {
     renderDash();
     await screen.findByRole("link", { name: "Keystone" });
-    fireEvent.click(screen.getByText("Design (1)")); // collapse on the summary tab
+    fireEvent.click(screen.getByText("Design (1)")); // collapse a section on the summary tab
     expect(screen.queryByRole("link", { name: "Keystone" })).not.toBeInTheDocument();
     clickTab(/Master Calendar/);
     await screen.findByTestId("calendar-scroller");
-    expect(screen.queryByTestId("row-key")).not.toBeInTheDocument(); // still collapsed there
+    expect(screen.getByTestId("row-key")).toBeInTheDocument(); // calendar has no sections to collapse
     expect(screen.getByTestId("row-ash")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-ash")).getByText("Under Construction")).toBeInTheDocument(); // status shown inline
   });
 
   it("shows the same empty state on both tabs when there are no projects", async () => {

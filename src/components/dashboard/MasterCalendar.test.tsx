@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import MasterCalendar, { type CalendarTypeGroup } from "./MasterCalendar";
+import MasterCalendar, { type CalendarProject } from "./MasterCalendar";
 import { buildPhaseSegments, computeRange, makeScale, parseDay, ZOOM_PX_PER_MONTH } from "@/lib/masterCalendar";
 
 beforeAll(() => {
@@ -10,56 +10,58 @@ beforeAll(() => {
 
 const TODAY = parseDay("2026-10-05");
 
-// Keystone's real schedule: phases overlap, so two lanes are needed.
+// Keystone's real schedule: four overlapping phases, still just one bar.
 const keystonePhases = buildPhaseSegments([
   { project_id: "keystone", phase_number: 1, start_date: "2025-10-01", end_date: "2026-02-07" },
   { project_id: "keystone", phase_number: 2, start_date: "2026-02-01", end_date: "2026-12-31" },
   { project_id: "keystone", phase_number: 3, start_date: "2026-10-01", end_date: "2027-04-15" },
   { project_id: "keystone", phase_number: 4, start_date: "2027-02-15", end_date: "2028-01-31" },
 ]).get("keystone")!;
+const ashlandPhases = buildPhaseSegments([
+  { project_id: "ashland", phase_number: 4, start_date: "2025-10-20", end_date: "2027-02-05" },
+]).get("ashland")!;
 
-const groups: CalendarTypeGroup[] = [
-  {
-    label: "Development",
-    total: 3,
-    statusGroups: [
-      { status: "Under Construction", items: [{ id: "ashland", name: "Ashland", _phases: buildPhaseSegments([
-        { project_id: "ashland", phase_number: 4, start_date: "2025-10-20", end_date: "2027-02-05" },
-      ]).get("ashland")!, _completionDate: "2027-04-30" }] },
-      { status: "Design", items: [
-        { id: "keystone", name: "Keystone", _phases: keystonePhases, _completionDate: null },
-        { id: "carmel", name: "Carmel", _phases: [], _completionDate: null },
-      ] },
-    ],
-  },
+// Deliberately NOT in finish order.
+const projects: CalendarProject[] = [
+  { id: "keystone", name: "Keystone", _status: "Design", _phases: keystonePhases, _completionDate: null },        // finishes 2028-01-31
+  { id: "carmel", name: "Carmel", _status: "Design", _phases: [], _completionDate: null },                         // no dates
+  { id: "ashland", name: "Ashland", _status: "Under Construction", _phases: ashlandPhases, _completionDate: "2027-04-30" }, // finishes 2027-02-05
+  { id: "opener", name: "Opener", _status: "Pre-Construction", _phases: [], _completionDate: "2027-06-30" },       // opening only
 ];
 
-function renderCal(extra: Partial<React.ComponentProps<typeof MasterCalendar>> = {}) {
-  const props = {
-    typeGroups: groups, collapsedTypes: new Set<string>(), collapsedStatuses: new Set<string>(),
-    onToggleType: vi.fn(), onToggleStatus: vi.fn(), today: TODAY, ...extra,
-  };
-  render(<MemoryRouter><MasterCalendar {...props} /></MemoryRouter>);
-  return props;
-}
+const renderCal = (p: CalendarProject[] = projects) => render(<MemoryRouter><MasterCalendar projects={p} today={TODAY} /></MemoryRouter>);
+const order = () => screen.getAllByTestId(/^row-/).map((el) => el.getAttribute("data-testid")!.replace("row-", ""));
 
 // Same scale the component derives, so expected positions aren't hard-coded.
-const allDates = [
-  ...keystonePhases.flatMap((s) => [s.start, s.end]),
-  parseDay("2025-10-20"), parseDay("2027-02-05"), parseDay("2027-04-30"),
-];
-const scaleFor = (zoom: keyof typeof ZOOM_PX_PER_MONTH = "fit") =>
-  makeScale(computeRange(allDates, TODAY), ZOOM_PX_PER_MONTH[zoom]);
+const allDates = [...keystonePhases.flatMap((s) => [s.start, s.end]), parseDay("2025-10-20"), parseDay("2027-02-05"), parseDay("2027-04-30"), parseDay("2027-06-30")];
+const scaleFor = (zoom: keyof typeof ZOOM_PX_PER_MONTH = "fit") => makeScale(computeRange(allDates, TODAY), ZOOM_PX_PER_MONTH[zoom]);
 const px = (el: HTMLElement, prop: "left" | "width" | "top") => parseFloat(el.style[prop]);
 
 describe("MasterCalendar", () => {
-  it("lists every project, grouped like the dashboard, with links to each project's schedule", () => {
+  it("is one flat list: no type or status sections", () => {
     renderCal();
-    expect(screen.getByText("Development (3)")).toBeInTheDocument();
-    expect(screen.getByText("Under Construction (1)")).toBeInTheDocument();
-    expect(screen.getByText("Design (2)")).toBeInTheDocument();
+    expect(screen.queryByText(/\(\d+\)/)).not.toBeInTheDocument(); // the old "Design (2)" style headers
+    expect(order()).toHaveLength(4);
+  });
+
+  it("sorts earliest finish first by default, with undated projects last", () => {
+    renderCal();
+    expect(screen.getByRole("radio", { name: "Earliest finish" })).toHaveAttribute("aria-checked", "true");
+    // Ashland 2027-02 (bar end) → Opener 2027-06 (opening, no phases) → Keystone 2028-01 → Carmel (no dates)
+    expect(order()).toEqual(["ashland", "opener", "keystone", "carmel"]);
+  });
+
+  it("flips to latest finish first, but undated projects still go last", () => {
+    renderCal();
+    fireEvent.click(screen.getByRole("radio", { name: "Latest finish" }));
+    expect(order()).toEqual(["keystone", "opener", "ashland", "carmel"]);
+  });
+
+  it("links each project to its schedule and shows its status under the name", () => {
+    renderCal();
     expect(screen.getByRole("link", { name: "Ashland" })).toHaveAttribute("href", "/project/ashland?tab=schedule");
-    expect(screen.getByRole("link", { name: "Carmel" })).toHaveAttribute("href", "/project/carmel?tab=schedule");
+    expect(within(screen.getByTestId("row-ashland")).getByText("Under Construction")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-opener")).getByText("Pre-Construction")).toBeInTheDocument();
   });
 
   it("draws ONE bar per project, from its earliest phase start to its latest phase end", () => {
@@ -68,14 +70,13 @@ describe("MasterCalendar", () => {
     const ash = screen.getByTestId("bar-ashland");
     expect(px(ash, "left")).toBeCloseTo(s.x(parseDay("2025-10-20")), 0);
     expect(px(ash, "width")).toBeCloseTo(s.x(parseDay("2027-02-05")) - s.x(parseDay("2025-10-20")), 0);
-    // Keystone has four overlapping phases but still just one bar, spanning all of them
     const key = screen.getAllByTestId(/^bar-keystone/);
     expect(key).toHaveLength(1);
     expect(px(key[0], "left")).toBeCloseTo(s.x(parseDay("2025-10-01")), 0);
     expect(px(key[0], "width")).toBeCloseTo(s.x(parseDay("2028-01-31")) - s.x(parseDay("2025-10-01")), 0);
   });
 
-  it("keeps every project row the same height (no per-phase lanes)", () => {
+  it("keeps every project row the same height", () => {
     renderCal();
     const rowH = (id: string) => screen.getByTestId(`row-${id}`).style.height;
     expect(rowH("keystone")).toBe(rowH("ashland"));
@@ -84,28 +85,22 @@ describe("MasterCalendar", () => {
 
   it("marks target opening with a diamond at its date", () => {
     renderCal();
-    const diamond = screen.getByTestId("opening-ashland");
-    expect(px(diamond, "left") + 6).toBeCloseTo(scaleFor().x(parseDay("2027-04-30")), 0);
+    expect(px(screen.getByTestId("opening-ashland"), "left") + 6).toBeCloseTo(scaleFor().x(parseDay("2027-04-30")), 0);
     expect(screen.queryByTestId("opening-keystone")).not.toBeInTheDocument();
   });
 
-  it("shows projects with no dates honestly instead of dropping them, and reports coverage", () => {
+  it("shows undated projects honestly instead of dropping them, and reports coverage", () => {
     renderCal();
-    const carmelRow = screen.getByTestId("row-carmel");
-    expect(within(carmelRow).getByText("No schedule dates yet")).toBeInTheDocument();
-    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 3 projects have schedule dates");
+    expect(within(screen.getByTestId("row-carmel")).getByText("No schedule dates yet")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-opener")).getByText("No phase dates yet")).toBeInTheDocument(); // opening only
+    expect(screen.getByTestId("opening-opener")).toBeInTheDocument();
+    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 4 projects have schedule dates");
   });
 
   it("says so when no project has dates at all", () => {
-    renderCal({ typeGroups: [{ label: "Development", total: 1, statusGroups: [{ status: "Design", items: [{ id: "a", name: "A", _phases: [] }] }] }] });
+    renderCal([{ id: "a", name: "A", _phases: [] }]);
     expect(screen.getByText(/No project has schedule dates yet/)).toBeInTheDocument();
     expect(screen.getByTestId("coverage")).toHaveTextContent("0 of 1 projects");
-  });
-
-  it("labels an opening-only project 'No phase dates yet'", () => {
-    renderCal({ typeGroups: [{ label: "Development", total: 1, statusGroups: [{ status: "Design", items: [{ id: "a", name: "A", _phases: [], _completionDate: "2027-06-30" }] }] }] });
-    expect(screen.getByText("No phase dates yet")).toBeInTheDocument();
-    expect(screen.getByTestId("opening-a")).toBeInTheDocument();
   });
 
   it("draws a today line at today's position", () => {
@@ -132,34 +127,20 @@ describe("MasterCalendar", () => {
     const contentWidth = () => parseFloat((screen.getByTestId("calendar-scroller").firstElementChild as HTMLElement).style.width);
     try {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 3000 });
-      const { unmount } = render(<MemoryRouter><MasterCalendar typeGroups={groups} collapsedTypes={new Set()} collapsedStatuses={new Set()} onToggleType={vi.fn()} onToggleStatus={vi.fn()} today={TODAY} /></MemoryRouter>);
-      expect(Math.abs(contentWidth() - 3000)).toBeLessThanOrEqual(2); // fills the container exactly
+      const { unmount } = renderCal();
+      expect(Math.abs(contentWidth() - 3000)).toBeLessThanOrEqual(2);
       unmount();
       Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 400 });
-      render(<MemoryRouter><MasterCalendar typeGroups={groups} collapsedTypes={new Set()} collapsedStatuses={new Set()} onToggleType={vi.fn()} onToggleStatus={vi.fn()} today={TODAY} /></MemoryRouter>);
+      renderCal();
       fireEvent.click(screen.getByRole("radio", { name: "Quarters" }));
-      expect(contentWidth()).toBeGreaterThan(400 + 220); // the zoom preset wins when the container is narrower (it scrolls)
+      expect(contentWidth()).toBeGreaterThan(400 + 220);
     } finally {
       if (real) Object.defineProperty(HTMLElement.prototype, "clientWidth", real); else delete (HTMLElement.prototype as any).clientWidth;
     }
   });
 
-  it("collapse toggles are driven by the dashboard's shared state", () => {
-    const props = renderCal();
-    fireEvent.click(screen.getByText("Design (2)"));
-    expect(props.onToggleStatus).toHaveBeenCalledWith("Development-Design");
-    fireEvent.click(screen.getByText("Development (3)"));
-    expect(props.onToggleType).toHaveBeenCalledWith("Development");
-  });
-
-  it("hides rows for collapsed groups", () => {
-    renderCal({ collapsedStatuses: new Set(["Development-Design"]) });
-    expect(screen.queryByTestId("row-keystone")).not.toBeInTheDocument();
-    expect(screen.getByTestId("row-ashland")).toBeInTheDocument();
-  });
-
   it("renders an empty state with no projects", () => {
-    renderCal({ typeGroups: [] });
+    renderCal([]);
     expect(screen.getByText(/No projects to show/)).toBeInTheDocument();
   });
 });

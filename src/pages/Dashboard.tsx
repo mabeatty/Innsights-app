@@ -198,6 +198,10 @@ export default function Dashboard() {
     return { label: typeGroup.label, statusGroups, total: typeProjects.length };
   }).filter((g) => g.total > 0);
 
+  // The calendar is one flat list (no type/status sections), covering the same
+  // set of projects the summary shows.
+  const calendarProjects = typeGroups.flatMap((g) => g.statusGroups.flatMap((st) => st.items));
+
   const emptyState = (
     <div className="text-center py-16 text-muted-foreground">
       <p>No projects yet.</p>
@@ -349,13 +353,7 @@ export default function Dashboard() {
           ) : projects.length === 0 ? (
             emptyState
           ) : (
-            <MasterCalendar
-              typeGroups={typeGroups}
-              collapsedTypes={collapsedTypes}
-              collapsedStatuses={collapsedStatuses}
-              onToggleType={toggleType}
-              onToggleStatus={toggleStatus}
-            />
+            <MasterCalendar projects={calendarProjects} />
           )}
         </TabsContent>
       </Tabs>

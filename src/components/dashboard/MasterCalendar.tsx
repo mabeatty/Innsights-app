@@ -1,43 +1,32 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
-import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
   ZOOM_PX_PER_MONTH, buildTicks, buildYears,
-  computeRange, makeScale, parseDay, projectSpan, resolvePxPerMonth, type PhaseSegment, type Zoom,
+  computeRange, makeScale, parseDay, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish, type FinishSort, type PhaseSegment, type Zoom,
 } from "@/lib/masterCalendar";
 
 // Structural types so the dashboard's richer ProjectRow satisfies these as-is.
 export interface CalendarProject {
   id: string;
   name: string;
+  _status?: string | null;
   _phases?: PhaseSegment[];
   _completionDate?: string | null; // target opening, yyyy-MM-dd
 }
-export interface CalendarTypeGroup {
-  label: string;
-  total: number;
-  statusGroups: { status: string; items: CalendarProject[] }[];
-}
 
 interface Props {
-  typeGroups: CalendarTypeGroup[];
-  collapsedTypes: Set<string>;
-  collapsedStatuses: Set<string>;
-  onToggleType: (label: string) => void;
-  onToggleStatus: (key: string) => void;
+  projects: CalendarProject[];
   today?: Date; // injectable for tests
 }
 
 const NAME_W = 220;
 const ROW_H = 40;
 const BAR_H = 20;
-const TYPE_H = 32;
-const STATUS_H = 26;
 const HEADER_YEAR_H = 24;
 const HEADER_TICK_H = 24;
 
@@ -49,7 +38,7 @@ function segmentTooltip(seg: PhaseSegment): string {
   return `${dayLabel(seg.start)} → ${dayLabel(seg.end)}`;
 }
 
-export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedStatuses, onToggleType, onToggleStatus, today: todayProp }: Props) {
+export default function MasterCalendar({ projects: projectsProp, today: todayProp }: Props) {
   const todayRef = useRef(todayProp ?? new Date());
   const today = todayProp ?? todayRef.current;
   const [zoom, setZoom] = useState<Zoom>("fit") // overview first: the whole portfolio timeline in one screen;
@@ -67,9 +56,11 @@ export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedSt
     return () => ro.disconnect();
   }, [scroller]);
 
+  const [sort, setSort] = useState<FinishSort>("earliest");
+  // One flat list, ordered by when each project finishes.
   const projects = useMemo(
-    () => typeGroups.flatMap((g) => g.statusGroups.flatMap((s) => s.items)),
-    [typeGroups],
+    () => sortByFinish(projectsProp, sort, (p) => projectFinish(p._phases ?? [], p._completionDate ? parseDay(p._completionDate) : null)),
+    [projectsProp, sort],
   );
   const datedCount = projects.filter((p) => (p._phases?.length ?? 0) > 0).length;
 
@@ -124,6 +115,10 @@ export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedSt
           <div className="ml-auto flex items-center gap-3">
             <span data-testid="coverage">{datedCount} of {projects.length} projects have schedule dates</span>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => scrollToToday(true)}>Today</Button>
+            <ToggleGroup type="single" size="sm" variant="outline" value={sort} onValueChange={(v) => { if (v) setSort(v as FinishSort); }}>
+              <ToggleGroupItem value="earliest" className="h-7 px-2.5 text-xs">Earliest finish</ToggleGroupItem>
+              <ToggleGroupItem value="latest" className="h-7 px-2.5 text-xs">Latest finish</ToggleGroupItem>
+            </ToggleGroup>
             <ToggleGroup type="single" size="sm" variant="outline" value={zoom} onValueChange={(v) => { if (v) setZoom(v as Zoom); }}>
               <ToggleGroupItem value="months" className="h-7 px-2.5 text-xs">Months</ToggleGroupItem>
               <ToggleGroupItem value="quarters" className="h-7 px-2.5 text-xs">Quarters</ToggleGroupItem>
@@ -182,103 +177,67 @@ export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedSt
                 ))}
               </div>
 
-              {typeGroups.map((tg) => {
-                const typeCollapsed = collapsedTypes.has(tg.label);
+              {projects.map((p) => {
+                const rowH = ROW_H;
+                const span = projectSpan(p._phases ?? []);
+                const opening = p._completionDate ? parseDay(p._completionDate) : null;
+                const hasPhases = span !== null;
                 return (
-                  <div key={tg.label}>
-                    <div
-                      className="relative flex cursor-pointer select-none border-b bg-sidebar-accent"
-                      style={{ height: TYPE_H, width: contentW }}
-                      onClick={() => onToggleType(tg.label)}
-                    >
-                      <div className="sticky left-0 z-20 flex items-center gap-2 px-3">
-                        <ChevronRight className={cn("h-3.5 w-3.5 text-sidebar-accent-foreground transition-transform duration-200", !typeCollapsed && "rotate-90")} />
-                        <span className="text-xs font-bold uppercase tracking-wider text-sidebar-accent-foreground">{tg.label} ({tg.total})</span>
-                      </div>
+                  <div key={p.id} className="group relative flex border-b" style={{ height: rowH, width: contentW }} data-testid={`row-${p.id}`}>
+                    <div className="sticky left-0 z-20 flex shrink-0 flex-col justify-center border-r bg-card px-3 group-hover:bg-muted" style={{ width: NAME_W }}>
+                      <Link to={`/project/${p.id}?tab=schedule`} className="truncate text-sm font-medium text-primary hover:underline">
+                        {p.name}
+                      </Link>
+                      {p._status && <span className="truncate text-[10px] leading-tight text-muted-foreground">{p._status}</span>}
                     </div>
-
-                    {!typeCollapsed && tg.statusGroups.map((sg) => {
-                      const statusKey = `${tg.label}-${sg.status}`;
-                      const statusCollapsed = collapsedStatuses.has(statusKey);
-                      return (
-                        <div key={statusKey}>
-                          <div
-                            className="relative flex cursor-pointer select-none border-b bg-muted"
-                            style={{ height: STATUS_H, width: contentW }}
-                            onClick={() => onToggleStatus(statusKey)}
-                          >
-                            <div className="sticky left-0 z-20 flex items-center gap-2 px-6">
-                              <ChevronRight className={cn("h-3 w-3 text-muted-foreground transition-transform duration-200", !statusCollapsed && "rotate-90")} />
-                              <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{sg.status} ({sg.items.length})</span>
-                            </div>
-                          </div>
-
-                          {!statusCollapsed && sg.items.map((p) => {
-                            const rowH = ROW_H;
-                            const span = projectSpan(p._phases ?? []);
-                            const opening = p._completionDate ? parseDay(p._completionDate) : null;
-                            const hasPhases = span !== null;
-                            return (
-                              <div key={p.id} className="group relative flex border-b" style={{ height: rowH, width: contentW }} data-testid={`row-${p.id}`}>
-                                <div className="sticky left-0 z-20 flex shrink-0 items-center border-r bg-card px-3 group-hover:bg-muted" style={{ width: NAME_W }}>
-                                  <Link to={`/project/${p.id}?tab=schedule`} className="truncate text-sm font-medium text-primary hover:underline">
-                                    {p.name}
-                                  </Link>
-                                </div>
-                                <div className="relative shrink-0 group-hover:bg-muted/40" style={{ width: scale.width }}>
-                                  {!hasPhases && (
-                                    <div className="sticky z-[1] flex h-full w-max items-center text-xs italic text-muted-foreground" style={{ left: NAME_W + 12 }}>
-                                      {opening ? "No phase dates yet" : "No schedule dates yet"}
-                                    </div>
-                                  )}
-                                  {span && (() => {
-                                    const left = scale.x(span.start);
-                                    const width = Math.max(scale.x(span.end) - left, 8);
-                                    return (
-                                      <Tooltip>
-                                        <TooltipTrigger asChild>
-                                          <div
-                                            data-testid={`bar-${p.id}`}
-                                            className="absolute flex items-center rounded-sm bg-blue-600"
-                                            style={{ left, width, height: BAR_H, top: (rowH - BAR_H) / 2, opacity: span.partial ? 0.55 : 1 }}
-                                          >
-                                            {width >= 150 && (
-                                              // Sticks to the visible left edge while the bar scrolls under the
-                                              // project column, so the label stays readable; it can't leave the bar.
-                                              <span className="sticky truncate px-2 text-[10px] font-medium text-white" style={{ left: NAME_W + 2, maxWidth: "100%" }}>
-                                                {format(span.start, "MMM yyyy")} – {format(span.end, "MMM yyyy")}
-                                              </span>
-                                            )}
-                                          </div>
-                                        </TooltipTrigger>
-                                        <TooltipContent>
-                                          <p className="text-xs font-medium">{p.name}: {dayLabel(span.start)} → {dayLabel(span.end)}</p>
-                                          {(p._phases ?? []).map((seg) => (
-                                            <p key={seg.phase} className="text-xs">{seg.name}: {segmentTooltip(seg)}</p>
-                                          ))}
-                                        </TooltipContent>
-                                      </Tooltip>
-                                    );
-                                  })()}
-                                  {opening && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div
-                                          data-testid={`opening-${p.id}`}
-                                          className="absolute z-[5] h-3 w-3 rotate-45 bg-foreground ring-2 ring-card"
-                                          style={{ left: scale.x(opening) - 6, top: rowH / 2 - 6 }}
-                                        />
-                                      </TooltipTrigger>
-                                      <TooltipContent><p className="text-xs">Target opening: {dayLabel(opening)}</p></TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                    <div className="relative shrink-0 group-hover:bg-muted/40" style={{ width: scale.width }}>
+                      {!hasPhases && (
+                        <div className="sticky z-[1] flex h-full w-max items-center text-xs italic text-muted-foreground" style={{ left: NAME_W + 12 }}>
+                          {opening ? "No phase dates yet" : "No schedule dates yet"}
                         </div>
-                      );
-                    })}
+                      )}
+                      {span && (() => {
+                        const left = scale.x(span.start);
+                        const width = Math.max(scale.x(span.end) - left, 8);
+                        return (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <div
+                                data-testid={`bar-${p.id}`}
+                                className="absolute flex items-center rounded-sm bg-blue-600"
+                                style={{ left, width, height: BAR_H, top: (rowH - BAR_H) / 2, opacity: span.partial ? 0.55 : 1 }}
+                              >
+                                {width >= 150 && (
+                                  // Sticks to the visible left edge while the bar scrolls under the
+                                  // project column, so the label stays readable; it can't leave the bar.
+                                  <span className="sticky truncate px-2 text-[10px] font-medium text-white" style={{ left: NAME_W + 2, maxWidth: "100%" }}>
+                                    {format(span.start, "MMM yyyy")} – {format(span.end, "MMM yyyy")}
+                                  </span>
+                                )}
+                              </div>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs font-medium">{p.name}: {dayLabel(span.start)} → {dayLabel(span.end)}</p>
+                              {(p._phases ?? []).map((seg) => (
+                                <p key={seg.phase} className="text-xs">{seg.name}: {segmentTooltip(seg)}</p>
+                              ))}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })()}
+                      {opening && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div
+                              data-testid={`opening-${p.id}`}
+                              className="absolute z-[5] h-3 w-3 rotate-45 bg-foreground ring-2 ring-card"
+                              style={{ left: scale.x(opening) - 6, top: rowH / 2 - 6 }}
+                            />
+                          </TooltipTrigger>
+                          <TooltipContent><p className="text-xs">Target opening: {dayLabel(opening)}</p></TooltipContent>
+                        </Tooltip>
+                      )}
+                    </div>
                   </div>
                 );
               })}
