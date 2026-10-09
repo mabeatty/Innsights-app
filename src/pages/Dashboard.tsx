@@ -20,6 +20,7 @@ interface ProjectRow {
   project_type: string;
   show_on_calendar?: boolean; // false = hidden from the Master Calendar (still on the summary)
   brands: { name: string } | null;
+  secondary_brand?: { name: string } | null; // dual-brand projects
   _status?: string;
   _constructionStart?: string | null;
   _completionDate?: string | null;
@@ -100,7 +101,7 @@ export default function Dashboard() {
       const [{ data: projData }, { data: infoData }, phaseRows, budgetData, txnData] = await Promise.all([
         supabase
           .from("projects")
-          .select("id, name, updated_at, project_type, show_on_calendar, brands!projects_brand_id_fkey(name)")
+          .select("id, name, updated_at, project_type, show_on_calendar, brands!projects_brand_id_fkey(name), secondary_brand:brands!projects_secondary_brand_id_fkey(name)")
           .order("updated_at", { ascending: false }),
         supabase
           .from("project_info")
@@ -201,7 +202,17 @@ export default function Dashboard() {
 
   // Every project eligible for the calendar (same set as the summary); the ones
   // switched off via show_on_calendar are left off what's drawn.
-  const calendarCandidates = typeGroups.flatMap((g) => g.statusGroups.flatMap((st) => st.items));
+  // Development projects are tagged "Dev"; Asset Management (renovation) projects are "PIP".
+  const KIND_BY_GROUP: Record<string, "Dev" | "PIP"> = { Development: "Dev", "Asset Management": "PIP" };
+  const calendarCandidates = typeGroups.flatMap((g) =>
+    g.statusGroups.flatMap((st) =>
+      st.items.map((p) => ({
+        ...p,
+        _kind: KIND_BY_GROUP[g.label] ?? null,
+        _brand: [p.brands?.name, p.secondary_brand?.name].filter(Boolean).join(" / ") || null,
+      })),
+    ),
+  );
   const calendarProjects = calendarCandidates.filter((p) => p.show_on_calendar !== false);
   const canManageCalendar = !isConsultant && accessLevel !== "view"; // same rule as editing a project
 

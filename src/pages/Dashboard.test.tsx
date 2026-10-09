@@ -11,8 +11,10 @@ beforeAll(() => {
 // Chainable query-builder fake: awaiting any chain yields the table's rows.
 const tables: Record<string, any[]> = {
   projects: [
-    { id: "ash", name: "Ashland", updated_at: "2026-09-01T00:00:00Z", project_type: "Development", brands: null },
-    { id: "key", name: "Keystone", updated_at: "2026-09-02T00:00:00Z", project_type: "Development", brands: null },
+    { id: "ash", name: "Ashland", updated_at: "2026-09-01T00:00:00Z", project_type: "Development", brands: { name: "Home2 Suites" } },
+    { id: "key", name: "Keystone", updated_at: "2026-09-02T00:00:00Z", project_type: "Development", brands: { name: "Hilton Garden Inn" }, secondary_brand: { name: "Tapestry" } },
+    // a renovation (PIP) project
+    { id: "pip", name: "Dayton", updated_at: "2026-09-04T00:00:00Z", project_type: "Asset Management", brands: { name: "SpringHill Suites" } },
     // switched off for the calendar: must still show on the summary
     { id: "hid", name: "Hidden Hotel", updated_at: "2026-09-03T00:00:00Z", project_type: "Development", brands: null, show_on_calendar: false },
   ],
@@ -20,6 +22,7 @@ const tables: Record<string, any[]> = {
     { project_id: "ash", project_status: "Under Construction", project_type: "New Construction", target_opening_date: "2027-04-30" },
     { project_id: "key", project_status: "Design", project_type: "New Construction", target_opening_date: null },
     { project_id: "hid", project_status: "Design", project_type: "New Construction", target_opening_date: null },
+    { project_id: "pip", project_status: "Under Construction", project_type: "Renovation", target_opening_date: null },
   ],
   schedule_phases: [
     { project_id: "ash", phase_number: 3, phase_name: "Pre-Construction", sub_phase_number: "3.1", start_date: "2025-07-01", end_date: "2026-03-31" },
@@ -119,7 +122,7 @@ describe("Dashboard tabs", () => {
     await screen.findByTestId("calendar-scroller");
     expect(screen.getByTestId("row-key")).toBeInTheDocument(); // calendar has no sections to collapse
     expect(screen.getByTestId("row-ash")).toBeInTheDocument();
-    expect(within(screen.getByTestId("row-ash")).getByText("Under Construction")).toBeInTheDocument(); // status shown inline
+    expect(within(screen.getByTestId("row-ash")).getByText("Home2 Suites · Under Construction")).toBeInTheDocument(); // brand + status shown inline
   });
 
   it("leaves projects switched off (show_on_calendar = false) off the calendar, but keeps them on the summary", async () => {
@@ -130,7 +133,7 @@ describe("Dashboard tabs", () => {
     expect(screen.queryByTestId("row-hid")).not.toBeInTheDocument();
     expect(screen.getByTestId("row-ash")).toBeInTheDocument();
     expect(screen.getByTestId("row-key")).toBeInTheDocument(); // flag absent (undefined) = shown
-    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 2 projects have construction dates");
+    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 3 projects have construction dates");
     clickTab(/Project Summary/);
     expect(await screen.findByRole("link", { name: "Hidden Hotel" })).toBeInTheDocument(); // still there
   });
@@ -180,6 +183,17 @@ describe("Dashboard tabs", () => {
         (AUTH as any).accessLevel = "edit";
       }
     });
+  });
+
+  it("labels each calendar row with its brand and a Dev / PIP tag", async () => {
+    renderDash("/dashboard?tab=calendar");
+    const ash = await screen.findByTestId("row-ash");
+    expect(within(ash).getByText("Dev")).toBeInTheDocument();
+    expect(within(ash).getByText("Home2 Suites · Under Construction")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-key")).getByText("Hilton Garden Inn / Tapestry · Design")).toBeInTheDocument(); // dual brand
+    const pip = screen.getByTestId("row-pip");
+    expect(within(pip).getByText("PIP")).toBeInTheDocument(); // Asset Management = PIP
+    expect(within(pip).getByText("SpringHill Suites · Under Construction")).toBeInTheDocument();
   });
 
   it("shows the same empty state on both tabs when there are no projects", async () => {

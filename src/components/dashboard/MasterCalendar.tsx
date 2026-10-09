@@ -16,6 +16,8 @@ export interface CalendarProject {
   id: string;
   name: string;
   _status?: string | null;
+  _kind?: "Dev" | "PIP" | null; // Development vs PIP (renovation) project
+  _brand?: string | null; // hotel brand, e.g. "Home2 Suites" (dual brands joined with " / ")
   _phases?: PhaseSegment[];
   _completionDate?: string | null; // target opening, yyyy-MM-dd
 }
@@ -26,7 +28,9 @@ interface Props {
   visibility?: CalendarVisibility; // omit to hide the show/hide control (e.g. view-only users)
 }
 
-const NAME_W = 220;
+// Wide enough for "Hilton Garden Inn · Under Construction" on the second line.
+export const NAME_COLUMN_WIDTH = 260;
+const NAME_W = NAME_COLUMN_WIDTH;
 const ROW_H = 40;
 const BAR_H = 20;
 const HEADER_YEAR_H = 24;
@@ -197,10 +201,28 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
                 return (
                   <div key={p.id} className="group relative flex border-b" style={{ height: rowH, width: contentW }} data-testid={`row-${p.id}`}>
                     <div className="sticky left-0 z-20 flex shrink-0 flex-col justify-center border-r bg-card px-3 group-hover:bg-muted" style={{ width: NAME_W }}>
-                      <Link to={`/project/${p.id}?tab=schedule`} className="truncate text-sm font-medium text-primary hover:underline">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <Link to={`/project/${p.id}?tab=schedule`} className="truncate text-sm font-medium text-primary hover:underline">
                         {p.name}
                       </Link>
-                      {p._status && <span className="truncate text-[10px] leading-tight text-muted-foreground">{p._status}</span>}
+                      {p._kind && (
+                          <span
+                            className={cn(
+                              "shrink-0 rounded px-1 py-px text-[9px] font-semibold leading-none",
+                              p._kind === "Dev"
+                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
+                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
+                            )}
+                          >
+                            {p._kind}
+                          </span>
+                        )}
+                      </div>
+                      {[p._brand, p._status].some(Boolean) && (
+                        <span className="truncate text-[10px] leading-tight text-muted-foreground">
+                          {[p._brand, p._status].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
                     </div>
                     <div className="relative shrink-0 group-hover:bg-muted/40" style={{ width: scale.width }}>
                       {!hasPhases && (

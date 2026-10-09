@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import MasterCalendar, { type CalendarProject } from "./MasterCalendar";
+import MasterCalendar, { NAME_COLUMN_WIDTH, type CalendarProject } from "./MasterCalendar";
 import { buildPhaseSegments, computeRange, makeScale, parseDay, ZOOM_PX_PER_MONTH } from "@/lib/masterCalendar";
 
 beforeAll(() => {
@@ -77,6 +77,23 @@ describe("MasterCalendar", () => {
     expect(px(key[0], "width")).toBeCloseTo(s.x(parseDay("2028-01-31")) - s.x(parseDay("2027-02-15")), 0);
   });
 
+  it("shows brand and status under the name, with a Dev / PIP tag", () => {
+    renderCal([
+      { id: "dev", name: "D", _kind: "Dev", _brand: "Home2 Suites", _status: "Design", _phases: [] },
+      { id: "pip", name: "P", _kind: "PIP", _brand: "Hampton Inn / Tapestry", _status: "On Hold", _phases: [] },
+      { id: "plain", name: "Q", _kind: null, _brand: null, _status: "Design", _phases: [] },
+      { id: "nostatus", name: "R", _kind: "Dev", _brand: "AC Hotel", _status: null, _phases: [] },
+    ]);
+    const row = (id: string) => within(screen.getByTestId(`row-${id}`));
+    expect(row("dev").getByText("Dev")).toBeInTheDocument();
+    expect(row("dev").getByText("Home2 Suites · Design")).toBeInTheDocument();
+    expect(row("pip").getByText("PIP")).toBeInTheDocument();
+    expect(row("pip").getByText("Hampton Inn / Tapestry · On Hold")).toBeInTheDocument(); // dual brand
+    expect(row("plain").queryByText(/^(Dev|PIP)$/)).not.toBeInTheDocument();             // uncategorized: no tag
+    expect(row("plain").getByText("Design")).toBeInTheDocument();                         // no brand: status alone
+    expect(row("nostatus").getByText("AC Hotel")).toBeInTheDocument();                    // no status: brand alone
+  });
+
   it("keeps every project row the same height", () => {
     renderCal();
     const rowH = (id: string) => screen.getByTestId(`row-${id}`).style.height;
@@ -117,7 +134,7 @@ describe("MasterCalendar", () => {
 
   it("draws a today line at today's position", () => {
     renderCal();
-    expect(px(screen.getByTestId("today-line"), "left")).toBeCloseTo(220 + scaleFor().x(TODAY), 0);
+    expect(px(screen.getByTestId("today-line"), "left")).toBeCloseTo(NAME_COLUMN_WIDTH + scaleFor().x(TODAY), 0);
   });
 
   it("zoom (Months / Quarters / Fit) changes the scale of the whole chart", () => {
@@ -145,7 +162,7 @@ describe("MasterCalendar", () => {
       Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 400 });
       renderCal();
       fireEvent.click(screen.getByRole("radio", { name: "Quarters" }));
-      expect(contentWidth()).toBeGreaterThan(400 + 220);
+      expect(contentWidth()).toBeGreaterThan(400 + NAME_COLUMN_WIDTH);
     } finally {
       if (real) Object.defineProperty(HTMLElement.prototype, "clientWidth", real); else delete (HTMLElement.prototype as any).clientWidth;
     }
