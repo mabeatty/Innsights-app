@@ -62,23 +62,24 @@ describe("MasterCalendar", () => {
     expect(screen.getByRole("link", { name: "Carmel" })).toHaveAttribute("href", "/project/carmel?tab=schedule");
   });
 
-  it("draws each phase at its date position, with the phase's color", () => {
+  it("draws ONE bar per project, from its earliest phase start to its latest phase end", () => {
     renderCal();
     const s = scaleFor();
-    const bar = screen.getByTestId("bar-ashland-4");
-    expect(px(bar, "left")).toBeCloseTo(s.x(parseDay("2025-10-20")), 0);
-    expect(px(bar, "width")).toBeCloseTo(s.x(parseDay("2027-02-05")) - s.x(parseDay("2025-10-20")), 0);
-    expect(bar).toHaveStyle({ backgroundColor: "#16A34A" }); // Construction = green, same as the per-project Gantt
+    const ash = screen.getByTestId("bar-ashland");
+    expect(px(ash, "left")).toBeCloseTo(s.x(parseDay("2025-10-20")), 0);
+    expect(px(ash, "width")).toBeCloseTo(s.x(parseDay("2027-02-05")) - s.x(parseDay("2025-10-20")), 0);
+    // Keystone has four overlapping phases but still just one bar, spanning all of them
+    const key = screen.getAllByTestId(/^bar-keystone/);
+    expect(key).toHaveLength(1);
+    expect(px(key[0], "left")).toBeCloseTo(s.x(parseDay("2025-10-01")), 0);
+    expect(px(key[0], "width")).toBeCloseTo(s.x(parseDay("2028-01-31")) - s.x(parseDay("2025-10-01")), 0);
   });
 
-  it("stacks overlapping phases into separate lanes and grows the row to fit", () => {
+  it("keeps every project row the same height (no per-phase lanes)", () => {
     renderCal();
-    const lane = (phase: number) => px(screen.getByTestId(`bar-keystone-${phase}`), "top");
-    expect(lane(1)).toBe(lane(3));           // phases 1 and 3 share a lane
-    expect(lane(2)).toBe(lane(4));           // phases 2 and 4 share the other
-    expect(lane(2)).toBeGreaterThan(lane(1));
-    const rowH = (id: string) => parseFloat(screen.getByTestId(`row-${id}`).style.height);
-    expect(rowH("keystone")).toBeGreaterThan(rowH("ashland"));
+    const rowH = (id: string) => screen.getByTestId(`row-${id}`).style.height;
+    expect(rowH("keystone")).toBe(rowH("ashland"));
+    expect(rowH("keystone")).toBe(rowH("carmel"));
   });
 
   it("marks target opening with a diamond at its date", () => {
@@ -114,7 +115,7 @@ describe("MasterCalendar", () => {
 
   it("zoom (Months / Quarters / Fit) changes the scale of the whole chart", () => {
     renderCal(); // defaults to Fit (unmeasured container in jsdom → the Fit floor)
-    const width = () => px(screen.getByTestId("bar-ashland-4"), "width");
+    const width = () => px(screen.getByTestId("bar-ashland"), "width");
     const fit = width();
     fireEvent.click(screen.getByRole("radio", { name: "Quarters" }));
     const quarters = width();

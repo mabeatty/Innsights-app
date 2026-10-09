@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  assignLanes, buildPhaseSegments, buildTicks, buildYears, computeRange, makeScale, parseDay, resolvePxPerMonth,
+  buildPhaseSegments, buildTicks, buildYears, computeRange, makeScale, parseDay, projectSpan, resolvePxPerMonth,
   type PhaseRow,
 } from "./masterCalendar";
 
@@ -48,48 +48,25 @@ describe("buildPhaseSegments", () => {
   });
 });
 
-describe("assignLanes", () => {
-  it("keeps sequential phases in one lane", () => {
-    const { items, laneCount } = assignLanes([
-      { start: d("2025-01-01"), end: d("2025-03-31") },
-      { start: d("2025-04-01"), end: d("2025-06-30") },
-    ]);
-    expect(laneCount).toBe(1);
-    expect(items.map((i) => i.lane)).toEqual([0, 0]);
+describe("projectSpan", () => {
+  const segs = buildPhaseSegments([
+    row("p", 1, "2025-10-01", "2026-02-07"), row("p", 2, "2026-02-01", "2026-12-31"),
+    row("p", 3, "2026-10-01", "2027-04-15"), row("p", 4, "2027-02-15", "2028-01-31"),
+  ]).get("p")!;
+  it("spans the earliest phase start to the latest phase end (Keystone's real schedule)", () => {
+    const span = projectSpan(segs)!;
+    expect(span.start).toEqual(d("2025-10-01"));
+    expect(span.end).toEqual(d("2028-01-31"));
+    expect(span.partial).toBe(false);
   });
-
-  it("stacks overlapping phases so neither bar hides the other (Keystone's real schedule)", () => {
-    const keystone = [
-      { phase: 1, start: d("2025-10-01"), end: d("2026-02-07") },
-      { phase: 2, start: d("2026-02-01"), end: d("2026-12-31") },
-      { phase: 3, start: d("2026-10-01"), end: d("2027-04-15") },
-      { phase: 4, start: d("2027-02-15"), end: d("2028-01-31") },
-    ];
-    const { items, laneCount } = assignLanes(keystone);
-    expect(laneCount).toBe(2);
-    const laneOf = Object.fromEntries(items.map((i) => [i.phase, i.lane]));
-    expect(laneOf).toEqual({ 1: 0, 2: 1, 3: 0, 4: 1 }); // 3 reuses lane 0 once phase 1 is done
+  it("is null for a project with no dated phases", () => {
+    expect(projectSpan([])).toBeNull();
   });
-
-  it("uses a third lane only when three phases genuinely overlap", () => {
-    const { laneCount } = assignLanes([
-      { start: d("2026-01-01"), end: d("2026-12-31") },
-      { start: d("2026-03-01"), end: d("2026-09-30") },
-      { start: d("2026-05-01"), end: d("2026-07-31") },
-    ]);
-    expect(laneCount).toBe(3);
-  });
-
-  it("treats a phase that starts the same day another ends as an overlap", () => {
-    const { laneCount } = assignLanes([
-      { start: d("2026-01-01"), end: d("2026-03-31") },
-      { start: d("2026-03-31"), end: d("2026-06-30") },
-    ]);
-    expect(laneCount).toBe(2);
-  });
-
-  it("returns one lane for an empty row (so no-date rows still have a height)", () => {
-    expect(assignLanes([]).laneCount).toBe(1);
+  it("is flagged partial only when no phase has both a start and an end", () => {
+    const onlyStarts = buildPhaseSegments([row("p", 3, "2026-01-01", null), row("p", 4, "2026-06-01", null)]).get("p")!;
+    expect(projectSpan(onlyStarts)!.partial).toBe(true);
+    const mixed = buildPhaseSegments([row("p", 3, "2026-01-01", null), row("p", 4, "2026-06-01", "2027-01-01")]).get("p")!;
+    expect(projectSpan(mixed)!.partial).toBe(false);
   });
 });
 

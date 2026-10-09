@@ -7,8 +7,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  PHASE_COLORS, PHASE_NAMES, ZOOM_PX_PER_MONTH, assignLanes, buildTicks, buildYears,
-  computeRange, makeScale, parseDay, resolvePxPerMonth, type PhaseSegment, type Zoom,
+  ZOOM_PX_PER_MONTH, buildTicks, buildYears,
+  computeRange, makeScale, parseDay, projectSpan, resolvePxPerMonth, type PhaseSegment, type Zoom,
 } from "@/lib/masterCalendar";
 
 // Structural types so the dashboard's richer ProjectRow satisfies these as-is.
@@ -34,10 +34,8 @@ interface Props {
 }
 
 const NAME_W = 220;
-const LANE_H = 18;
-const LANE_GAP = 3;
-const ROW_PAD = 9;
-const MIN_ROW_H = 38;
+const ROW_H = 40;
+const BAR_H = 20;
 const TYPE_H = 32;
 const STATUS_H = 26;
 const HEADER_YEAR_H = 24;
@@ -120,12 +118,7 @@ export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedSt
     <TooltipProvider delayDuration={150}>
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
-          {[1, 2, 3, 4].map((n) => (
-            <span key={n} className="inline-flex items-center gap-1.5">
-              <span className="h-2.5 w-4 rounded-sm" style={{ backgroundColor: PHASE_COLORS[n] }} />
-              {PHASE_NAMES[n]}
-            </span>
-          ))}
+          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-blue-600" />Project timeline</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rotate-45 bg-foreground" />Target opening</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-0.5 bg-destructive" />Today</span>
           <div className="ml-auto flex items-center gap-3">
@@ -221,10 +214,10 @@ export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedSt
                           </div>
 
                           {!statusCollapsed && sg.items.map((p) => {
-                            const { items: laid, laneCount } = assignLanes(p._phases ?? []);
-                            const rowH = Math.max(MIN_ROW_H, ROW_PAD * 2 + laneCount * LANE_H + (laneCount - 1) * LANE_GAP);
+                            const rowH = ROW_H;
+                            const span = projectSpan(p._phases ?? []);
                             const opening = p._completionDate ? parseDay(p._completionDate) : null;
-                            const hasPhases = laid.length > 0;
+                            const hasPhases = span !== null;
                             return (
                               <div key={p.id} className="group relative flex border-b" style={{ height: rowH, width: contentW }} data-testid={`row-${p.id}`}>
                                 <div className="sticky left-0 z-20 flex shrink-0 items-center border-r bg-card px-3 group-hover:bg-muted" style={{ width: NAME_W }}>
@@ -238,38 +231,35 @@ export default function MasterCalendar({ typeGroups, collapsedTypes, collapsedSt
                                       {opening ? "No phase dates yet" : "No schedule dates yet"}
                                     </div>
                                   )}
-                                  {laid.map((seg) => {
-                                    const left = scale.x(seg.start);
-                                    const width = Math.max(scale.x(seg.end) - left, 8);
+                                  {span && (() => {
+                                    const left = scale.x(span.start);
+                                    const width = Math.max(scale.x(span.end) - left, 8);
                                     return (
-                                      <Tooltip key={seg.phase}>
+                                      <Tooltip>
                                         <TooltipTrigger asChild>
                                           <div
-                                            data-testid={`bar-${p.id}-${seg.phase}`}
-                                            className="absolute flex items-center rounded-sm"
-                                            style={{
-                                              left, width, height: LANE_H,
-                                              top: ROW_PAD + seg.lane * (LANE_H + LANE_GAP),
-                                              backgroundColor: PHASE_COLORS[seg.phase] ?? "#64748B",
-                                              opacity: seg.hasStart && seg.hasEnd ? 1 : 0.55,
-                                            }}
+                                            data-testid={`bar-${p.id}`}
+                                            className="absolute flex items-center rounded-sm bg-blue-600"
+                                            style={{ left, width, height: BAR_H, top: (rowH - BAR_H) / 2, opacity: span.partial ? 0.55 : 1 }}
                                           >
-                                            {width >= 110 && (
+                                            {width >= 150 && (
                                               // Sticks to the visible left edge while the bar scrolls under the
                                               // project column, so the label stays readable; it can't leave the bar.
-                                              <span className="sticky truncate px-1.5 text-[10px] font-medium text-white" style={{ left: NAME_W + 2, maxWidth: "100%" }}>
-                                                {seg.name}
+                                              <span className="sticky truncate px-2 text-[10px] font-medium text-white" style={{ left: NAME_W + 2, maxWidth: "100%" }}>
+                                                {format(span.start, "MMM yyyy")} – {format(span.end, "MMM yyyy")}
                                               </span>
                                             )}
                                           </div>
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          <p className="text-xs font-medium">{seg.name}</p>
-                                          <p className="text-xs">{segmentTooltip(seg)}</p>
+                                          <p className="text-xs font-medium">{p.name}: {dayLabel(span.start)} → {dayLabel(span.end)}</p>
+                                          {(p._phases ?? []).map((seg) => (
+                                            <p key={seg.phase} className="text-xs">{seg.name}: {segmentTooltip(seg)}</p>
+                                          ))}
                                         </TooltipContent>
                                       </Tooltip>
                                     );
-                                  })}
+                                  })()}
                                   {opening && (
                                     <Tooltip>
                                       <TooltipTrigger asChild>

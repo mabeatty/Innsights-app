@@ -3,15 +3,6 @@
 
 import { addMonths, differenceInDays, endOfMonth, startOfMonth } from "date-fns";
 
-// Same palette as the per-project Gantt (schedule/GanttTimeline) so a phase has
-// the same color in both views.
-export const PHASE_COLORS: Record<number, string> = {
-  1: "#0D9488", // Land Acquisition — teal
-  2: "#2563EB", // Pre-Development — blue
-  3: "#D97706", // Pre-Construction — amber
-  4: "#16A34A", // Construction — green
-};
-
 export const PHASE_NAMES: Record<number, string> = {
   1: "Land Acquisition",
   2: "Pre-Development",
@@ -76,21 +67,16 @@ export function buildPhaseSegments(rows: PhaseRow[]): Map<string, PhaseSegment[]
   return out;
 }
 
-// Greedy interval packing: put each segment in the first lane where it doesn't
-// collide with what's already there. Phases normally run in sequence (one lane),
-// but real schedules overlap (construction starting while pre-con wraps up), and
-// stacking those in lanes keeps both bars fully visible instead of one hiding
-// the other.
-export function assignLanes<T extends { start: Date; end: Date }>(segments: T[]): { items: (T & { lane: number })[]; laneCount: number } {
-  const sorted = [...segments].sort((a, b) => a.start.getTime() - b.start.getTime() || a.end.getTime() - b.end.getTime());
-  const laneEnds: number[] = [];
-  const items = sorted.map((seg) => {
-    let lane = laneEnds.findIndex((endTime) => seg.start.getTime() > endTime);
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(seg.end.getTime()); }
-    else laneEnds[lane] = seg.end.getTime();
-    return { ...seg, lane };
-  });
-  return { items, laneCount: Math.max(1, laneEnds.length) };
+// One bar per project: earliest phase start → latest phase end. `partial` is
+// true when no phase has both ends entered, so the bar is only a rough marker and
+// is drawn faded. Null when the project has no phase dates at all.
+export function projectSpan(segments: PhaseSegment[]): { start: Date; end: Date; partial: boolean } | null {
+  if (segments.length === 0) return null;
+  return {
+    start: new Date(Math.min(...segments.map((g) => g.start.getTime()))),
+    end: new Date(Math.max(...segments.map((g) => g.end.getTime()))),
+    partial: !segments.some((g) => g.hasStart && g.hasEnd),
+  };
 }
 
 // Visible range: every date on the chart plus today, padded so bars aren't flush

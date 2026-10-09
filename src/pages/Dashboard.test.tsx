@@ -75,10 +75,9 @@ describe("Dashboard tabs", () => {
     clickTab(/Master Calendar/);
     expect(await screen.findByTestId("calendar-scroller")).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("?tab=calendar");
-    // every phase with dates is drawn; the undated sub-phase adds nothing
-    expect(screen.getByTestId("bar-ash-3")).toBeInTheDocument();
-    expect(screen.getByTestId("bar-ash-4")).toBeInTheDocument();
-    expect(screen.getByTestId("bar-key-2")).toBeInTheDocument();
+    // one bar per project that has dated phases
+    expect(screen.getByTestId("bar-ash")).toBeInTheDocument();
+    expect(screen.getByTestId("bar-key")).toBeInTheDocument();
     expect(screen.getByTestId("opening-ash")).toBeInTheDocument();
   });
 
