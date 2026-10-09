@@ -89,10 +89,10 @@ export function projectSpan(segments: PhaseSegment[]): { start: Date; end: Date;
 
 export type FinishSort = "earliest" | "latest";
 
-// When a project finishes: the end of its bar, or its target opening if it has no
-// phase dates. Null when it has neither.
-export function projectFinish(segments: PhaseSegment[], opening: Date | null): Date | null {
-  return projectSpan(segments)?.end ?? opening;
+// When a project finishes: the end of its Construction bar. Null if it has no
+// construction dates (target opening dates are not used on the calendar).
+export function projectFinish(segments: PhaseSegment[]): Date | null {
+  return projectSpan(segments)?.end ?? null;
 }
 
 // Sort by finish date. Projects with no finish date always go last (in either

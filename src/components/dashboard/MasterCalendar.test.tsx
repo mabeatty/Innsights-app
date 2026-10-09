@@ -23,18 +23,18 @@ const ashlandPhases = buildPhaseSegments([
 
 // Deliberately NOT in finish order.
 const projects: CalendarProject[] = [
-  { id: "keystone", name: "Keystone", _status: "Design", _phases: keystonePhases, _completionDate: null },        // finishes 2028-01-31
-  { id: "carmel", name: "Carmel", _status: "Design", _phases: [], _completionDate: null },                         // no dates
-  { id: "ashland", name: "Ashland", _status: "Under Construction", _phases: ashlandPhases, _completionDate: "2027-04-30" }, // finishes 2027-02-05
-  { id: "opener", name: "Opener", _status: "Pre-Construction", _phases: [], _completionDate: "2027-06-30" },       // opening only
+  { id: "keystone", name: "Keystone", _status: "Design", _phases: keystonePhases },         // finishes 2028-01-31
+  { id: "carmel", name: "Carmel", _status: "Design", _phases: [] },                          // no dates
+  { id: "ashland", name: "Ashland", _status: "Under Construction", _phases: ashlandPhases }, // finishes 2027-02-05
+  { id: "quiet", name: "Quiet", _status: "Pre-Construction", _phases: [] },                  // no dates
 ];
 
 const renderCal = (p: CalendarProject[] = projects) => render(<MemoryRouter><MasterCalendar projects={p} today={TODAY} /></MemoryRouter>);
 const order = () => screen.getAllByTestId(/^row-/).map((el) => el.getAttribute("data-testid")!.replace("row-", ""));
 
 // Same scale the component derives, so expected positions aren't hard-coded.
-// construction dates + openings only: the calendar ignores earlier phases
-const allDates = [parseDay("2027-02-15"), parseDay("2028-01-31"), parseDay("2025-10-20"), parseDay("2027-02-05"), parseDay("2027-04-30"), parseDay("2027-06-30")];
+// construction dates only: the calendar ignores earlier phases and opening dates
+const allDates = [parseDay("2027-02-15"), parseDay("2028-01-31"), parseDay("2025-10-20"), parseDay("2027-02-05")];
 const scaleFor = (zoom: keyof typeof ZOOM_PX_PER_MONTH = "fit") => makeScale(computeRange(allDates, TODAY), ZOOM_PX_PER_MONTH[zoom]);
 const px = (el: HTMLElement, prop: "left" | "width" | "top") => parseFloat(el.style[prop]);
 
@@ -48,21 +48,21 @@ describe("MasterCalendar", () => {
   it("sorts earliest finish first by default, with undated projects last", () => {
     renderCal();
     expect(screen.getByRole("radio", { name: "Earliest finish" })).toHaveAttribute("aria-checked", "true");
-    // Ashland 2027-02 (bar end) → Opener 2027-06 (opening, no phases) → Keystone 2028-01 → Carmel (no dates)
-    expect(order()).toEqual(["ashland", "opener", "keystone", "carmel"]);
+    // Ashland 2027-02 → Keystone 2028-01 → then the undated ones, alphabetically
+    expect(order()).toEqual(["ashland", "keystone", "carmel", "quiet"]);
   });
 
   it("flips to latest finish first, but undated projects still go last", () => {
     renderCal();
     fireEvent.click(screen.getByRole("radio", { name: "Latest finish" }));
-    expect(order()).toEqual(["keystone", "opener", "ashland", "carmel"]);
+    expect(order()).toEqual(["keystone", "ashland", "carmel", "quiet"]);
   });
 
   it("links each project to its schedule and shows its status under the name", () => {
     renderCal();
     expect(screen.getByRole("link", { name: "Ashland" })).toHaveAttribute("href", "/project/ashland?tab=schedule");
     expect(within(screen.getByTestId("row-ashland")).getByText("Under Construction")).toBeInTheDocument();
-    expect(within(screen.getByTestId("row-opener")).getByText("Pre-Construction")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-quiet")).getByText("Pre-Construction")).toBeInTheDocument();
   });
 
   it("draws ONE bar per project, covering its Construction phase only (Keystone's 2025 pre-development is ignored)", () => {
@@ -101,17 +101,16 @@ describe("MasterCalendar", () => {
     expect(rowH("keystone")).toBe(rowH("carmel"));
   });
 
-  it("marks target opening with a diamond at its date", () => {
+  it("has no target-opening legend entry or markers", () => {
     renderCal();
-    expect(px(screen.getByTestId("opening-ashland"), "left") + 6).toBeCloseTo(scaleFor().x(parseDay("2027-04-30")), 0);
-    expect(screen.queryByTestId("opening-keystone")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target opening")).not.toBeInTheDocument();
+    expect(screen.queryByTestId(/^opening-/)).not.toBeInTheDocument();
   });
 
   it("shows undated projects honestly instead of dropping them, and reports coverage", () => {
     renderCal();
     expect(within(screen.getByTestId("row-carmel")).getByText("No construction dates yet")).toBeInTheDocument();
-    expect(within(screen.getByTestId("row-opener")).getByText("No construction dates yet")).toBeInTheDocument(); // opening only
-    expect(screen.getByTestId("opening-opener")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-quiet")).getByText("No construction dates yet")).toBeInTheDocument();
     expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 4 projects have construction dates");
   });
 

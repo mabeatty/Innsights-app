@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import CalendarVisibilityMenu, { type CalendarVisibility } from "./CalendarVisibilityMenu";
 import {
   ZOOM_PX_PER_MONTH, buildTicks, buildYears,
-  computeRange, constructionSegments, makeScale, parseDay, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish, type FinishSort, type PhaseSegment, type Zoom,
+  computeRange, constructionSegments, makeScale, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish, type FinishSort, type PhaseSegment, type Zoom,
 } from "@/lib/masterCalendar";
 
 // Structural types so the dashboard's richer ProjectRow satisfies these as-is.
@@ -19,7 +19,6 @@ export interface CalendarProject {
   _kind?: "Dev" | "PIP" | null; // Development vs PIP (renovation) project
   _brand?: string | null; // hotel brand, e.g. "Home2 Suites" (dual brands joined with " / ")
   _phases?: PhaseSegment[];
-  _completionDate?: string | null; // target opening, yyyy-MM-dd
 }
 
 interface Props {
@@ -65,7 +64,7 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
   const [sort, setSort] = useState<FinishSort>("earliest");
   // One flat list, ordered by when each project finishes.
   const projects = useMemo(
-    () => sortByFinish(projectsProp, sort, (p) => projectFinish(p._phases ?? [], p._completionDate ? parseDay(p._completionDate) : null)),
+    () => sortByFinish(projectsProp, sort, (p) => projectFinish(p._phases ?? [])),
     [projectsProp, sort],
   );
   const datedCount = projects.filter((p) => projectSpan(p._phases ?? []) !== null).length;
@@ -74,7 +73,6 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
     const dates: Date[] = [];
     for (const p of projects) {
       for (const s of constructionSegments(p._phases ?? [])) dates.push(s.start, s.end);
-      if (p._completionDate) dates.push(parseDay(p._completionDate));
     }
     return computeRange(dates, today);
   }, [projects, today]);
@@ -125,7 +123,6 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted-foreground">
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-4 rounded-sm bg-blue-600" />Project timeline</span>
-          <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rotate-45 bg-foreground" />Target opening</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-0.5 bg-destructive" />Today</span>
           <div className="ml-auto flex items-center gap-3">
             <span data-testid="coverage">{datedCount} of {projects.length} projects have construction dates</span>
@@ -196,7 +193,6 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
               {projects.map((p) => {
                 const rowH = ROW_H;
                 const span = projectSpan(p._phases ?? []);
-                const opening = p._completionDate ? parseDay(p._completionDate) : null;
                 const hasPhases = span !== null;
                 return (
                   <div key={p.id} className="group relative flex border-b" style={{ height: rowH, width: contentW }} data-testid={`row-${p.id}`}>
@@ -259,18 +255,6 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
                           </Tooltip>
                         );
                       })()}
-                      {opening && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              data-testid={`opening-${p.id}`}
-                              className="absolute z-[5] h-3 w-3 rotate-45 bg-foreground ring-2 ring-card"
-                              style={{ left: scale.x(opening) - 6, top: rowH / 2 - 6 }}
-                            />
-                          </TooltipTrigger>
-                          <TooltipContent><p className="text-xs">Target opening: {dayLabel(opening)}</p></TooltipContent>
-                        </Tooltip>
-                      )}
                     </div>
                   </div>
                 );

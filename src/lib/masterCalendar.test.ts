@@ -150,10 +150,10 @@ describe("projectFinish / sortByFinish", () => {
   const names = (xs: { name: string }[]) => xs.map((x) => x.name);
   const items = [proj("Late", "2028-03-15"), proj("None B", null), proj("Early", "2027-02-05"), proj("Mid", "2027-07-31"), proj("None A", null)];
 
-  it("finishes at the end of the bar, falling back to target opening, else null", () => {
-    expect(projectFinish(segs("2027-07-31"), d("2027-04-30"))).toEqual(d("2027-07-31")); // bar wins over opening
-    expect(projectFinish([], d("2027-04-30"))).toEqual(d("2027-04-30"));
-    expect(projectFinish([], null)).toBeNull();
+  it("finishes at the end of the construction bar, or null without one (opening dates are ignored)", () => {
+    expect(projectFinish(segs("2027-07-31"))).toEqual(d("2027-07-31"));
+    expect(projectFinish([])).toBeNull();
+    expect(projectFinish(buildPhaseSegments([row("p", 3, "2026-01-01", "2026-06-30")]).get("p")!)).toBeNull(); // earlier phases only
   });
   it("earliest first, with undated projects last", () => {
     expect(names(sortByFinish(items, "earliest", (i) => i.finish))).toEqual(["Early", "Mid", "Late", "None A", "None B"]);

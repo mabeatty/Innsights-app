@@ -101,7 +101,9 @@ describe("Dashboard tabs", () => {
     // one bar per project that has dated phases
     expect(screen.getByTestId("bar-ash")).toBeInTheDocument();
     expect(screen.getByTestId("bar-key")).toBeInTheDocument();
-    expect(screen.getByTestId("opening-ash")).toBeInTheDocument();
+    // Ashland has a target opening in the data, but the calendar no longer draws or lists it
+    expect(screen.queryByTestId("opening-ash")).not.toBeInTheDocument();
+    expect(screen.queryByText("Target opening")).not.toBeInTheDocument();
   });
 
   it("opens straight onto the calendar from a link, and back to the summary clears the param", async () => {
