@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import CalendarVisibilityMenu, { type CalendarVisibility } from "./CalendarVisibilityMenu";
 import {
   ZOOM_PX_PER_MONTH, buildTicks, buildYears,
-  computeRange, makeScale, parseDay, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish, type FinishSort, type PhaseSegment, type Zoom,
+  computeRange, constructionSegments, makeScale, parseDay, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish, type FinishSort, type PhaseSegment, type Zoom,
 } from "@/lib/masterCalendar";
 
 // Structural types so the dashboard's richer ProjectRow satisfies these as-is.
@@ -22,6 +23,7 @@ export interface CalendarProject {
 interface Props {
   projects: CalendarProject[];
   today?: Date; // injectable for tests
+  visibility?: CalendarVisibility; // omit to hide the show/hide control (e.g. view-only users)
 }
 
 const NAME_W = 220;
@@ -38,10 +40,10 @@ function segmentTooltip(seg: PhaseSegment): string {
   return `${dayLabel(seg.start)} → ${dayLabel(seg.end)}`;
 }
 
-export default function MasterCalendar({ projects: projectsProp, today: todayProp }: Props) {
+export default function MasterCalendar({ projects: projectsProp, today: todayProp, visibility }: Props) {
   const todayRef = useRef(todayProp ?? new Date());
   const today = todayProp ?? todayRef.current;
-  const [zoom, setZoom] = useState<Zoom>("fit") // overview first: the whole portfolio timeline in one screen;
+  const [zoom, setZoom] = useState<Zoom>("fit"); // overview first: the whole portfolio timeline in one screen
   // Callback ref + state (not useRef) so measuring starts whenever the scroller
   // mounts, even if the chart first rendered empty.
   const [scroller, setScroller] = useState<HTMLDivElement | null>(null);
@@ -62,12 +64,12 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
     () => sortByFinish(projectsProp, sort, (p) => projectFinish(p._phases ?? [], p._completionDate ? parseDay(p._completionDate) : null)),
     [projectsProp, sort],
   );
-  const datedCount = projects.filter((p) => (p._phases?.length ?? 0) > 0).length;
+  const datedCount = projects.filter((p) => projectSpan(p._phases ?? []) !== null).length;
 
   const range = useMemo(() => {
     const dates: Date[] = [];
     for (const p of projects) {
-      for (const s of p._phases ?? []) dates.push(s.start, s.end);
+      for (const s of constructionSegments(p._phases ?? [])) dates.push(s.start, s.end);
       if (p._completionDate) dates.push(parseDay(p._completionDate));
     }
     return computeRange(dates, today);
@@ -102,7 +104,16 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
     [zoom, scroller, range.start.getTime(), range.end.getTime()]);
 
   if (projects.length === 0) {
-    return <p className="text-sm text-muted-foreground">No projects to show on the calendar.</p>;
+    // Keep the show/hide control reachable when everything is hidden, or there'd be no way back.
+    const allHidden = !!visibility && visibility.options.length > 0;
+    return (
+      <div className="space-y-3">
+        {visibility && <div className="flex justify-end"><CalendarVisibilityMenu {...visibility} /></div>}
+        <p className="text-sm text-muted-foreground">
+          {allHidden ? "All projects are hidden from the calendar." : "No projects to show on the calendar."}
+        </p>
+      </div>
+    );
   }
 
   return (
@@ -113,8 +124,9 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
           <span className="inline-flex items-center gap-1.5"><span className="h-2.5 w-2.5 rotate-45 bg-foreground" />Target opening</span>
           <span className="inline-flex items-center gap-1.5"><span className="h-3.5 w-0.5 bg-destructive" />Today</span>
           <div className="ml-auto flex items-center gap-3">
-            <span data-testid="coverage">{datedCount} of {projects.length} projects have schedule dates</span>
+            <span data-testid="coverage">{datedCount} of {projects.length} projects have construction dates</span>
             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => scrollToToday(true)}>Today</Button>
+            {visibility && <CalendarVisibilityMenu {...visibility} />}
             <ToggleGroup type="single" size="sm" variant="outline" value={sort} onValueChange={(v) => { if (v) setSort(v as FinishSort); }}>
               <ToggleGroupItem value="earliest" className="h-7 px-2.5 text-xs">Earliest finish</ToggleGroupItem>
               <ToggleGroupItem value="latest" className="h-7 px-2.5 text-xs">Latest finish</ToggleGroupItem>
@@ -129,7 +141,7 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
 
         {datedCount === 0 && (
           <p className="text-xs text-muted-foreground">
-            No project has schedule dates yet. Add start and end dates on a project's Schedule tab and its phases will appear here.
+            No project has construction dates yet. Add start and end dates for the Construction phase on a project's Schedule tab and it will appear here.
           </p>
         )}
 
@@ -193,7 +205,7 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
                     <div className="relative shrink-0 group-hover:bg-muted/40" style={{ width: scale.width }}>
                       {!hasPhases && (
                         <div className="sticky z-[1] flex h-full w-max items-center text-xs italic text-muted-foreground" style={{ left: NAME_W + 12 }}>
-                          {opening ? "No phase dates yet" : "No schedule dates yet"}
+                          No construction dates yet
                         </div>
                       )}
                       {span && (() => {
@@ -218,7 +230,7 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
                             </TooltipTrigger>
                             <TooltipContent>
                               <p className="text-xs font-medium">{p.name}: {dayLabel(span.start)} → {dayLabel(span.end)}</p>
-                              {(p._phases ?? []).map((seg) => (
+                              {constructionSegments(p._phases ?? []).map((seg) => (
                                 <p key={seg.phase} className="text-xs">{seg.name}: {segmentTooltip(seg)}</p>
                               ))}
                             </TooltipContent>

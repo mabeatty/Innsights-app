@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, expect, beforeAll, vi } from "vitest";
 import { render, screen, fireEvent, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import MasterCalendar, { type CalendarProject } from "./MasterCalendar";
@@ -33,7 +33,8 @@ const renderCal = (p: CalendarProject[] = projects) => render(<MemoryRouter><Mas
 const order = () => screen.getAllByTestId(/^row-/).map((el) => el.getAttribute("data-testid")!.replace("row-", ""));
 
 // Same scale the component derives, so expected positions aren't hard-coded.
-const allDates = [...keystonePhases.flatMap((s) => [s.start, s.end]), parseDay("2025-10-20"), parseDay("2027-02-05"), parseDay("2027-04-30"), parseDay("2027-06-30")];
+// construction dates + openings only: the calendar ignores earlier phases
+const allDates = [parseDay("2027-02-15"), parseDay("2028-01-31"), parseDay("2025-10-20"), parseDay("2027-02-05"), parseDay("2027-04-30"), parseDay("2027-06-30")];
 const scaleFor = (zoom: keyof typeof ZOOM_PX_PER_MONTH = "fit") => makeScale(computeRange(allDates, TODAY), ZOOM_PX_PER_MONTH[zoom]);
 const px = (el: HTMLElement, prop: "left" | "width" | "top") => parseFloat(el.style[prop]);
 
@@ -64,7 +65,7 @@ describe("MasterCalendar", () => {
     expect(within(screen.getByTestId("row-opener")).getByText("Pre-Construction")).toBeInTheDocument();
   });
 
-  it("draws ONE bar per project, from its earliest phase start to its latest phase end", () => {
+  it("draws ONE bar per project, covering its Construction phase only (Keystone's 2025 pre-development is ignored)", () => {
     renderCal();
     const s = scaleFor();
     const ash = screen.getByTestId("bar-ashland");
@@ -72,8 +73,8 @@ describe("MasterCalendar", () => {
     expect(px(ash, "width")).toBeCloseTo(s.x(parseDay("2027-02-05")) - s.x(parseDay("2025-10-20")), 0);
     const key = screen.getAllByTestId(/^bar-keystone/);
     expect(key).toHaveLength(1);
-    expect(px(key[0], "left")).toBeCloseTo(s.x(parseDay("2025-10-01")), 0);
-    expect(px(key[0], "width")).toBeCloseTo(s.x(parseDay("2028-01-31")) - s.x(parseDay("2025-10-01")), 0);
+    expect(px(key[0], "left")).toBeCloseTo(s.x(parseDay("2027-02-15")), 0);
+    expect(px(key[0], "width")).toBeCloseTo(s.x(parseDay("2028-01-31")) - s.x(parseDay("2027-02-15")), 0);
   });
 
   it("keeps every project row the same height", () => {
@@ -91,15 +92,26 @@ describe("MasterCalendar", () => {
 
   it("shows undated projects honestly instead of dropping them, and reports coverage", () => {
     renderCal();
-    expect(within(screen.getByTestId("row-carmel")).getByText("No schedule dates yet")).toBeInTheDocument();
-    expect(within(screen.getByTestId("row-opener")).getByText("No phase dates yet")).toBeInTheDocument(); // opening only
+    expect(within(screen.getByTestId("row-carmel")).getByText("No construction dates yet")).toBeInTheDocument();
+    expect(within(screen.getByTestId("row-opener")).getByText("No construction dates yet")).toBeInTheDocument(); // opening only
     expect(screen.getByTestId("opening-opener")).toBeInTheDocument();
-    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 4 projects have schedule dates");
+    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 4 projects have construction dates");
   });
 
   it("says so when no project has dates at all", () => {
     renderCal([{ id: "a", name: "A", _phases: [] }]);
-    expect(screen.getByText(/No project has schedule dates yet/)).toBeInTheDocument();
+    expect(screen.getByText(/No project has construction dates yet/)).toBeInTheDocument();
+    expect(screen.getByTestId("coverage")).toHaveTextContent("0 of 1 projects");
+  });
+
+  it("gives a project with only pre-development / pre-construction dated no bar at all", () => {
+    const pre = buildPhaseSegments([
+      { project_id: "pre", phase_number: 2, start_date: "2026-01-01", end_date: "2026-06-30" },
+      { project_id: "pre", phase_number: 3, start_date: "2026-07-01", end_date: "2026-12-31" },
+    ]).get("pre")!;
+    renderCal([{ id: "pre", name: "Pre", _phases: pre }]);
+    expect(screen.queryByTestId("bar-pre")).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("row-pre")).getByText("No construction dates yet")).toBeInTheDocument();
     expect(screen.getByTestId("coverage")).toHaveTextContent("0 of 1 projects");
   });
 
@@ -142,5 +154,49 @@ describe("MasterCalendar", () => {
   it("renders an empty state with no projects", () => {
     renderCal([]);
     expect(screen.getByText(/No projects to show/)).toBeInTheDocument();
+  });
+});
+
+describe("show / hide menu", () => {
+  const options = [
+    { id: "a", name: "Alpha", status: "Design", visible: true },
+    { id: "b", name: "Beta", status: "On Hold", visible: false },
+  ];
+  const open = () => fireEvent.click(screen.getByRole("button", { name: /Show \/ hide projects/ }));
+
+  it("is absent when no visibility prop is given (e.g. view-only users)", () => {
+    renderCal();
+    expect(screen.queryByRole("button", { name: /Show \/ hide projects/ })).not.toBeInTheDocument();
+  });
+
+  it("lists every project, shown AND hidden, and reports a change when one is toggled", () => {
+    const onChange = vi.fn();
+    render(<MemoryRouter><MasterCalendar projects={projects} today={TODAY} visibility={{ options, onChange }} /></MemoryRouter>);
+    open();
+    expect(screen.getByText("1 of 2 shown. Hidden projects stay on the Project Summary tab.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Alpha" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Beta" })).not.toBeChecked();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Beta" }));
+    expect(onChange).toHaveBeenCalledWith("b", true);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alpha" }));
+    expect(onChange).toHaveBeenCalledWith("a", false);
+  });
+
+  it("'Show all' re-shows every hidden project", () => {
+    const onChange = vi.fn();
+    render(<MemoryRouter><MasterCalendar projects={projects} today={TODAY} visibility={{ options, onChange }} /></MemoryRouter>);
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+    expect(onChange).toHaveBeenCalledTimes(1);
+    expect(onChange).toHaveBeenCalledWith("b", true);
+  });
+
+  it("stays reachable when every project is hidden, so they can be brought back", () => {
+    const onChange = vi.fn();
+    render(<MemoryRouter><MasterCalendar projects={[]} today={TODAY} visibility={{ options: options.map((o) => ({ ...o, visible: false })), onChange }} /></MemoryRouter>);
+    expect(screen.getByText("All projects are hidden from the calendar.")).toBeInTheDocument();
+    open();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alpha" }));
+    expect(onChange).toHaveBeenCalledWith("a", true);
   });
 });

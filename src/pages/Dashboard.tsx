@@ -199,11 +199,24 @@ export default function Dashboard() {
     return { label: typeGroup.label, statusGroups, total: typeProjects.length };
   }).filter((g) => g.total > 0);
 
-  // The calendar is one flat list (no type/status sections), covering the same
-  // set of projects the summary shows, minus any switched off via show_on_calendar.
-  const calendarProjects = typeGroups
-    .flatMap((g) => g.statusGroups.flatMap((st) => st.items))
-    .filter((p) => p.show_on_calendar !== false);
+  // Every project eligible for the calendar (same set as the summary); the ones
+  // switched off via show_on_calendar are left off what's drawn.
+  const calendarCandidates = typeGroups.flatMap((g) => g.statusGroups.flatMap((st) => st.items));
+  const calendarProjects = calendarCandidates.filter((p) => p.show_on_calendar !== false);
+  const canManageCalendar = !isConsultant && accessLevel !== "view"; // same rule as editing a project
+
+  const setCalendarVisible = async (id: string, visible: boolean) => {
+    const previous = projects.find((p) => p.id === id)?.show_on_calendar;
+    const apply = (value: boolean | undefined) =>
+      setProjects((prev) => prev.map((p) => (p.id === id ? { ...p, show_on_calendar: value } : p)));
+    apply(visible); // optimistic: the row appears/disappears immediately
+    // (supabase as any): the generated client types predate this column
+    const { error } = await (supabase as any).from("projects").update({ show_on_calendar: visible }).eq("id", id);
+    if (error) {
+      apply(previous);
+      toast.error(`Couldn't update the calendar: ${error.message}`);
+    }
+  };
 
   const emptyState = (
     <div className="text-center py-16 text-muted-foreground">
@@ -356,7 +369,13 @@ export default function Dashboard() {
           ) : projects.length === 0 ? (
             emptyState
           ) : (
-            <MasterCalendar projects={calendarProjects} />
+            <MasterCalendar
+              projects={calendarProjects}
+              visibility={canManageCalendar ? {
+                options: calendarCandidates.map((p) => ({ id: p.id, name: p.name, status: p._status, visible: p.show_on_calendar !== false })),
+                onChange: setCalendarVisible,
+              } : undefined}
+            />
           )}
         </TabsContent>
       </Tabs>

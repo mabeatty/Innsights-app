@@ -53,14 +53,16 @@ describe("projectSpan", () => {
     row("p", 1, "2025-10-01", "2026-02-07"), row("p", 2, "2026-02-01", "2026-12-31"),
     row("p", 3, "2026-10-01", "2027-04-15"), row("p", 4, "2027-02-15", "2028-01-31"),
   ]).get("p")!;
-  it("spans the earliest phase start to the latest phase end (Keystone's real schedule)", () => {
+  it("spans the Construction phase only — earlier phases are ignored (Keystone's real schedule)", () => {
     const span = projectSpan(segs)!;
-    expect(span.start).toEqual(d("2025-10-01"));
+    expect(span.start).toEqual(d("2027-02-15")); // not the 2025 pre-development start
     expect(span.end).toEqual(d("2028-01-31"));
     expect(span.partial).toBe(false);
   });
-  it("is null for a project with no dated phases", () => {
+  it("is null with no dated phases, or with only pre-development / pre-construction dated", () => {
     expect(projectSpan([])).toBeNull();
+    const earlierOnly = buildPhaseSegments([row("p", 2, "2026-01-01", "2026-06-30"), row("p", 3, "2026-07-01", "2026-12-31")]).get("p")!;
+    expect(projectSpan(earlierOnly)).toBeNull();
   });
   it("is flagged partial only when no phase has both a start and an end", () => {
     const onlyStarts = buildPhaseSegments([row("p", 3, "2026-01-01", null), row("p", 4, "2026-06-01", null)]).get("p")!;

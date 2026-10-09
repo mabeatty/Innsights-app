@@ -1,6 +1,7 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router-dom";
+import { toast } from "sonner";
 import Dashboard from "./Dashboard";
 
 beforeAll(() => {
@@ -31,10 +32,26 @@ const tables: Record<string, any[]> = {
   project_budget: [],
   budget_transactions: [],
 };
+const updates: { table: string; payload: any; col?: string; val?: any }[] = [];
+let updateError: string | null = null;
 function builder(table: string): any {
   const b: any = new Proxy(function () {}, {
     get(_t, prop) {
       if (prop === "then") return (res: any, rej: any) => Promise.resolve({ data: tables[table] ?? [], error: null }).then(res, rej);
+      if (prop === "update") {
+        return (payload: any) => {
+          const rec: { table: string; payload: any; col?: string; val?: any } = { table, payload };
+          updates.push(rec);
+          const chain: any = new Proxy({}, {
+            get(_t2, p2) {
+              if (p2 === "eq") return (col: string, val: any) => { rec.col = col; rec.val = val; return chain; };
+              if (p2 === "then") return (res: any, rej: any) => Promise.resolve({ data: [], error: updateError ? { message: updateError } : null }).then(res, rej);
+              return () => chain;
+            },
+          });
+          return chain;
+        };
+      }
       return () => b;
     },
   });
@@ -113,9 +130,56 @@ describe("Dashboard tabs", () => {
     expect(screen.queryByTestId("row-hid")).not.toBeInTheDocument();
     expect(screen.getByTestId("row-ash")).toBeInTheDocument();
     expect(screen.getByTestId("row-key")).toBeInTheDocument(); // flag absent (undefined) = shown
-    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 2 projects have schedule dates");
+    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 2 projects have construction dates");
     clickTab(/Project Summary/);
     expect(await screen.findByRole("link", { name: "Hidden Hotel" })).toBeInTheDocument(); // still there
+  });
+
+  describe("show / hide projects menu", () => {
+    const openMenu = () => fireEvent.click(screen.getByRole("button", { name: /Show \/ hide projects/ }));
+    beforeEach(() => { updates.length = 0; updateError = null; vi.clearAllMocks(); });
+
+    it("hides a project from the calendar and saves it", async () => {
+      renderDash("/dashboard?tab=calendar");
+      await screen.findByTestId("row-key");
+      openMenu();
+      // the menu lists the already-hidden project too, so it can be brought back
+      expect(screen.getByRole("checkbox", { name: "Hidden Hotel" })).not.toBeChecked();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Keystone" }));
+      await waitFor(() => expect(screen.queryByTestId("row-key")).not.toBeInTheDocument());
+      expect(updates).toContainEqual({ table: "projects", payload: { show_on_calendar: false }, col: "id", val: "key" });
+    });
+
+    it("brings a hidden project back onto the calendar", async () => {
+      renderDash("/dashboard?tab=calendar");
+      await screen.findByTestId("row-ash");
+      expect(screen.queryByTestId("row-hid")).not.toBeInTheDocument();
+      openMenu();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Hidden Hotel" }));
+      expect(await screen.findByTestId("row-hid")).toBeInTheDocument();
+      expect(updates).toContainEqual({ table: "projects", payload: { show_on_calendar: true }, col: "id", val: "hid" });
+    });
+
+    it("undoes the change and says so if saving fails", async () => {
+      updateError = "permission denied";
+      renderDash("/dashboard?tab=calendar");
+      await screen.findByTestId("row-key");
+      openMenu();
+      fireEvent.click(screen.getByRole("checkbox", { name: "Keystone" }));
+      await waitFor(() => expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("permission denied")));
+      expect(await screen.findByTestId("row-key")).toBeInTheDocument(); // reverted
+    });
+
+    it("isn't offered to view-only users", async () => {
+      (AUTH as any).accessLevel = "view";
+      try {
+        renderDash("/dashboard?tab=calendar");
+        await screen.findByTestId("row-ash");
+        expect(screen.queryByRole("button", { name: /Show \/ hide projects/ })).not.toBeInTheDocument();
+      } finally {
+        (AUTH as any).accessLevel = "edit";
+      }
+    });
   });
 
   it("shows the same empty state on both tabs when there are no projects", async () => {

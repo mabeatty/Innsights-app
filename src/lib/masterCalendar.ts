@@ -67,15 +67,23 @@ export function buildPhaseSegments(rows: PhaseRow[]): Map<string, PhaseSegment[]
   return out;
 }
 
-// One bar per project: earliest phase start → latest phase end. `partial` is
-// true when no phase has both ends entered, so the bar is only a rough marker and
-// is drawn faded. Null when the project has no phase dates at all.
+// The calendar shows the Construction phase only — pre-development and
+// pre-construction effort is deliberately left off the timeline.
+export const CONSTRUCTION_PHASE = 4;
+export const constructionSegments = (segments: PhaseSegment[]): PhaseSegment[] =>
+  segments.filter((g) => g.phase === CONSTRUCTION_PHASE);
+
+// One bar per project: the Construction phase's earliest start → latest end.
+// `partial` is true when that phase has no complete start+end, so the bar is only
+// a rough marker and is drawn faded. Null when the project has no construction
+// dates (a project with only earlier phases dated gets no bar).
 export function projectSpan(segments: PhaseSegment[]): { start: Date; end: Date; partial: boolean } | null {
-  if (segments.length === 0) return null;
+  const c = constructionSegments(segments);
+  if (c.length === 0) return null;
   return {
-    start: new Date(Math.min(...segments.map((g) => g.start.getTime()))),
-    end: new Date(Math.max(...segments.map((g) => g.end.getTime()))),
-    partial: !segments.some((g) => g.hasStart && g.hasEnd),
+    start: new Date(Math.min(...c.map((g) => g.start.getTime()))),
+    end: new Date(Math.max(...c.map((g) => g.end.getTime()))),
+    partial: !c.some((g) => g.hasStart && g.hasEnd),
   };
 }
 
