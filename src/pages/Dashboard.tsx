@@ -18,6 +18,7 @@ interface ProjectRow {
   name: string;
   updated_at: string;
   project_type: string;
+  show_on_calendar?: boolean; // false = hidden from the Master Calendar (still on the summary)
   brands: { name: string } | null;
   _status?: string;
   _constructionStart?: string | null;
@@ -99,7 +100,7 @@ export default function Dashboard() {
       const [{ data: projData }, { data: infoData }, phaseRows, budgetData, txnData] = await Promise.all([
         supabase
           .from("projects")
-          .select("id, name, updated_at, project_type, brands!projects_brand_id_fkey(name)")
+          .select("id, name, updated_at, project_type, show_on_calendar, brands!projects_brand_id_fkey(name)")
           .order("updated_at", { ascending: false }),
         supabase
           .from("project_info")
@@ -199,8 +200,10 @@ export default function Dashboard() {
   }).filter((g) => g.total > 0);
 
   // The calendar is one flat list (no type/status sections), covering the same
-  // set of projects the summary shows.
-  const calendarProjects = typeGroups.flatMap((g) => g.statusGroups.flatMap((st) => st.items));
+  // set of projects the summary shows, minus any switched off via show_on_calendar.
+  const calendarProjects = typeGroups
+    .flatMap((g) => g.statusGroups.flatMap((st) => st.items))
+    .filter((p) => p.show_on_calendar !== false);
 
   const emptyState = (
     <div className="text-center py-16 text-muted-foreground">

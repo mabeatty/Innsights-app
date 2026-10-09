@@ -12,10 +12,13 @@ const tables: Record<string, any[]> = {
   projects: [
     { id: "ash", name: "Ashland", updated_at: "2026-09-01T00:00:00Z", project_type: "Development", brands: null },
     { id: "key", name: "Keystone", updated_at: "2026-09-02T00:00:00Z", project_type: "Development", brands: null },
+    // switched off for the calendar: must still show on the summary
+    { id: "hid", name: "Hidden Hotel", updated_at: "2026-09-03T00:00:00Z", project_type: "Development", brands: null, show_on_calendar: false },
   ],
   project_info: [
     { project_id: "ash", project_status: "Under Construction", project_type: "New Construction", target_opening_date: "2027-04-30" },
     { project_id: "key", project_status: "Design", project_type: "New Construction", target_opening_date: null },
+    { project_id: "hid", project_status: "Design", project_type: "New Construction", target_opening_date: null },
   ],
   schedule_phases: [
     { project_id: "ash", phase_number: 3, phase_name: "Pre-Construction", sub_phase_number: "3.1", start_date: "2025-07-01", end_date: "2026-03-31" },
@@ -93,13 +96,26 @@ describe("Dashboard tabs", () => {
   it("lists every project on the calendar in one flat list, regardless of the summary's collapsed sections", async () => {
     renderDash();
     await screen.findByRole("link", { name: "Keystone" });
-    fireEvent.click(screen.getByText("Design (1)")); // collapse a section on the summary tab
+    fireEvent.click(screen.getByText("Design (2)")); // collapse a section on the summary tab
     expect(screen.queryByRole("link", { name: "Keystone" })).not.toBeInTheDocument();
     clickTab(/Master Calendar/);
     await screen.findByTestId("calendar-scroller");
     expect(screen.getByTestId("row-key")).toBeInTheDocument(); // calendar has no sections to collapse
     expect(screen.getByTestId("row-ash")).toBeInTheDocument();
     expect(within(screen.getByTestId("row-ash")).getByText("Under Construction")).toBeInTheDocument(); // status shown inline
+  });
+
+  it("leaves projects switched off (show_on_calendar = false) off the calendar, but keeps them on the summary", async () => {
+    renderDash();
+    expect(await screen.findByRole("link", { name: "Hidden Hotel" })).toBeInTheDocument(); // summary
+    clickTab(/Master Calendar/);
+    await screen.findByTestId("calendar-scroller");
+    expect(screen.queryByTestId("row-hid")).not.toBeInTheDocument();
+    expect(screen.getByTestId("row-ash")).toBeInTheDocument();
+    expect(screen.getByTestId("row-key")).toBeInTheDocument(); // flag absent (undefined) = shown
+    expect(screen.getByTestId("coverage")).toHaveTextContent("2 of 2 projects have schedule dates");
+    clickTab(/Project Summary/);
+    expect(await screen.findByRole("link", { name: "Hidden Hotel" })).toBeInTheDocument(); // still there
   });
 
   it("shows the same empty state on both tabs when there are no projects", async () => {
