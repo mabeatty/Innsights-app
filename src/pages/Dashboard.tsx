@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { FolderPlus, ChevronRight, AlertTriangle } from "lucide-react";
+import { FolderPlus, ChevronRight, AlertTriangle, LayoutList, CalendarRange } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import MasterCalendar from "@/components/dashboard/MasterCalendar";
+import { buildPhaseSegments, type PhaseRow, type PhaseSegment } from "@/lib/masterCalendar";
 import { format } from "date-fns";
 import { useAlerts } from "@/hooks/useAlerts";
 import { toast } from "sonner";
@@ -22,6 +25,7 @@ interface ProjectRow {
   _infoType?: string | null;
   _projectCost?: number | null;
   _completedToDate?: number | null;
+  _phases?: PhaseSegment[];
 }
 
 // Paginate to bypass Supabase's default 1000-row cap. Without this, tables that grow
@@ -60,6 +64,14 @@ export default function Dashboard() {
   const { isConsultant, consultantProjectIds, accessLevel } = useAuth();
   const { getProjectsWithAlerts } = useAlerts();
   const projectsWithAlerts = getProjectsWithAlerts();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = searchParams.get("tab") === "calendar" ? "calendar" : "summary";
+  const setTab = (v: string) =>
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      if (v === "calendar") next.set("tab", "calendar"); else next.delete("tab");
+      return next;
+    }, { replace: true });
   const [projects, setProjects] = useState<ProjectRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
@@ -84,7 +96,7 @@ export default function Dashboard() {
   useEffect(() => {
     async function load() {
       try {
-      const [{ data: projData }, { data: infoData }, { data: phaseData }, budgetData, txnData] = await Promise.all([
+      const [{ data: projData }, { data: infoData }, phaseRows, budgetData, txnData] = await Promise.all([
         supabase
           .from("projects")
           .select("id, name, updated_at, project_type, brands!projects_brand_id_fkey(name)")
@@ -92,10 +104,12 @@ export default function Dashboard() {
         supabase
           .from("project_info")
           .select("project_id, project_status, project_type, target_opening_date"),
-        supabase
-          .from("schedule_phases")
-          .select("project_id, start_date")
-          .eq("sub_phase_number", "4.1"),
+        // Every phase row (not just 4.1): the Construction Start column still
+        // comes from 4.1, and the Master Calendar needs all four phases.
+        fetchAllRows<PhaseRow & { sub_phase_number: string | null }>(
+          "schedule_phases",
+          "project_id, phase_number, phase_name, sub_phase_number, start_date, end_date"
+        ),
         fetchAllRows<{ project_id: string; scheduled_value: number }>(
           "project_budget",
           "project_id, scheduled_value"
@@ -116,9 +130,10 @@ export default function Dashboard() {
       }
 
       const constructionStartMap = new Map<string, string>();
-      for (const phase of phaseData ?? []) {
-        if (phase.start_date) constructionStartMap.set(phase.project_id, phase.start_date);
+      for (const phase of phaseRows ?? []) {
+        if (phase.sub_phase_number === "4.1" && phase.start_date) constructionStartMap.set(phase.project_id, phase.start_date);
       }
+      const phaseSegments = buildPhaseSegments(phaseRows ?? []);
 
       const costMap = new Map<string, number>();
       for (const b of budgetData ?? []) {
@@ -142,6 +157,7 @@ export default function Dashboard() {
         _infoType: infoTypeMap.get(p.id) ?? p.project_type ?? null,
         _projectCost: costMap.has(p.id) && costMap.get(p.id)! > 0 ? costMap.get(p.id)! : null,
         _completedToDate: completedMap.has(p.id) && completedMap.get(p.id)! > 0 ? completedMap.get(p.id)! : null,
+        _phases: phaseSegments.get(p.id) ?? [],
       }));
 
       // Filter for consultants
@@ -182,6 +198,14 @@ export default function Dashboard() {
     return { label: typeGroup.label, statusGroups, total: typeProjects.length };
   }).filter((g) => g.total > 0);
 
+  const emptyState = (
+    <div className="text-center py-16 text-muted-foreground">
+      <p>No projects yet.</p>
+      {!isConsultant && <p className="text-sm mt-1">Create your first FF&E takeoff to get started.</p>}
+      {isConsultant && <p className="text-sm mt-1">No projects have been assigned to you yet.</p>}
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -198,118 +222,143 @@ export default function Dashboard() {
 
       
 
-      {loading ? (
-        <p className="text-muted-foreground text-sm">Loading…</p>
-      ) : projects.length === 0 ? (
-        <div className="text-center py-16 text-muted-foreground">
-          <p>No projects yet.</p>
-          {!isConsultant && <p className="text-sm mt-1">Create your first FF&E takeoff to get started.</p>}
-          {isConsultant && <p className="text-sm mt-1">No projects have been assigned to you yet.</p>}
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {typeGroups.map((typeGroup, groupIdx) => {
-            const typeCollapsed = collapsedTypes.has(typeGroup.label);
-            return (
-              <div key={typeGroup.label} className="border rounded-md overflow-hidden bg-card">
-                <table className="w-full table-dense" style={{ tableLayout: 'fixed' }}>
-                  <colgroup>
-                    <col style={{ width: '22%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '18%' }} />
-                    <col style={{ width: '16%' }} />
-                    <col style={{ width: '12%' }} />
-                    <col style={{ width: '16%' }} />
-                  </colgroup>
-                  {groupIdx === 0 && (
-                    <thead className="bg-muted/50">
-                      <tr>
-                        <th className="text-center">Project</th>
-                        <th className="text-center">Project Cost</th>
-                        <th className="text-center">Completed to Date</th>
-                        <th className="text-center">Construction Start</th>
-                        <th className="text-center">Completion Date</th>
-                        <th className="text-center">Last Updated</th>
-                      </tr>
-                    </thead>
-                  )}
-                  <tbody className="divide-y">
-                    <tr
-                      className="cursor-pointer select-none"
-                      onClick={() => toggleType(typeGroup.label)}
-                    >
-                      <td colSpan={6} className="bg-sidebar-accent py-2 px-3 text-left">
-                        <div className="flex items-center gap-2">
-                          <ChevronRight className={`h-3.5 w-3.5 text-sidebar-accent-foreground transition-transform duration-200 ${typeCollapsed ? "" : "rotate-90"}`} />
-                          <span className="text-xs font-bold uppercase tracking-wider text-sidebar-accent-foreground">
-                            {typeGroup.label} ({typeGroup.total})
-                          </span>
-                        </div>
-                      </td>
-                    </tr>
-                    {!typeCollapsed && typeGroup.statusGroups.map((group) => {
-                      const statusKey = `${typeGroup.label}-${group.status}`;
-                      const statusCollapsed = collapsedStatuses.has(statusKey);
-                      return (
-                        <>
-                          <tr
-                            key={`status-${statusKey}`}
-                            className="cursor-pointer select-none"
-                            onClick={() => toggleStatus(statusKey)}
-                          >
-                            <td colSpan={6} className="bg-muted py-1.5 px-6 text-left">
-                              <div className="flex items-center gap-2">
-                                <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${statusCollapsed ? "" : "rotate-90"}`} />
-                                <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                                  {group.status} ({group.items.length})
-                                </span>
-                              </div>
-                            </td>
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="bg-blue-100 text-blue-900 dark:bg-blue-900/30 dark:text-blue-200">
+          <TabsTrigger value="summary" className="gap-1.5">
+            <LayoutList className="h-3.5 w-3.5" /> Project Summary
+          </TabsTrigger>
+          <TabsTrigger value="calendar" className="gap-1.5">
+            <CalendarRange className="h-3.5 w-3.5" /> Master Calendar
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="summary" className="mt-4">
+          {loading ? (
+            <p className="text-muted-foreground text-sm">Loading…</p>
+          ) : projects.length === 0 ? (
+            emptyState
+          ) : (
+            <div className="space-y-6">
+              {typeGroups.map((typeGroup, groupIdx) => {
+                const typeCollapsed = collapsedTypes.has(typeGroup.label);
+                return (
+                  <div key={typeGroup.label} className="border rounded-md overflow-hidden bg-card">
+                    <table className="w-full table-dense" style={{ tableLayout: 'fixed' }}>
+                      <colgroup>
+                        <col style={{ width: '22%' }} />
+                        <col style={{ width: '16%' }} />
+                        <col style={{ width: '18%' }} />
+                        <col style={{ width: '16%' }} />
+                        <col style={{ width: '12%' }} />
+                        <col style={{ width: '16%' }} />
+                      </colgroup>
+                      {groupIdx === 0 && (
+                        <thead className="bg-muted/50">
+                          <tr>
+                            <th className="text-center">Project</th>
+                            <th className="text-center">Project Cost</th>
+                            <th className="text-center">Completed to Date</th>
+                            <th className="text-center">Construction Start</th>
+                            <th className="text-center">Completion Date</th>
+                            <th className="text-center">Last Updated</th>
                           </tr>
-                          {!statusCollapsed && group.items.map((p) => (
-                            <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                              <td className="text-center">
-                                <Link
-                                  to={`/project/${p.id}`}
-                                  className="text-primary hover:underline font-medium inline-flex items-center gap-1.5"
-                                >
-                                  {projectsWithAlerts.has(p.id) && (
-                                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                  )}
-                                  {p.name}
-                                </Link>
-                              </td>
-                              <td className="text-center text-foreground">
-                                {p._projectCost != null ? fmtCost(p._projectCost) : "—"}
-                              </td>
-                              <td className="text-center text-foreground">
-                                {p._completedToDate != null ? fmtCents(p._completedToDate) : "—"}
-                              </td>
-                              <td className="text-center text-muted-foreground">
-                                {p._constructionStart
-                                  ? format(new Date(p._constructionStart + "T00:00:00"), "MMM yyyy")
-                                  : "—"}
-                              </td>
-                              <td className="text-center text-muted-foreground">
-                                {p._completionDate
-                                  ? format(new Date(p._completionDate + "T00:00:00"), "MMM yyyy")
-                                  : "—"}
-                              </td>
-                              <td className="text-center text-muted-foreground">
-                                {format(new Date(p.updated_at), "MMM d, yyyy")}
-                              </td>
-                            </tr>
-                          ))}
-                        </>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            );
-          })}
-        </div>
-      )}
+                        </thead>
+                      )}
+                      <tbody className="divide-y">
+                        <tr
+                          className="cursor-pointer select-none"
+                          onClick={() => toggleType(typeGroup.label)}
+                        >
+                          <td colSpan={6} className="bg-sidebar-accent py-2 px-3 text-left">
+                            <div className="flex items-center gap-2">
+                              <ChevronRight className={`h-3.5 w-3.5 text-sidebar-accent-foreground transition-transform duration-200 ${typeCollapsed ? "" : "rotate-90"}`} />
+                              <span className="text-xs font-bold uppercase tracking-wider text-sidebar-accent-foreground">
+                                {typeGroup.label} ({typeGroup.total})
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                        {!typeCollapsed && typeGroup.statusGroups.map((group) => {
+                          const statusKey = `${typeGroup.label}-${group.status}`;
+                          const statusCollapsed = collapsedStatuses.has(statusKey);
+                          return (
+                            <>
+                              <tr
+                                key={`status-${statusKey}`}
+                                className="cursor-pointer select-none"
+                                onClick={() => toggleStatus(statusKey)}
+                              >
+                                <td colSpan={6} className="bg-muted py-1.5 px-6 text-left">
+                                  <div className="flex items-center gap-2">
+                                    <ChevronRight className={`h-3 w-3 text-muted-foreground transition-transform duration-200 ${statusCollapsed ? "" : "rotate-90"}`} />
+                                    <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                                      {group.status} ({group.items.length})
+                                    </span>
+                                  </div>
+                                </td>
+                              </tr>
+                              {!statusCollapsed && group.items.map((p) => (
+                                <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                                  <td className="text-center">
+                                    <Link
+                                      to={`/project/${p.id}`}
+                                      className="text-primary hover:underline font-medium inline-flex items-center gap-1.5"
+                                    >
+                                      {projectsWithAlerts.has(p.id) && (
+                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                                      )}
+                                      {p.name}
+                                    </Link>
+                                  </td>
+                                  <td className="text-center text-foreground">
+                                    {p._projectCost != null ? fmtCost(p._projectCost) : "—"}
+                                  </td>
+                                  <td className="text-center text-foreground">
+                                    {p._completedToDate != null ? fmtCents(p._completedToDate) : "—"}
+                                  </td>
+                                  <td className="text-center text-muted-foreground">
+                                    {p._constructionStart
+                                      ? format(new Date(p._constructionStart + "T00:00:00"), "MMM yyyy")
+                                      : "—"}
+                                  </td>
+                                  <td className="text-center text-muted-foreground">
+                                    {p._completionDate
+                                      ? format(new Date(p._completionDate + "T00:00:00"), "MMM yyyy")
+                                      : "—"}
+                                  </td>
+                                  <td className="text-center text-muted-foreground">
+                                    {format(new Date(p.updated_at), "MMM d, yyyy")}
+                                  </td>
+                                </tr>
+                              ))}
+                            </>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="calendar" className="mt-4">
+          {loading ? (
+            <p className="text-muted-foreground text-sm">Loading…</p>
+          ) : projects.length === 0 ? (
+            emptyState
+          ) : (
+            <MasterCalendar
+              typeGroups={typeGroups}
+              collapsedTypes={collapsedTypes}
+              collapsedStatuses={collapsedStatuses}
+              onToggleType={toggleType}
+              onToggleStatus={toggleStatus}
+            />
+          )}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
