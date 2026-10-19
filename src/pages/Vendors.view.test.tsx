@@ -1,7 +1,8 @@
-import { describe, it, expect, vi, beforeAll } from "vitest";
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { featureFlags } from "@/lib/featureFlags";
 import Vendors from "./Vendors";
 
 beforeAll(() => {
@@ -40,7 +41,10 @@ const renderAt = (url: string) =>
   );
 const clickTab = (name: string) => fireEvent.mouseDown(screen.getByRole("tab", { name }), { button: 0 });
 
-describe("Vendors page — All Vendors / Project Vendors", () => {
+describe("Vendors page — All Vendors / Project Vendors (feature turned on)", () => {
+  beforeEach(() => { featureFlags.projectVendorManagement = true; });
+  afterEach(() => { featureFlags.projectVendorManagement = false; });
+
   it("opens on the organization directory, with its own header buttons", async () => {
     renderAt("/vendors");
     expect(screen.getByRole("tab", { name: "All Vendors" })).toHaveAttribute("data-state", "active");
@@ -81,5 +85,23 @@ describe("Vendors page — All Vendors / Project Vendors", () => {
       renderAt("/vendors");
       expect(screen.getAllByText("dashboard").length).toBeGreaterThan(0);
     } finally { AUTH.accessLevel = "edit"; }
+  });
+});
+
+describe("Vendors page — Project Vendors turned off (the default)", () => {
+  it("is just the organization directory: no tabs, no Project Vendors", () => {
+    renderAt("/vendors");
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
+    expect(screen.queryByText("Project Vendors")).not.toBeInTheDocument();
+    expect(screen.getByText("Organization-wide vendor directory.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pricing Library/ })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search vendors...")).toBeInTheDocument();
+  });
+
+  it("an old ?view=project link just opens the directory", () => {
+    renderAt("/vendors?view=project");
+    expect(screen.queryByTestId("project-vendors-panel")).not.toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search vendors...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pricing Library/ })).toBeInTheDocument();
   });
 });

@@ -18,6 +18,7 @@ import { Pencil, Trash2, Plus, Search, Star, Mail, Phone, Download, Library, Lin
 import * as XLSX from "xlsx";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ProjectVendorsPanel from "@/components/vendors/ProjectVendorsPanel";
+import { featureFlags } from "@/lib/featureFlags";
 import VendorProposalImportDialog from "@/components/vendors/VendorProposalImportDialog";
 import VendorW9Panel, { VendorW9, computeW9Status, w9StatusBadgeClasses, w9StatusLabel } from "@/components/vendors/VendorW9Panel";
 import ManageCategoriesDialog, { VendorCategory } from "@/components/vendors/ManageCategoriesDialog";
@@ -117,7 +118,8 @@ function StarRating({ value, onChange, size = 18 }: { value: number; onChange?: 
 export default function Vendors() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const view: "directory" | "project" = searchParams.get("view") === "project" ? "project" : "directory";
+  // "Project Vendors" is switched off (see featureFlags); a ?view=project link just opens the directory.
+  const view: "directory" | "project" = featureFlags.projectVendorManagement && searchParams.get("view") === "project" ? "project" : "directory";
   const setView = (v: string) =>
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
@@ -424,12 +426,14 @@ export default function Vendors() {
         )}
       </div>
 
-      <Tabs value={view} onValueChange={setView}>
-        <TabsList>
-          <TabsTrigger value="directory">All Vendors</TabsTrigger>
-          <TabsTrigger value="project">Project Vendors</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {featureFlags.projectVendorManagement && (
+        <Tabs value={view} onValueChange={setView}>
+          <TabsList>
+            <TabsTrigger value="directory">All Vendors</TabsTrigger>
+            <TabsTrigger value="project">Project Vendors</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      )}
 
       {view === "project" ? (
         <ProjectVendorsPanel />

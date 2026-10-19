@@ -25,6 +25,7 @@ import { statusBadgeClasses } from "@/components/invoices/types";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/contexts/AuthContext";
 import { isDrawEligible, isHeldForNextDraw } from "./drawHold";
+import { featureFlags } from "@/lib/featureFlags";
 
 interface Props {
   projectId: string;
@@ -1063,9 +1064,11 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                   <SelectTrigger className="h-8"><SelectValue placeholder="Select vendor" /></SelectTrigger>
                   <SelectContent>
                     {vendors.map(v => <SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>)}
-                    <SelectItem value="__add_new__" className="text-primary font-medium">
-                      <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Vendor</span>
-                    </SelectItem>
+                    {featureFlags.projectVendorManagement && (
+                      <SelectItem value="__add_new__" className="text-primary font-medium">
+                        <span className="flex items-center gap-1"><Plus className="h-3.5 w-3.5" /> Add New Vendor</span>
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </div>

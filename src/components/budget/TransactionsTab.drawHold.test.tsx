@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeAll, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import TransactionsTab from "./TransactionsTab";
 import { toast } from "sonner";
+import { featureFlags } from "@/lib/featureFlags";
 
 beforeAll(() => {
   (globalThis as any).ResizeObserver ??= class { observe() {} unobserve() {} disconnect() {} };
@@ -24,12 +25,13 @@ const ROWS = [
   tx({ id: "E1", transaction_group_id: "gE", transaction_number: 5, payee: "Old Co", amount: 9000, net_amount: 9000, draw_id: "d1" }),
 ];
 
+const VENDORS = [{ id: "vv1", project_id: "p1", name: "Rapid Draw", contact_name: null, email: null, phone: null, notes: null, created_at: "2026-01-01" }];
 const calls = { selects: 0, updates: [] as { table: string; payload: any; ids?: string[] }[], inserts: [] as { table: string; payload: any }[] };
 let updateError: string | null = null;
 function builder(table: string): any {
   const b: any = new Proxy(function () {}, {
     get(_t, prop) {
-      if (prop === "then") return (res: any, rej: any) => Promise.resolve({ data: table === "budget_transactions" ? ROWS : [], error: null }).then(res, rej);
+      if (prop === "then") return (res: any, rej: any) => Promise.resolve({ data: table === "budget_transactions" ? ROWS : table === "vendors" ? VENDORS : [], error: null }).then(res, rej);
       if (prop === "select") return () => { if (table === "budget_transactions") calls.selects++; return b; };
       if (prop === "insert") return (payload: any) => { calls.inserts.push({ table, payload }); return b; };
       if (prop === "update") {
@@ -219,7 +221,21 @@ describe("Transactions tab — vendors", () => {
     expect(screen.queryByText("Manage Vendors")).not.toBeInTheDocument();
   });
 
-  it("adding a vendor from the payee dropdown in the transaction form still works", async () => {
+
+  it("with project vendor management off (the default), the payee dropdown lists existing vendors but offers no 'Add New Vendor'", async () => {
+    renderTab();
+    const alphaRow = (await box(/Include Alpha Concrete #1/)).closest("tr")!;
+    fireEvent.click(within(alphaRow).getByTitle("Edit"));
+    const payee = (await screen.findByText("Payee / Vendor *")).parentElement!.querySelector('[role="combobox"]') as HTMLElement;
+    fireEvent.keyDown(payee, { key: "Enter" });
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toContain("Rapid Draw");            // the existing list is still used
+    expect(screen.queryByRole("option", { name: /Add New Vendor/ })).not.toBeInTheDocument();
+  });
+
+  it("with project vendor management turned on, adding a vendor from the payee dropdown works", async () => {
+    featureFlags.projectVendorManagement = true;
+    try { // the feature is off by default
     renderTab();
     const alphaRow = (await box(/Include Alpha Concrete #1/)).closest("tr")!;
     fireEvent.click(within(alphaRow).getByTitle("Edit"));                         // open the transaction form
@@ -233,5 +249,6 @@ describe("Transactions tab — vendors", () => {
     await waitFor(() => expect(calls.inserts).toHaveLength(1));
     expect(calls.inserts[0]).toMatchObject({ table: "vendors", payload: { name: "New Vendor Co", project_id: "p1" } });
     await waitFor(() => expect(screen.queryByText("Vendor Name *")).not.toBeInTheDocument()); // the add-vendor form closed
+  } finally { featureFlags.projectVendorManagement = false; }
   });
 });
