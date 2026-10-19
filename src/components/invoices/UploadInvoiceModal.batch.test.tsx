@@ -78,7 +78,7 @@ const renderForm = (batch: BatchModeProps, extra: Record<string, any> = {}) => {
 beforeEach(() => {
   vi.clearAllMocks();
   for (const k of Object.keys(tables)) delete tables[k];
-  tables.projects = [{ id: "p1", name: "Intech", hotel_name: null }];
+  tables.projects = [{ id: "p1", name: "Intech", hotel_name: null, brands: { name: "TownePlace Suites" }, secondary_brand: null }];
 });
 
 describe("UploadInvoiceModal in batch mode", () => {
@@ -165,6 +165,38 @@ describe("UploadInvoiceModal in batch mode", () => {
     await screen.findByDisplayValue("Acme Plumbing");
     await new Promise((r) => setTimeout(r, 800)); // past the 500ms debounce
     expect(screen.queryByText(/Possible duplicate/)).not.toBeInTheDocument();
+  });
+
+  // The project dropdown (the one in the "Project *" field)
+  const projectTrigger = () => screen.getByText("Project *").parentElement!.querySelector('[role="combobox"]') as HTMLElement;
+
+  it("shows the selected project as 'city — brand'", async () => {
+    renderForm(batchProps());
+    await waitFor(() => expect(projectTrigger()).toHaveTextContent("Intech — TownePlace Suites"));
+  });
+
+  it("lists projects as 'city — brand' so two in the same city can be told apart, and selecting one works", async () => {
+    tables.projects = [
+      { id: "o2", name: "Ontario", hotel_name: null, brands: { name: "Home2 Suites" }, secondary_brand: null },
+      { id: "o1", name: "Ontario", hotel_name: null, brands: { name: "Hampton Inn" }, secondary_brand: null },
+      { id: "t1", name: "Tudor Arms", hotel_name: null, brands: { name: "Hampton Inn" }, secondary_brand: { name: "Tapestry" } },
+      { id: "f1", name: "Ferry Street", hotel_name: null, brands: null, secondary_brand: null },
+      { id: "s1", name: "Springfield Home2 Suites", hotel_name: null, brands: { name: "Home2 Suites" }, secondary_brand: null },
+    ];
+    render(<UploadInvoiceModal open onOpenChange={vi.fn()} />); // no project pre-selected, not batch
+    await screen.findByText("Project *");
+    await waitFor(() => expect(projectTrigger()).toBeInTheDocument());
+    fireEvent.keyDown(projectTrigger(), { key: "Enter" });
+    const options = await screen.findAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "Ferry Street",
+      "Ontario — Hampton Inn",
+      "Ontario — Home2 Suites",
+      "Springfield Home2 Suites",
+      "Tudor Arms — Hampton Inn / Tapestry",
+    ]);
+    fireEvent.keyDown(options[1], { key: "Enter" });
+    await waitFor(() => expect(projectTrigger()).toHaveTextContent("Ontario — Hampton Inn"));
   });
 
   it("single-upload mode is unchanged: Cancel / Submit Invoice, no batch controls", async () => {

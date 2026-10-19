@@ -19,9 +19,9 @@ import type { AIADetailRow } from "./aiaExcel";
 import { buildBudgetMatcher, extractInvoiceFile, fileKind, type ExtractionResult } from "./invoiceExtraction";
 import DriveFolderPicker from "./DriveFolderPicker";
 import { format } from "date-fns";
-import { formatProjectLabel } from "@/lib/projectLabel";
+import { PROJECT_OPTION_SELECT, projectOptions } from "@/lib/projectLabel";
 
-interface Project { id: string; name: string; hotel_name: string | null }
+interface Project { id: string; name: string; hotel_name: string | null; brands?: { name: string } | null; secondary_brand?: { name: string } | null }
 
 interface LineItem {
   id: string;
@@ -140,7 +140,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
 
   useEffect(() => {
     if (!open) return;
-    supabase.from("projects").select("id, name, hotel_name").order("name").then(({ data }) => setProjects(data ?? []));
+    supabase.from("projects").select(PROJECT_OPTION_SELECT).order("name").then(({ data }) => setProjects((data ?? []) as unknown as Project[]));
     supabase.from("project_info").select("project_id, entity_name").then(({ data }) => {
       const m: Record<string, string> = {};
       (data ?? []).forEach((r: any) => { if (r.entity_name) m[r.project_id] = r.entity_name; });
@@ -602,7 +602,7 @@ export default function UploadInvoiceModal({ open, onOpenChange, defaultProjectI
               <Select value={projectId} onValueChange={setProjectId} disabled={!!defaultProjectId}>
                 <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
                 <SelectContent>
-                  {projects.map((p) => <SelectItem key={p.id} value={p.id}>{formatProjectLabel(p.name, p.hotel_name)}</SelectItem>)}
+                  {projectOptions(projects).map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">Select a project to auto-match line item categories</p>

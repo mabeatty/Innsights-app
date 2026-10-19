@@ -15,7 +15,7 @@ beforeAll(() => {
 vi.mock("@/integrations/supabase/client", () => ({
   supabase: {
     from: () => ({
-      select: () => ({ order: () => Promise.resolve({ data: [{ id: "p1", name: "Intech", hotel_name: null }] }) }),
+      select: () => ({ order: () => Promise.resolve({ data: [{ id: "p1", name: "Intech", hotel_name: null, brands: { name: "TownePlace Suites" }, secondary_brand: null }] }) }),
     }),
   },
 }));
@@ -72,6 +72,12 @@ beforeEach(() => {
 });
 
 describe("BatchUploadModal", () => {
+  it("shows the project as 'city — brand'", async () => {
+    renderBatch();
+    const trigger = screen.getByText("Project *").parentElement!.querySelector('[role="combobox"]') as HTMLElement;
+    await waitFor(() => expect(trigger).toHaveTextContent("Intech — TownePlace Suites"));
+  });
+
   it("runs at most 3 extractions at once and finishes all of them", async () => {
     let inFlight = 0, maxInFlight = 0;
     mockExtract.mockImplementation(async (f: File) => {

@@ -13,7 +13,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { createNotifications } from "@/lib/notify";
 import { fmtDecimal } from "../budget/types";
-import { formatProjectLabel } from "@/lib/projectLabel";
+import { PROJECT_OPTION_SELECT, projectOptions } from "@/lib/projectLabel";
 import UploadInvoiceModal, { type BatchSaveInfo } from "./UploadInvoiceModal";
 import {
   buildBudgetMatcher, extractInvoiceFile, fileKind, isExtractionFailure, summarizeExtraction,
@@ -44,7 +44,7 @@ interface Props {
 }
 
 export default function BatchUploadModal({ open, onOpenChange, defaultProjectId, onCreated }: Props) {
-  const [projects, setProjects] = useState<{ id: string; name: string; hotel_name: string | null }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; hotel_name: string | null; brands?: { name: string } | null; secondary_brand?: { name: string } | null }[]>([]);
   const [projectId, setProjectId] = useState<string>("");
   const [items, setItems] = useState<QueueItem[]>([]);
   const [reviewId, setReviewId] = useState<string | null>(null);
@@ -79,7 +79,7 @@ export default function BatchUploadModal({ open, onOpenChange, defaultProjectId,
     const pid = defaultProjectId || "";
     setProjectId(pid);
     projectIdRef.current = pid;
-    supabase.from("projects").select("id, name, hotel_name").order("name").then(({ data }) => setProjects(data ?? []));
+    supabase.from("projects").select(PROJECT_OPTION_SELECT).order("name").then(({ data }) => setProjects((data ?? []) as unknown as typeof projects));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, defaultProjectId]);
 
@@ -288,7 +288,7 @@ export default function BatchUploadModal({ open, onOpenChange, defaultProjectId,
               >
                 <SelectTrigger><SelectValue placeholder="Select project" /></SelectTrigger>
                 <SelectContent>
-                  {projects.map((p) => <SelectItem key={p.id} value={p.id}>{formatProjectLabel(p.name, p.hotel_name)}</SelectItem>)}
+                  {projectOptions(projects).map((o) => <SelectItem key={o.id} value={o.id}>{o.label}</SelectItem>)}
                 </SelectContent>
               </Select>
               {!defaultProjectId && items.length > 0 && (
