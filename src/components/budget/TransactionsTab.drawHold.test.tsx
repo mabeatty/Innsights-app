@@ -139,6 +139,50 @@ describe("Transactions tab — include / hold transactions for the next draw", (
     expect(calls.updates[1].payload).toEqual({ exclude_from_draw: true });
   });
 
+  it("'Select all' includes every eligible row (never the Pending one), then has nothing left to do", async () => {
+    renderTab();
+    const selectAll = await screen.findByRole("button", { name: "Select all" });
+    expect(selectAll).toBeEnabled(); // Beta is held
+    fireEvent.click(selectAll);
+    await waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect(calls.updates[0].payload).toEqual({ exclude_from_draw: false });
+    expect(calls.updates[0].ids!.sort()).toEqual(["A1", "A2", "B1", "D1"]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Select all" })).toBeDisabled());
+    expect(checked(screen.getByRole("checkbox", { name: /Include Beta Electric #2/ }))).toBe("true");
+  });
+
+  it("'Deselect all' holds every eligible row and leaves Pending alone", async () => {
+    renderTab();
+    fireEvent.click(await screen.findByRole("button", { name: "Deselect all" }));
+    await waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect(calls.updates[0].payload).toEqual({ exclude_from_draw: true });
+    expect(calls.updates[0].ids!.sort()).toEqual(["A1", "A2", "B1", "D1"]);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Deselect all" })).toBeDisabled());
+    expect(screen.getByRole("button", { name: "Select all" })).toBeEnabled();
+    expect(screen.getByTestId("draw-summary")).toHaveTextContent(/Held for the following draw:\s*3/); // Alpha, Beta, Delta
+  });
+
+  it("with a filter on, the buttons say 'shown' and only touch the rows you can see", async () => {
+    renderTab();
+    await screen.findByRole("button", { name: "Select all" });
+    // filter the list to Paid (only Delta Plumbing)
+    const statusTrigger = screen.getAllByText("Status")[0].parentElement!.querySelector('[role="combobox"]') as HTMLElement;
+    fireEvent.keyDown(statusTrigger, { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("option", { name: "Paid" }), { key: "Enter" });
+    const deselectShown = await screen.findByRole("button", { name: "Deselect all shown" });
+    expect(screen.getByRole("button", { name: "Select all shown" })).toBeDisabled(); // Delta is already included
+    fireEvent.click(deselectShown);
+    await waitFor(() => expect(calls.updates).toHaveLength(1));
+    expect(calls.updates[0]).toMatchObject({ payload: { exclude_from_draw: true }, ids: ["D1"] });
+  });
+
+  it("the buttons are disabled for view-only users", async () => {
+    AUTH.accessLevel = "view";
+    renderTab();
+    expect(await screen.findByRole("button", { name: "Select all" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Deselect all" })).toBeDisabled();
+  });
+
   it("puts the row back and says so if the save fails", async () => {
     updateError = "permission denied";
     renderTab();

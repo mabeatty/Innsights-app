@@ -583,6 +583,12 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     onChange: (include) => setGroupsExcluded(visibleEligible, !include),
     disabled: !canToggleDraw || visibleEligible.length === 0,
   };
+  // "Select all" / "Deselect all" buttons: the same rows the header checkbox acts on (what's shown,
+  // minus Pending), so with a filter on they say "shown" instead of implying the whole list.
+  const filtersActive = filterType !== "all" || filterStatus !== "all" || filterDivision !== "all";
+  const allShownIncluded = visibleEligible.length > 0 && visibleEligible.every((g) => groupDrawState(g) === "included");
+  const noneShownIncluded = visibleEligible.every((g) => groupDrawState(g) === "held");
+  const bulkDisabled = !canToggleDraw || visibleEligible.length === 0;
 
   const grandTotalAmount = filteredGroups.reduce((s, g) => s + g.totalAmount, 0);
   const grandTotalRetainage = filteredGroups.reduce((s, g) => s + g.totalRetainage, 0);
@@ -927,6 +933,24 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
               <span className="text-amber-700 dark:text-amber-400"><span className="font-medium">Held for the following draw:</span> {drawCounts.held} · {fmtDecimal(drawCounts.heldNet)} net</span>
             )}
             {drawCounts.pending > 0 && <span className="text-muted-foreground">{drawCounts.pending} pending approval (can't go on a draw yet)</span>}
+            <span className="flex items-center gap-1.5">
+              <Button
+                size="sm" variant="outline" className="h-7 text-xs"
+                disabled={bulkDisabled || allShownIncluded}
+                onClick={() => setGroupsExcluded(visibleEligible, false)}
+                title="Include every transaction shown (Pending ones can't be included yet)"
+              >
+                {filtersActive ? "Select all shown" : "Select all"}
+              </Button>
+              <Button
+                size="sm" variant="outline" className="h-7 text-xs"
+                disabled={bulkDisabled || noneShownIncluded}
+                onClick={() => setGroupsExcluded(visibleEligible, true)}
+                title="Hold every transaction shown for the following draw"
+              >
+                {filtersActive ? "Deselect all shown" : "Deselect all"}
+              </Button>
+            </span>
             <span className="text-muted-foreground sm:ml-auto">Uncheck a transaction to hold it back — it rolls into the next draw.</span>
           </div>
 
