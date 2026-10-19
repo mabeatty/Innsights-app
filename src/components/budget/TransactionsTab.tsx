@@ -175,7 +175,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   const [vendorNotes, setVendorNotes] = useState("");
   const [editingVendorId, setEditingVendorId] = useState<string | null>(null);
   const [vendorSaving, setVendorSaving] = useState(false);
-  const [manageVendorsOpen, setManageVendorsOpen] = useState(false);
 
   const loadVendors = useCallback(async () => {
     const { data } = await supabase
@@ -605,16 +604,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setVendorDialogOpen(true);
   };
 
-  const openVendorEdit = (v: Vendor) => {
-    setEditingVendorId(v.id);
-    setVendorName(v.name);
-    setVendorContact(v.contact_name ?? "");
-    setVendorEmail(v.email ?? "");
-    setVendorPhone(v.phone ?? "");
-    setVendorNotes(v.notes ?? "");
-    setVendorDialogOpen(true);
-  };
-
   const handleSaveVendor = async () => {
     if (!vendorName.trim()) { toast.error("Vendor name is required."); return; }
     setVendorSaving(true);
@@ -649,12 +638,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
       toast.error(err?.message ?? "Failed to save vendor.");
     }
     setVendorSaving(false);
-  };
-
-  const handleDeleteVendor = async (id: string) => {
-    const { error } = await supabase.from("vendors").delete().eq("id", id);
-    if (error) toast.error("Failed to delete vendor.");
-    else { toast.success("Vendor deleted."); await loadVendors(); }
   };
 
   // Render helpers
@@ -920,9 +903,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
             </div>
             <div className="flex gap-2 ml-auto">
               <span className="text-xs text-muted-foreground self-center">Invoices are added in the global Invoices tab.</span>
-              <Button size="sm" variant="outline" onClick={() => setManageVendorsOpen(true)}>
-                Manage Vendors
-              </Button>
             </div>
           </div>
 
@@ -1259,56 +1239,6 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
           <DialogFooter>
             <Button variant="outline" onClick={() => setVendorDialogOpen(false)}>Cancel</Button>
             <Button onClick={handleSaveVendor} disabled={vendorSaving}>{vendorSaving ? "Saving…" : editingVendorId ? "Save Changes" : "Add Vendor"}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage Vendors Dialog */}
-      <Dialog open={manageVendorsOpen} onOpenChange={setManageVendorsOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader><DialogTitle>Manage Vendors</DialogTitle></DialogHeader>
-          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
-            {vendors.length === 0 ? (
-              <p className="text-sm text-muted-foreground py-4 text-center">No vendors yet. Add your first vendor below.</p>
-            ) : (
-              <div className="rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-muted/50 text-muted-foreground text-left text-xs">
-                      <th className="px-3 py-2">Name</th>
-                      <th className="px-3 py-2">Contact</th>
-                      <th className="px-3 py-2">Email</th>
-                      <th className="px-3 py-2">Phone</th>
-                      <th className="px-3 py-2 w-20" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {vendors.map(v => (
-                      <tr key={v.id} className="border-t">
-                        <td className="px-3 py-2">{v.name}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{v.contact_name || "—"}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{v.email || "—"}</td>
-                        <td className="px-3 py-2 text-muted-foreground">{v.phone || "—"}</td>
-                        <td className="px-3 py-2">
-                          <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-7 w-7" title="Edit" onClick={() => { openVendorEdit(v); }}>
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="Delete" onClick={() => handleDeleteVendor(v.id)}>
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setManageVendorsOpen(false)}>Close</Button>
-            <Button onClick={openVendorAdd} className="gap-1.5"><Plus className="h-3.5 w-3.5" /> Add Vendor</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

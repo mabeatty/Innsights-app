@@ -24,13 +24,14 @@ const ROWS = [
   tx({ id: "E1", transaction_group_id: "gE", transaction_number: 5, payee: "Old Co", amount: 9000, net_amount: 9000, draw_id: "d1" }),
 ];
 
-const calls = { selects: 0, updates: [] as { table: string; payload: any; ids?: string[] }[] };
+const calls = { selects: 0, updates: [] as { table: string; payload: any; ids?: string[] }[], inserts: [] as { table: string; payload: any }[] };
 let updateError: string | null = null;
 function builder(table: string): any {
   const b: any = new Proxy(function () {}, {
     get(_t, prop) {
       if (prop === "then") return (res: any, rej: any) => Promise.resolve({ data: table === "budget_transactions" ? ROWS : [], error: null }).then(res, rej);
       if (prop === "select") return () => { if (table === "budget_transactions") calls.selects++; return b; };
+      if (prop === "insert") return (payload: any) => { calls.inserts.push({ table, payload }); return b; };
       if (prop === "update") {
         return (payload: any) => {
           const rec: { table: string; payload: any; ids?: string[] } = { table, payload };
@@ -67,7 +68,7 @@ const checked = (el: HTMLElement) => el.getAttribute("aria-checked");
 
 beforeEach(() => {
   vi.clearAllMocks();
-  calls.selects = 0; calls.updates.length = 0; updateError = null; AUTH.accessLevel = "edit"; AUTH.isConsultant = false;
+  calls.selects = 0; calls.updates.length = 0; calls.inserts.length = 0; updateError = null; AUTH.accessLevel = "edit"; AUTH.isConsultant = false;
 });
 
 describe("Transactions tab — include / hold transactions for the next draw", () => {
@@ -207,5 +208,30 @@ describe("Transactions tab — include / hold transactions for the next draw", (
     expect(calls.selects).toBe(afterMount);
     rerender(<TransactionsTab projectId="p1" draws={[DRAW, { ...DRAW, id: "d2", draw_number: 2 }]} onTransactionsChange={onTransactionsChange} />);
     await waitFor(() => expect(calls.selects).toBe(afterMount + 1));
+  });
+});
+
+describe("Transactions tab — vendors", () => {
+  it("has no Manage Vendors button", async () => {
+    renderTab();
+    await screen.findByRole("button", { name: "Select all" });
+    expect(screen.queryByRole("button", { name: /Manage Vendors/i })).not.toBeInTheDocument();
+    expect(screen.queryByText("Manage Vendors")).not.toBeInTheDocument();
+  });
+
+  it("adding a vendor from the payee dropdown in the transaction form still works", async () => {
+    renderTab();
+    const alphaRow = (await box(/Include Alpha Concrete #1/)).closest("tr")!;
+    fireEvent.click(within(alphaRow).getByTitle("Edit"));                         // open the transaction form
+    const payee = (await screen.findByText("Payee / Vendor *")).parentElement!.querySelector('[role="combobox"]') as HTMLElement;
+    fireEvent.keyDown(payee, { key: "Enter" });
+    fireEvent.keyDown(await screen.findByRole("option", { name: /Add New Vendor/ }), { key: "Enter" });
+
+    const nameInput = (await screen.findByText("Vendor Name *")).parentElement!.querySelector("input") as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: "New Vendor Co" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add Vendor" }));
+    await waitFor(() => expect(calls.inserts).toHaveLength(1));
+    expect(calls.inserts[0]).toMatchObject({ table: "vendors", payload: { name: "New Vendor Co", project_id: "p1" } });
+    await waitFor(() => expect(screen.queryByText("Vendor Name *")).not.toBeInTheDocument()); // the add-vendor form closed
   });
 });
