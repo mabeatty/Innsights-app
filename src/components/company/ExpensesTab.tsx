@@ -3,6 +3,8 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { format } from "date-fns";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useCompanyFinancials } from "@/hooks/useCompanyFinancials";
+import { useCompanyExpenseDetail } from "@/hooks/useCompanyExpenseDetail";
+import SubCategoryTable from "./SubCategoryTable";
 import { getRevenueCalendarMonths } from "@/lib/revenueCalendar";
 import { makeStackedBarShape } from "@/lib/stackedBarShape";
 
@@ -46,6 +48,7 @@ export default function ExpensesTab() {
   const financialsYear1 = useCompanyFinancials(calendarYear1);
   const financialsYear2 = useCompanyFinancials(calendarYear1 + 1);
   const [expandedCategoryId, setExpandedCategoryId] = useState<string | null>(null);
+  const expenseDetail = useCompanyExpenseDetail(); // account-level rows under each category
 
   const loading = financialsYear1.loading || financialsYear2.loading;
   const error = financialsYear1.error || financialsYear2.error;
@@ -216,7 +219,7 @@ export default function ExpensesTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">By category</h3>
-        <p className="text-xs text-muted-foreground mb-2">Click a row for the monthly breakdown.</p>
+        <p className="text-xs text-muted-foreground mb-2">Click a row for its sub-categories and monthly breakdown.</p>
         <div className="rounded-lg border overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -256,6 +259,17 @@ export default function ExpensesTab() {
                               </div>
                             ))}
                           </div>
+                          <SubCategoryTable
+                            rows={expenseDetail.rows.filter((r) => r.category_id === category.id)}
+                            months={monthDetail
+                              .filter((m) => {
+                                const e = byCategoryMonth.get(category.id)?.get(m.month);
+                                return hasExpenseDataForYear(m.month) && !!e && !e.isProjected; // a real closed month, not just a missing one
+                              })
+                              .map((m) => m.month)}
+                            categoryActuals={new Map(monthDetail.map((m) => [m.month, m.actual]))}
+                            loading={expenseDetail.loading}
+                          />
                         </td>
                       </tr>
                     )}
