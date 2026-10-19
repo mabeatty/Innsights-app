@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo, Fragment } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef, Fragment } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,9 @@ import {
 import type { DrawRecord } from "./DrawHistoryTab";
 import InvoiceDetailDialog from "@/components/invoices/InvoiceDetailDialog";
 import { statusBadgeClasses } from "@/components/invoices/types";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useAuth } from "@/contexts/AuthContext";
+import { isDrawEligible, isHeldForNextDraw } from "./drawHold";
 
 interface Props {
   projectId: string;
@@ -108,6 +111,18 @@ function buildGroups(txns: BudgetTransaction[]): TransactionGroup[] {
   return result;
 }
 
+// Whether a row is going into the next draw: "included" (the default), "held" (every
+// line held back, rolls into the following draw), "mixed" (some lines each way), or
+// "pending" (not approved yet, so it can't go on a draw regardless).
+type DrawState = "included" | "held" | "mixed" | "pending";
+function groupDrawState(g: TransactionGroup): DrawState {
+  if (!isDrawEligible(g)) return "pending";
+  const held = g.items.filter((i) => isHeldForNextDraw(i)).length;
+  return held === 0 ? "included" : held === g.items.length ? "held" : "mixed";
+}
+
+interface DrawControl { state: boolean | "indeterminate"; onChange: (include: boolean) => void; disabled: boolean }
+
 export default function TransactionsTab({ projectId, onTransactionsChange, draws, onDrawsRefresh }: Props) {
   const [transactions, setTransactions] = useState<BudgetTransaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,6 +131,10 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   const [editingDrawId, setEditingDrawId] = useState<string | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
+  const { isConsultant, accessLevel } = useAuth();
+  const canToggleDraw = !isConsultant && accessLevel !== "view"; // same rule as editing a project
+  const transactionsRef = useRef<BudgetTransaction[]>([]); // always the latest list, so rapid toggles compose
+  transactionsRef.current = transactions;
 
   // View toggle: "current" or "past"
   const [view, setView] = useState<"current" | "past">("current");
@@ -192,6 +211,16 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   }, [projectId, onTransactionsChange]);
 
   useEffect(() => { load(); loadVendors(); loadContracts(); }, [load, loadVendors, loadContracts]);
+
+  // Closing a draw claims rows and clears holds in the database; refetch so this list
+  // doesn't keep showing the pre-close picture. (Skips the first run: the load above covers it.)
+  const drawsKey = (draws ?? []).map((d) => d.id).join(",");
+  const lastDrawsKey = useRef(drawsKey);
+  useEffect(() => {
+    if (lastDrawsKey.current === drawsKey) return;
+    lastDrawsKey.current = drawsKey;
+    load();
+  }, [drawsKey, load]);
 
   // Split transactions into current (no draw_id) and past (has draw_id)
   const currentTransactions = useMemo(() => transactions.filter(t => !(t as any).draw_id), [transactions]);
@@ -448,6 +477,28 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     setSaving(false);
   };
 
+  // Hold rows out of the next draw (excluded = true) or put them back in. Held rows stay
+  // unassigned, so they simply roll into the following draw — no destination to pick.
+  // The screen updates immediately; if the save fails it's put back to what's stored.
+  const setGroupsExcluded = async (groups: TransactionGroup[], excluded: boolean) => {
+    const ids = groups.flatMap((g) => g.items.map((i) => i.id));
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    const next = transactionsRef.current.map((t) => (idSet.has(t.id) ? { ...t, exclude_from_draw: excluded } : t));
+    transactionsRef.current = next;
+    setTransactions(next);
+    onTransactionsChange?.(next); // keeps G702/G703 in step with the change
+    let failure: string | null = null;
+    for (let i = 0; i < ids.length; i += 100) { // chunked so a big select-all doesn't blow the URL length
+      const { error } = await (supabase as any).from("budget_transactions").update({ exclude_from_draw: excluded }).in("id", ids.slice(i, i + 100));
+      if (error) { failure = error.message; break; }
+    }
+    if (failure) {
+      toast.error(`Couldn't update the draw: ${failure}`);
+      await load();
+    }
+  };
+
   const toggleExpand = (groupId: string) => {
     setExpandedGroups(prev => {
       const next = new Set(prev);
@@ -508,6 +559,30 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   };
 
   const sortedGroups = useMemo(() => sortGroups(filteredGroups), [filteredGroups, sortKey, sortDir]);
+
+  // Draw inclusion, counted over ALL current rows (the filters above don't change what's in the draw).
+  const drawCounts = useMemo(() => {
+    const c = { included: 0, includedNet: 0, held: 0, heldNet: 0, pending: 0 };
+    for (const g of currentGroups) {
+      const st = groupDrawState(g);
+      if (st === "pending") c.pending++;
+      else if (st === "held") { c.held++; c.heldNet += g.totalNet; }
+      else { c.included++; c.includedNet += g.totalNet; }
+    }
+    return c;
+  }, [currentGroups]);
+  // The header checkbox acts on the rows you can currently see (respects the filters), like any data table.
+  const visibleEligible = sortedGroups.filter((g) => groupDrawState(g) !== "pending");
+  const headerState: boolean | "indeterminate" =
+    visibleEligible.length === 0 ? false
+    : visibleEligible.every((g) => groupDrawState(g) === "included") ? true
+    : visibleEligible.every((g) => groupDrawState(g) === "held") ? false
+    : "indeterminate";
+  const headerDrawControl: DrawControl = {
+    state: headerState,
+    onChange: (include) => setGroupsExcluded(visibleEligible, !include),
+    disabled: !canToggleDraw || visibleEligible.length === 0,
+  };
 
   const grandTotalAmount = filteredGroups.reduce((s, g) => s + g.totalAmount, 0);
   const grandTotalRetainage = filteredGroups.reduce((s, g) => s + g.totalRetainage, 0);
@@ -577,9 +652,20 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
   };
 
   // Render helpers
-  const renderTableHeader = (sortable: boolean) => (
+  const renderTableHeader = (sortable: boolean, drawControl?: DrawControl) => (
     <thead>
       <tr className="bg-muted/50 text-muted-foreground text-left">
+        {drawControl && (
+          <th className="px-2 py-2">
+            <Checkbox
+              checked={drawControl.state}
+              disabled={drawControl.disabled}
+              onCheckedChange={(v) => drawControl.onChange(v === true)}
+              aria-label="Include all visible transactions in the next draw"
+              title="Include or hold all visible transactions"
+            />
+          </th>
+        )}
         <th className={cn("px-3 py-2", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("number") : undefined}><div className="flex items-center gap-1"># {sortable && sortIcon("number")}</div></th>
         <th className={cn("px-3 py-2", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("type") : undefined}><div className="flex items-center gap-1">Type {sortable && sortIcon("type")}</div></th>
         <th className={cn("px-3 py-2", sortable && "cursor-pointer select-none")} onClick={sortable ? () => handleSort("date") : undefined}><div className="flex items-center gap-1">Date {sortable && sortIcon("date")}</div></th>
@@ -601,9 +687,10 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     return match ? parseInt(match[1], 10) : 9999;
   };
 
-  const renderGroupRow = (g: TransactionGroup, readOnly: boolean) => {
+  const renderGroupRow = (g: TransactionGroup, readOnly: boolean, withDrawControl = false) => {
     const isExpanded = expandedGroups.has(g.groupId);
     const hasMultiple = g.items.length > 1;
+    const drawState = groupDrawState(g);
     const hasContract = !!(g.items[0] as any)?.contract_id;
     const sortedItems = [...g.items].sort(
       (a, b) => getCategoryNumber(a.division_number) - getCategoryNumber(b.division_number)
@@ -623,7 +710,22 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
     const divisionTitle = uniqueDivisions.map(([num, name]) => `${num} — ${name}`).join("\n");
     return (
       <Fragment key={g.groupId}>
-        <tr className="border-t hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => hasMultiple && toggleExpand(g.groupId)}>
+        <tr className={cn("border-t hover:bg-muted/30 transition-colors cursor-pointer", withDrawControl && drawState === "held" && "opacity-60")} onClick={() => hasMultiple && toggleExpand(g.groupId)}>
+          {withDrawControl && (
+            <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={drawState === "mixed" ? "indeterminate" : drawState === "included"}
+                disabled={!canToggleDraw || drawState === "pending"}
+                onCheckedChange={(v) => setGroupsExcluded([g], v !== true)}
+                aria-label={`Include ${g.payee} #${g.transactionNumber} in the next draw`}
+                title={
+                  drawState === "pending" ? "Pending — can go on a draw once it's approved"
+                  : drawState === "held" ? "Held — rolls into the following draw. Check to include it in the next one."
+                  : "Included in the next draw. Uncheck to hold it for the following draw."
+                }
+              />
+            </td>
+          )}
           <td className="px-3 py-2 font-mono text-muted-foreground">
             <div className="flex items-center gap-1">
               {hasMultiple && (isExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" /> : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />)}
@@ -639,6 +741,9 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
                 className={cn("inline-block h-2 w-2 shrink-0 rounded-full", hasContract ? "bg-green-500" : "bg-foreground")}
               />
               <span className="truncate">{g.payee}{hasMultiple && <span className="ml-1.5 text-xs text-muted-foreground">({g.items.length} lines)</span>}</span>
+              {withDrawControl && drawState === "held" && (
+                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">Held</span>
+              )}
             </span>
           </td>
           <td className="px-3 py-2 text-xs text-muted-foreground truncate max-w-[200px]" title={divisionTitle}>
@@ -728,6 +833,7 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
         </tr>
         {isExpanded && sortedItems.map(item => (
           <tr key={item.id} className="bg-muted/20 border-t border-dashed">
+            {withDrawControl && <td className="px-3 py-1.5" />}
             <td className="px-3 py-1.5" />
             <td className="px-3 py-1.5" />
             <td className="px-3 py-1.5" />
@@ -814,30 +920,43 @@ export default function TransactionsTab({ projectId, onTransactionsChange, draws
             </div>
           </div>
 
+          {/* What the next Close Draw will take, and what's being held back */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-md border bg-muted/30 px-3 py-2 text-xs" data-testid="draw-summary">
+            <span><span className="font-medium">Included in the next draw:</span> {drawCounts.included} · {fmtDecimal(drawCounts.includedNet)} net</span>
+            {drawCounts.held > 0 && (
+              <span className="text-amber-700 dark:text-amber-400"><span className="font-medium">Held for the following draw:</span> {drawCounts.held} · {fmtDecimal(drawCounts.heldNet)} net</span>
+            )}
+            {drawCounts.pending > 0 && <span className="text-muted-foreground">{drawCounts.pending} pending approval (can't go on a draw yet)</span>}
+            <span className="text-muted-foreground sm:ml-auto">Uncheck a transaction to hold it back — it rolls into the next draw.</span>
+          </div>
+
           {/* Current Draw Table */}
           <div className="rounded-lg border overflow-auto">
             <table className="w-full text-sm min-w-[900px] table-fixed">
               <colgroup>
+                {/* The checkbox column takes its share out of the others (still 90% + the 100px actions
+                    column, same as before it existed) — a fixed-px column here made the table scroll sideways. */}
+                <col style={{ width: "3%" }} />
                 <col style={{ width: "5%" }} />
-                <col style={{ width: "14%" }} />
-                <col style={{ width: "10%" }} />
-                <col style={{ width: "18%" }} />
                 <col style={{ width: "13%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "17%" }} />
+                <col style={{ width: "12%" }} />
                 <col style={{ width: "11%" }} />
                 <col style={{ width: "11%" }} />
                 <col style={{ width: "8%" }} />
                 <col style={{ width: "100px" }} />
               </colgroup>
-              {renderTableHeader(true)}
+              {renderTableHeader(true, headerDrawControl)}
               <tbody>
                 {sortedGroups.length === 0 ? (
-                  <tr><td colSpan={9} className="px-3 py-8 text-center text-muted-foreground">No transactions in current draw.</td></tr>
-                ) : sortedGroups.map(g => renderGroupRow(g, false))}
+                  <tr><td colSpan={10} className="px-3 py-8 text-center text-muted-foreground">No transactions in current draw.</td></tr>
+                ) : sortedGroups.map(g => renderGroupRow(g, false, true))}
               </tbody>
               {filteredGroups.length > 0 && (
                 <tfoot>
                   <tr className="border-t bg-muted/50 font-semibold">
-                    <td className="px-3 py-2" colSpan={4}>Totals</td>
+                    <td className="px-3 py-2" colSpan={5}>Totals</td>
                     <td className="px-3 py-2 text-right">{fmtDecimal(grandTotalAmount)}</td>
                     <td className="px-3 py-2 text-right">{fmtDecimal(grandTotalRetainage)}</td>
                     <td className="px-3 py-2 text-right">{fmtDecimal(grandTotalNet)}</td>

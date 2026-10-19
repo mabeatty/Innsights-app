@@ -11,7 +11,7 @@ import {
 import { Lock } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { BudgetRow, BudgetTransaction } from "@/components/budget/types";
+import { BudgetRow, BudgetTransaction, fmtDecimal } from "@/components/budget/types";
 import G702Tab, { type G702FormData } from "@/components/budget/G702Tab";
 import G703Tab from "@/components/budget/G703Tab";
 import TransactionsTab from "@/components/budget/TransactionsTab";
@@ -19,6 +19,7 @@ import DrawHistoryTab, { DrawRecord } from "@/components/budget/DrawHistoryTab";
 import ChangeOrdersTab from "@/components/budget/ChangeOrdersTab";
 import { exportBudgetPDF } from "@/components/budget/exportPDF";
 import { useAIAExport } from "@/components/budget/useAIAExport";
+import { forDrawDocuments, summarizeCurrentDraw } from "@/components/budget/drawHold";
 
 interface Props {
   projectId: string;
@@ -107,7 +108,11 @@ export default function ProjectAccountingModule({
   }, []);
 
   /* ── AIA Export ── */
-  const { exporting, handleExportAIA } = useAIAExport(budgetRows, transactions, g702Form);
+  // Held transactions (unassigned but left out of the draw being built) are still real
+  // costs, so budget views keep the full list — but the draw documents (G702, G703,
+  // exports, Close Draw) are built without them.
+  const drawTransactions = useMemo(() => forDrawDocuments(transactions), [transactions]);
+  const { exporting, handleExportAIA } = useAIAExport(budgetRows, drawTransactions, g702Form);
 
   /* ── Draw History ── */
   const loadDraws = useCallback(async () => {
@@ -124,9 +129,10 @@ export default function ProjectAccountingModule({
   const nextDrawNumber = draws.length > 0 ? Math.max(...draws.map((d) => d.draw_number)) + 1 : 1;
 
   const approvedTxns = useMemo(
-    () => transactions.filter((t) => t.status === "Approved" || t.status === "Paid" || t.status === "Deferred"),
-    [transactions]
+    () => drawTransactions.filter((t) => t.status === "Approved" || t.status === "Paid" || t.status === "Deferred"),
+    [drawTransactions]
   );
+  const drawSummary = useMemo(() => summarizeCurrentDraw(transactions), [transactions]);
 
   const handleCloseDraw = async () => {
     if (!drawMonth) {
@@ -180,9 +186,18 @@ export default function ProjectAccountingModule({
       if (error) throw error;
 
       if (insertedDraw) {
-        // Only approved (non-Pending) transactions go on the draw; unapproved
-        // invoices' lines stay current until their invoice is approved.
-        await (supabase as any).from("budget_transactions").update({ draw_id: insertedDraw.id }).eq("project_id", projectId).is("draw_id", null).neq("status", "Pending");
+        // Only approved (non-Pending), non-held transactions go on the draw; unapproved
+        // invoices' lines stay current until their invoice is approved, and held ones are
+        // deliberately left out.
+        const { error: claimError } = await (supabase as any).from("budget_transactions").update({ draw_id: insertedDraw.id }).eq("project_id", projectId).is("draw_id", null).neq("status", "Pending").eq("exclude_from_draw", false);
+        if (claimError) {
+          // Don't leave a draw behind with nothing on it.
+          await (supabase as any).from("draw_history").delete().eq("id", insertedDraw.id);
+          throw claimError;
+        }
+        // Whatever is still held rolls into the next draw: clear the hold so it's included by default there.
+        const { error: releaseError } = await (supabase as any).from("budget_transactions").update({ exclude_from_draw: false }).eq("project_id", projectId).is("draw_id", null).eq("exclude_from_draw", true);
+        if (releaseError) toast.error("Draw closed, but the held transactions couldn't be released — check the Transactions tab.");
       }
 
       const monthYear = drawMonth;
@@ -198,6 +213,7 @@ export default function ProjectAccountingModule({
       setDrawBackupUrl("");
       setDrawNotes("");
       setDrawMonth("");
+      onTransactionsReload();
       await loadDraws();
     } catch (err: any) {
       toast.error(err.message || "Failed to close draw.");
@@ -231,7 +247,7 @@ export default function ProjectAccountingModule({
         <TabsContent value="g702">
           <G702Tab
             budgetRows={budgetRows}
-            transactions={transactions}
+            transactions={drawTransactions}
             materialsStored={materialsStored}
             formData={g702Form}
             onFormChange={handleG702FormChange}
@@ -241,7 +257,7 @@ export default function ProjectAccountingModule({
         <TabsContent value="g703">
           <G703Tab
             budgetRows={budgetRows}
-            transactions={transactions}
+            transactions={drawTransactions}
             projectName={projectName}
             periodStart={periodStart}
             periodEnd={periodEnd}
@@ -277,6 +293,16 @@ export default function ProjectAccountingModule({
           <p className="text-sm text-muted-foreground">
             This will lock the current period and create a permanent record of the G702 and G703 values.
           </p>
+          <div className="space-y-0.5 rounded-md border bg-muted/30 px-3 py-2 text-xs" data-testid="close-draw-summary">
+            <p>
+              <span className="font-medium">Included in this draw:</span> {drawSummary.includedCount} line item{drawSummary.includedCount === 1 ? "" : "s"} · {fmtDecimal(drawSummary.includedNet)} net
+            </p>
+            {drawSummary.heldCount > 0 && (
+              <p className="text-amber-700 dark:text-amber-400">
+                <span className="font-medium">Held for Draw #{nextDrawNumber + 1}:</span> {drawSummary.heldCount} line item{drawSummary.heldCount === 1 ? "" : "s"} · {fmtDecimal(drawSummary.heldNet)} net — they roll into the next draw.
+              </p>
+            )}
+          </div>
           <div className="space-y-3 py-2">
             <div className="space-y-1">
               <Label className="text-xs">Draw Month</Label>

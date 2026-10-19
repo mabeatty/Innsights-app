@@ -79,6 +79,7 @@ export interface BudgetTransaction {
   notes: string | null;
   document_url: string | null;
   draw_id: string | null;
+  exclude_from_draw?: boolean; // held out of the draw being built; rolls to the next draw (only while draw_id is null)
   invoice_id: string | null;
   created_at: string;
   updated_at: string;
