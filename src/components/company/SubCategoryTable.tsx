@@ -42,7 +42,6 @@ export default function SubCategoryTable({ rows, months, categoryActuals, loadin
 
   return (
     <div className="overflow-x-auto">
-      <p className="mb-1.5 text-xs font-medium text-muted-foreground">Sub-categories (QuickBooks accounts)</p>
       <table className="w-full text-xs">
         <thead>
           <tr className="text-muted-foreground">

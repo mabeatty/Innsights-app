@@ -61,7 +61,7 @@ describe("Expenses tab — category drill-down", () => {
     // ...and the old month-by-month summary strip is gone (it labelled every month, projected and next year's included)
     expect(screen.queryByText("Apr 26")).not.toBeInTheDocument();
     expect(screen.queryByText("Dec 27")).not.toBeInTheDocument();
-    expect(screen.getByText("Sub-categories (QuickBooks accounts)")).toBeInTheDocument();
+    expect(screen.queryByText(/Sub-categories \(QuickBooks accounts\)/)).not.toBeInTheDocument(); // no heading above the table
     expect(screen.queryByTestId("subcategory-difference")).not.toBeInTheDocument(); // accounts add up to the total
   });
 
