@@ -18,8 +18,8 @@ interface Props {
 // detail are synced separately, so one can be newer than the other), that gap is
 // shown as its own row instead of being hidden.
 export default function SubCategoryTable({ rows, months, categoryActuals, loading }: Props) {
-  if (loading) return <p className="mt-4 text-xs text-muted-foreground">Loading sub-categories…</p>;
-  if (rows.length === 0) return <p className="mt-4 text-xs text-muted-foreground">No sub-category detail for this category.</p>;
+  if (loading) return <p className="text-xs text-muted-foreground">Loading sub-categories…</p>;
+  if (rows.length === 0) return <p className="text-xs text-muted-foreground">No sub-category detail for this category.</p>;
 
   const byAccount = new Map<string, Map<string, number>>();
   for (const r of rows) {
@@ -41,7 +41,7 @@ export default function SubCategoryTable({ rows, months, categoryActuals, loadin
   const totalDiff = diffs.reduce((s, d) => s + (Math.abs(d.diff) >= 1 ? d.diff : 0), 0);
 
   return (
-    <div className="mt-4 overflow-x-auto">
+    <div className="overflow-x-auto">
       <p className="mb-1.5 text-xs font-medium text-muted-foreground">Sub-categories (QuickBooks accounts)</p>
       <table className="w-full text-xs">
         <thead>

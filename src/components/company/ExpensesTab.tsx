@@ -12,12 +12,6 @@ const fmtK = (n: number) => {
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.round(Math.abs(n) / 1000)}K`;
 };
-// The per-month detail cells previously used fmtK too, which rounds to the
-// nearest $1,000 — any expense under ~$500 rounds down to "$0K", making a
-// real (if small) expense look like there's nothing there at all. Below
-// $1,000, show the actual dollar amount instead of a misleading rounded-to-
-// zero figure (found 2026-09-23).
-const fmtDetail = (n: number) => (Math.abs(n) < 1000 ? fmtFull(n) : fmtK(n));
 const fmtFull = (n: number) => {
   const sign = n < 0 ? "-" : "";
   return `${sign}$${Math.round(Math.abs(n)).toLocaleString()}`;
@@ -219,7 +213,7 @@ export default function ExpensesTab() {
 
       <div>
         <h3 className="text-sm font-medium mb-2">By category</h3>
-        <p className="text-xs text-muted-foreground mb-2">Click a row for its sub-categories and monthly breakdown.</p>
+        <p className="text-xs text-muted-foreground mb-2">Click a row to see its sub-categories by month.</p>
         <div className="rounded-lg border overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-xs text-muted-foreground">
@@ -250,15 +244,6 @@ export default function ExpensesTab() {
                     {expanded && (
                       <tr className="border-t bg-muted/10">
                         <td colSpan={3} className="px-3 py-3">
-                          <div className="grid grid-cols-6 sm:grid-cols-12 gap-2 text-xs">
-                            {monthDetail.map((m) => (
-                              <div key={m.month} className="text-center">
-                                <p className="text-muted-foreground">{format(new Date(`${m.month}-01T00:00:00`), "MMM yy")}</p>
-                                <p>{m.isProjected || m.actual === 0 ? "—" : fmtDetail(m.actual)}</p>
-                                <p className="text-muted-foreground">{m.budget > 0 ? fmtDetail(m.budget) : "—"}</p>
-                              </div>
-                            ))}
-                          </div>
                           <SubCategoryTable
                             rows={expenseDetail.rows.filter((r) => r.category_id === category.id)}
                             months={monthDetail

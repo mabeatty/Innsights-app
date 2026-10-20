@@ -47,16 +47,20 @@ describe("Expenses tab — category drill-down", () => {
   it("shows no sub-categories until a category is opened", () => {
     render(<ExpensesTab />);
     expect(screen.queryByTestId("subcategory-row")).not.toBeInTheDocument();
+    expect(screen.getByText("Click a row to see its sub-categories by month.")).toBeInTheDocument();
   });
 
-  it("opening a category lists its accounts (biggest first, numbers stripped) alongside the monthly strip", () => {
+  it("opening a category lists its accounts (biggest first, numbers stripped)", () => {
     render(<ExpensesTab />);
     fireEvent.click(rowCell("Payroll & Related"));
     expect(screen.getAllByTestId("subcategory-row").map((r) => within(r).getAllByRole("cell")[0].textContent))
       .toEqual(["Regular Payroll", "Guaranteed Payments - Sachin Patel"]);
-    // only the closed months are columns; the existing month-by-month strip is still there too
+    // only the closed months are columns...
     expect(screen.getByRole("columnheader", { name: "Mar 26" })).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", { name: "Apr 26" })).not.toBeInTheDocument();
+    // ...and the old month-by-month summary strip is gone (it labelled every month, projected and next year's included)
+    expect(screen.queryByText("Apr 26")).not.toBeInTheDocument();
+    expect(screen.queryByText("Dec 27")).not.toBeInTheDocument();
     expect(screen.getByText("Sub-categories (QuickBooks accounts)")).toBeInTheDocument();
     expect(screen.queryByTestId("subcategory-difference")).not.toBeInTheDocument(); // accounts add up to the total
   });
