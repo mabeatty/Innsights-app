@@ -32,7 +32,7 @@ describe("SubCategoryTable", () => {
   it("adds no difference row when the accounts add up to the category total", () => {
     render(<SubCategoryTable months={months} categoryActuals={actuals(100, 100, 100)} rows={months.map((m) => row("6501 Rent", m, 100))} />);
     expect(screen.queryByTestId("subcategory-difference")).not.toBeInTheDocument();
-    expect(screen.queryByText(/synced at different times/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/don't add up to the category total/)).not.toBeInTheDocument();
   });
 
   it("shows the gap — and says why — when the accounts don't add up to the category total", () => {
@@ -42,7 +42,8 @@ describe("SubCategoryTable", () => {
     ]} />);
     const diff = screen.getByTestId("subcategory-difference");
     expect(within(diff).getAllByRole("cell").map((c) => c.textContent)).toEqual(["Difference vs. category total", "—", "—", "-$50", "-$50"]);
-    expect(screen.getByText(/synced at different times/)).toBeInTheDocument();
+    expect(screen.getByText(/don't add up to the category total/)).toBeInTheDocument();
+    expect(screen.getByText(/Difference = category total minus the accounts/)).toBeInTheDocument();
   });
 
   it("sub-dollar noise doesn't create a difference row", () => {

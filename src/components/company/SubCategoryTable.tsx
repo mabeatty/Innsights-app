@@ -75,8 +75,8 @@ export default function SubCategoryTable({ rows, months, categoryActuals, loadin
       </table>
       {hasDiff && (
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          Sub-category amounts and the category total were synced at different times, so they differ until both are refreshed.
-          A negative difference means the accounts add up to more than the category total.
+          The accounts above don't add up to the category total for the months shown. One was refreshed from QuickBooks more recently than the other.
+          Difference = category total minus the accounts.
         </p>
       )}
     </div>
