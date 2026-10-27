@@ -3,9 +3,10 @@ import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
-import { FolderPlus, ChevronRight, AlertTriangle, LayoutList, CalendarRange } from "lucide-react";
+import { FolderPlus, ChevronRight, AlertTriangle, LayoutList, CalendarRange, CheckCircle2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import MasterCalendar from "@/components/dashboard/MasterCalendar";
+import CompletedProjectsTab, { type CompletedProject } from "@/components/dashboard/CompletedProjectsTab";
 import { buildPhaseSegments, type PhaseRow, type PhaseSegment } from "@/lib/masterCalendar";
 import { format } from "date-fns";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -67,11 +68,12 @@ export default function Dashboard() {
   const { getProjectsWithAlerts } = useAlerts();
   const projectsWithAlerts = getProjectsWithAlerts();
   const [searchParams, setSearchParams] = useSearchParams();
-  const tab = searchParams.get("tab") === "calendar" ? "calendar" : "summary";
+  const tabParam = searchParams.get("tab");
+  const tab = tabParam === "calendar" || tabParam === "completed" ? tabParam : "summary";
   const setTab = (v: string) =>
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
-      if (v === "calendar") next.set("tab", "calendar"); else next.delete("tab");
+      if (v === "calendar" || v === "completed") next.set("tab", v); else next.delete("tab");
       return next;
     }, { replace: true });
   const [projects, setProjects] = useState<ProjectRow[]>([]);
@@ -178,8 +180,9 @@ export default function Dashboard() {
     load();
   }, [isConsultant, consultantProjectIds]);
 
-  // Dashboard shows exactly these 4 stages. Prospecting and Open projects
-  // are intentionally excluded — Prospecting lives on the Prospecting tab.
+  // Dashboard shows exactly these 4 stages. Prospecting, Open and Completed projects
+  // are intentionally excluded — Prospecting lives on the Prospecting tab, and Completed
+  // projects are listed on the Completed tab so they can always be found again.
   const STATUS_ORDER = ["Under Construction", "Pre-Construction", "Design", "On Hold"];
   const TYPE_ORDER: { label: string; match: (t: string | null | undefined) => boolean }[] = [
     { label: "Development", match: (t) => t === "Development" || t === "New Construction" || t === "Conversion" },
@@ -197,7 +200,9 @@ export default function Dashboard() {
           .sort((a, b) => a.name.localeCompare(b.name)),
       }))
       .filter((g) => g.items.length > 0);
-    return { label: typeGroup.label, statusGroups, total: typeProjects.length };
+    // Count only what is shown: projects in a status the Dashboard hides (Completed, Open…)
+    // must not inflate the section count or leave behind an empty section.
+    return { label: typeGroup.label, statusGroups, total: statusGroups.reduce((n, g) => n + g.items.length, 0) };
   }).filter((g) => g.total > 0);
 
   // Every project eligible for the calendar (same set as the summary); the ones
@@ -215,6 +220,17 @@ export default function Dashboard() {
   );
   const calendarProjects = calendarCandidates.filter((p) => p.show_on_calendar !== false);
   const canManageCalendar = !isConsultant && accessLevel !== "view"; // same rule as editing a project
+
+  // Completed projects: off the Dashboard and Master Calendar, kept findable on the Completed tab.
+  const completedProjects: CompletedProject[] = projects
+    .filter((p) => p._status === "Completed")
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      brand: [p.brands?.name, p.secondary_brand?.name].filter(Boolean).join(" / ") || null,
+      kind: TYPE_ORDER[0].match(p._infoType) ? "Dev" : TYPE_ORDER[1].match(p._infoType) ? "PIP" : null,
+      opening: p._completionDate ?? null,
+    }));
 
   const setCalendarVisible = async (id: string, visible: boolean) => {
     const previous = projects.find((p) => p.id === id)?.show_on_calendar;
@@ -260,6 +276,9 @@ export default function Dashboard() {
           </TabsTrigger>
           <TabsTrigger value="calendar" className="gap-1.5">
             <CalendarRange className="h-3.5 w-3.5" /> Master Calendar
+          </TabsTrigger>
+          <TabsTrigger value="completed" className="gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5" /> Completed{completedProjects.length > 0 ? ` (${completedProjects.length})` : ""}
           </TabsTrigger>
         </TabsList>
 
@@ -388,6 +407,10 @@ export default function Dashboard() {
               } : undefined}
             />
           )}
+        </TabsContent>
+
+        <TabsContent value="completed" className="mt-4">
+          {loading ? <p className="text-muted-foreground text-sm">Loading…</p> : <CompletedProjectsTab projects={completedProjects} />}
         </TabsContent>
       </Tabs>
     </div>

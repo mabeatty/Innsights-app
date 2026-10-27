@@ -15,6 +15,9 @@ const tables: Record<string, any[]> = {
     { id: "key", name: "Keystone", updated_at: "2026-09-02T00:00:00Z", project_type: "Development", brands: { name: "Hilton Garden Inn" }, secondary_brand: { name: "Tapestry" } },
     // a renovation (PIP) project
     { id: "pip", name: "Dayton", updated_at: "2026-09-04T00:00:00Z", project_type: "Asset Management", brands: { name: "SpringHill Suites" } },
+    // completed: off the Dashboard and calendar, listed on the Completed tab
+    { id: "done", name: "Old Hotel", updated_at: "2026-09-05T00:00:00Z", project_type: "Development", brands: { name: "Hampton Inn" }, secondary_brand: { name: "Tapestry" } },
+    { id: "donep", name: "Renovated Inn", updated_at: "2026-09-06T00:00:00Z", project_type: "Asset Management", brands: { name: "Hilton Garden Inn" } },
     // switched off for the calendar: must still show on the summary
     { id: "hid", name: "Hidden Hotel", updated_at: "2026-09-03T00:00:00Z", project_type: "Development", brands: null, show_on_calendar: false },
   ],
@@ -23,6 +26,8 @@ const tables: Record<string, any[]> = {
     { project_id: "key", project_status: "Design", project_type: "New Construction", target_opening_date: null },
     { project_id: "hid", project_status: "Design", project_type: "New Construction", target_opening_date: null },
     { project_id: "pip", project_status: "Under Construction", project_type: "Renovation", target_opening_date: null },
+    { project_id: "done", project_status: "Completed", project_type: "New Construction", target_opening_date: "2025-06-15" },
+    { project_id: "donep", project_status: "Completed", project_type: "Renovation", target_opening_date: null },
   ],
   schedule_phases: [
     { project_id: "ash", phase_number: 3, phase_name: "Pre-Construction", sub_phase_number: "3.1", start_date: "2025-07-01", end_date: "2026-03-31" },
@@ -196,6 +201,68 @@ describe("Dashboard tabs", () => {
     const pip = screen.getByTestId("row-pip");
     expect(within(pip).getByText("PIP")).toBeInTheDocument(); // Asset Management = PIP
     expect(within(pip).getByText("SpringHill Suites · Under Construction")).toBeInTheDocument();
+  });
+
+  describe("Completed projects", () => {
+    it("are off the summary and the calendar, and don't inflate the section counts", async () => {
+      renderDash();
+      await screen.findByRole("link", { name: "Ashland" });
+      expect(screen.queryByRole("link", { name: "Old Hotel" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Renovated Inn" })).not.toBeInTheDocument();
+      expect(screen.getByText("Development (3)")).toBeInTheDocument();       // Ashland, Keystone, Hidden Hotel — not Old Hotel
+      expect(screen.getByText("Asset Management (1)")).toBeInTheDocument(); // Dayton — not Renovated Inn
+      clickTab(/Master Calendar/);
+      await screen.findByTestId("calendar-scroller");
+      expect(screen.queryByTestId("row-done")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("row-donep")).not.toBeInTheDocument();
+      expect(screen.getByTestId("coverage")).toHaveTextContent("of 3 projects");
+    });
+
+    it("are listed on the Completed tab, each one click from its project", async () => {
+      renderDash();
+      await screen.findByRole("link", { name: "Ashland" });
+      clickTab(/Completed/);
+      const rows = await screen.findAllByTestId("completed-row");
+      expect(rows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["Old HotelDev", "Renovated InnPIP"]); // by name, tagged
+      const old = rows[0];
+      expect(within(old).getByRole("link", { name: "Old Hotel" })).toHaveAttribute("href", "/project/done");
+      expect(within(old).getByRole("link", { name: "Open Old Hotel" })).toHaveAttribute("href", "/project/done");
+      expect(within(old).getByText("Hampton Inn / Tapestry")).toBeInTheDocument();
+      expect(within(old).getByText("Jun 15, 2025")).toBeInTheDocument();
+      expect(within(rows[1]).getByText("Hilton Garden Inn")).toBeInTheDocument();
+      expect(screen.getByTestId("where")).toHaveTextContent("?tab=completed");
+    });
+
+    it("show how many there are on the tab", async () => {
+      renderDash();
+      expect(await screen.findByRole("tab", { name: "Completed (2)" })).toBeInTheDocument();
+    });
+
+    it("open straight onto the Completed tab from a link", async () => {
+      renderDash("/dashboard?tab=completed");
+      expect(await screen.findAllByTestId("completed-row")).toHaveLength(2);
+      expect(screen.getByRole("tab", { name: /Completed/ })).toHaveAttribute("data-state", "active");
+    });
+
+    it("the tab says so, and has no count, when nothing is completed", async () => {
+      const saved = tables.project_info;
+      tables.project_info = saved.filter((i) => i.project_status !== "Completed");
+      try {
+        renderDash("/dashboard?tab=completed");
+        expect(await screen.findByTestId("completed-empty")).toHaveTextContent("No completed projects yet.");
+        expect(screen.getByRole("tab", { name: "Completed" })).toBeInTheDocument();
+      } finally { tables.project_info = saved; }
+    });
+
+    it("a section whose projects are all completed leaves no empty header behind", async () => {
+      const saved = tables.project_info;
+      tables.project_info = saved.map((i) => (i.project_id === "pip" ? { ...i, project_status: "Completed" } : i)); // Dayton completes too
+      try {
+        renderDash();
+        await screen.findByRole("link", { name: "Ashland" });
+        expect(screen.queryByText(/Asset Management/)).not.toBeInTheDocument();
+      } finally { tables.project_info = saved; }
+    });
   });
 
   it("shows the same empty state on both tabs when there are no projects", async () => {

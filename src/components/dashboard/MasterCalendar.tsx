@@ -6,6 +6,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import CalendarVisibilityMenu, { type CalendarVisibility } from "./CalendarVisibilityMenu";
+import KindTag from "./KindTag";
 import {
   ZOOM_PX_PER_MONTH, buildTicks, buildYears,
   computeRange, constructionSegments, makeScale, projectFinish, projectSpan, resolvePxPerMonth, sortByFinish, type FinishSort, type PhaseSegment, type Zoom,
@@ -199,20 +200,9 @@ export default function MasterCalendar({ projects: projectsProp, today: todayPro
                     <div className="sticky left-0 z-20 flex shrink-0 flex-col justify-center border-r bg-card px-3 group-hover:bg-muted" style={{ width: NAME_W }}>
                       <div className="flex min-w-0 items-center gap-1.5">
                         <Link to={`/project/${p.id}?tab=schedule`} className="truncate text-sm font-medium text-primary hover:underline">
-                        {p.name}
-                      </Link>
-                      {p._kind && (
-                          <span
-                            className={cn(
-                              "shrink-0 rounded px-1 py-px text-[9px] font-semibold leading-none",
-                              p._kind === "Dev"
-                                ? "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-200"
-                                : "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200",
-                            )}
-                          >
-                            {p._kind}
-                          </span>
-                        )}
+                          {p.name}
+                        </Link>
+                        {p._kind && <KindTag kind={p._kind} />}
                       </div>
                       {[p._brand, p._status].some(Boolean) && (
                         <span className="truncate text-[10px] leading-tight text-muted-foreground">
