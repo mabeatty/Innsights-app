@@ -91,21 +91,21 @@ describe("Dashboard tabs", () => {
     renderDash();
     expect(screen.getByRole("tab", { name: /Project Summary/ })).toHaveAttribute("data-state", "active");
     expect(screen.getByRole("tab", { name: /Master Calendar/ })).toHaveAttribute("data-state", "inactive");
-    expect(await screen.findByRole("link", { name: "Ashland" })).toHaveAttribute("href", "/project/ash");
+    expect(await screen.findByRole("link", { name: "Ashland — Home2 Suites" })).toHaveAttribute("href", "/project/ash");
     expect(screen.queryByTestId("calendar-scroller")).not.toBeInTheDocument();
   });
 
   it("keeps the Construction Start column fed by phase 4.1 only (the schedule query was widened to all phases)", async () => {
     renderDash();
-    const ashRow = (await screen.findByRole("link", { name: "Ashland" })).closest("tr")!;
+    const ashRow = (await screen.findByRole("link", { name: "Ashland — Home2 Suites" })).closest("tr")!;
     expect(within(ashRow).getByText("Oct 2025")).toBeInTheDocument(); // 4.1 start
-    const keyRow = screen.getByRole("link", { name: "Keystone" }).closest("tr")!;
+    const keyRow = screen.getByRole("link", { name: "Keystone — Hilton Garden Inn / Tapestry" }).closest("tr")!;
     expect(within(keyRow).queryByText("Feb 2027")).not.toBeInTheDocument(); // 4.3 must not leak in
   });
 
   it("switches to the Master Calendar and records it in the URL", async () => {
     renderDash();
-    await screen.findByRole("link", { name: "Ashland" });
+    await screen.findByRole("link", { name: "Ashland — Home2 Suites" });
     clickTab(/Master Calendar/);
     expect(await screen.findByTestId("calendar-scroller")).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("?tab=calendar");
@@ -121,16 +121,16 @@ describe("Dashboard tabs", () => {
     renderDash("/dashboard?tab=calendar");
     expect(await screen.findByTestId("calendar-scroller")).toBeInTheDocument();
     clickTab(/Project Summary/);
-    expect(await screen.findByRole("link", { name: "Ashland" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Ashland — Home2 Suites" })).toBeInTheDocument();
     expect(screen.getByTestId("where")).toHaveTextContent("");
     expect(screen.getByTestId("where").textContent).toBe("");
   });
 
   it("lists every project on the calendar in one flat list, regardless of the summary's collapsed sections", async () => {
     renderDash();
-    await screen.findByRole("link", { name: "Keystone" });
+    await screen.findByRole("link", { name: "Keystone — Hilton Garden Inn / Tapestry" });
     fireEvent.click(screen.getByText("Design (2)")); // collapse a section on the summary tab
-    expect(screen.queryByRole("link", { name: "Keystone" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Keystone — Hilton Garden Inn / Tapestry" })).not.toBeInTheDocument();
     clickTab(/Master Calendar/);
     await screen.findByTestId("calendar-scroller");
     expect(screen.getByTestId("row-key")).toBeInTheDocument(); // calendar has no sections to collapse
@@ -209,12 +209,32 @@ describe("Dashboard tabs", () => {
     expect(within(pip).getByText("SpringHill Suites · Under Construction")).toBeInTheDocument();
   });
 
+  describe("Project column", () => {
+    it("shows the city and the brand: dual brands both, no brand just the city", async () => {
+      renderDash();
+      await screen.findByRole("link", { name: "Ashland — Home2 Suites" });
+      expect(screen.getByRole("link", { name: "Keystone — Hilton Garden Inn / Tapestry" })).toHaveAttribute("href", "/project/key");
+      expect(screen.getByRole("link", { name: "Dayton — SpringHill Suites" })).toHaveAttribute("href", "/project/pip"); // Asset Management section too
+      expect(screen.getByRole("link", { name: "Hidden Hotel" })).toBeInTheDocument();                                   // no brand on file
+      expect(screen.queryByRole("link", { name: "Ashland" })).not.toBeInTheDocument();                                  // not the city alone any more
+    });
+
+    it("leaves the brand out when the project's name already says it", async () => {
+      const saved = tables.projects;
+      tables.projects = saved.map((p) => (p.id === "ash" ? { ...p, name: "Springfield Home2 Suites" } : p));
+      try {
+        renderDash();
+        expect(await screen.findByRole("link", { name: "Springfield Home2 Suites" })).toBeInTheDocument(); // not "… — Home2 Suites"
+      } finally { tables.projects = saved; }
+    });
+  });
+
   describe("Completed projects", () => {
     it("are off the summary and the calendar, and don't inflate the section counts", async () => {
       renderDash();
-      await screen.findByRole("link", { name: "Ashland" });
-      expect(screen.queryByRole("link", { name: "Old Hotel" })).not.toBeInTheDocument();
-      expect(screen.queryByRole("link", { name: "Renovated Inn" })).not.toBeInTheDocument();
+      await screen.findByRole("link", { name: "Ashland — Home2 Suites" });
+      expect(screen.queryByRole("link", { name: "Old Hotel — Hampton Inn / Tapestry" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Renovated Inn — Hilton Garden Inn" })).not.toBeInTheDocument();
       expect(screen.getByText("Development (3)")).toBeInTheDocument();       // Ashland, Keystone, Hidden Hotel — not Old Hotel
       expect(screen.getByText("Asset Management (1)")).toBeInTheDocument(); // Dayton — not Renovated Inn
       clickTab(/Master Calendar/);
@@ -226,7 +246,7 @@ describe("Dashboard tabs", () => {
 
     it("are listed on the Completed tab in the same table as the Dashboard: same columns, same cells", async () => {
       renderDash();
-      await screen.findByRole("link", { name: "Ashland" });
+      await screen.findByRole("link", { name: "Ashland — Home2 Suites" });
       const summaryHeaders = screen.getAllByRole("columnheader").map((h) => h.textContent);
       expect(summaryHeaders).toEqual(["Project", "Project Cost", "Completed to Date", "Construction Start", "Completion Date", "Last Updated"]);
       clickTab(/Completed/);
@@ -236,10 +256,10 @@ describe("Dashboard tabs", () => {
       expect(screen.getByText("Asset Management (1)")).toBeInTheDocument();
       const cells = (r: HTMLElement) => within(r).getAllByRole("cell").map((c) => c.textContent);
       const [name, cost, done, start, completion, updated] = cells(rows[0]);
-      expect([name, cost, done, start, completion]).toEqual(["Old Hotel", "$1,000,000", "$250,000.50", "Mar 2024", "Jun 2025"]);
+      expect([name, cost, done, start, completion]).toEqual(["Old Hotel — Hampton Inn / Tapestry", "$1,000,000", "$250,000.50", "Mar 2024", "Jun 2025"]);
       expect(updated).toMatch(/^Sep [56], 2026$/);
-      expect(cells(rows[1]).slice(0, 5)).toEqual(["Renovated Inn", "—", "—", "—", "—"]);
-      expect(within(rows[0]).getByRole("link", { name: "Old Hotel" })).toHaveAttribute("href", "/project/done");
+      expect(cells(rows[1]).slice(0, 5)).toEqual(["Renovated Inn — Hilton Garden Inn", "—", "—", "—", "—"]);
+      expect(within(rows[0]).getByRole("link", { name: "Old Hotel — Hampton Inn / Tapestry" })).toHaveAttribute("href", "/project/done");
       expect(screen.getByTestId("where")).toHaveTextContent("?tab=completed");
     });
 
@@ -247,10 +267,10 @@ describe("Dashboard tabs", () => {
       renderDash("/dashboard?tab=completed");
       expect(await screen.findAllByTestId("completed-row")).toHaveLength(2);
       fireEvent.click(screen.getByText("Development (1)"));
-      expect(screen.queryByRole("link", { name: "Old Hotel" })).not.toBeInTheDocument();
-      expect(screen.getByRole("link", { name: "Renovated Inn" })).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: "Old Hotel — Hampton Inn / Tapestry" })).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Renovated Inn — Hilton Garden Inn" })).toBeInTheDocument();
       fireEvent.click(screen.getByText("Development (1)"));
-      expect(screen.getByRole("link", { name: "Old Hotel" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Old Hotel — Hampton Inn / Tapestry" })).toBeInTheDocument();
     });
 
     it("the tab itself carries no count", async () => {
@@ -279,7 +299,7 @@ describe("Dashboard tabs", () => {
       tables.project_info = saved.map((i) => (i.project_id === "pip" ? { ...i, project_status: "Completed" } : i)); // Dayton completes too
       try {
         renderDash();
-        await screen.findByRole("link", { name: "Ashland" });
+        await screen.findByRole("link", { name: "Ashland — Home2 Suites" });
         expect(screen.queryByText(/Asset Management/)).not.toBeInTheDocument();
       } finally { tables.project_info = saved; }
     });

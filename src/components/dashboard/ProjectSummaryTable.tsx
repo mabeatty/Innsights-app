@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import { AlertTriangle } from "lucide-react";
+import { formatProjectOption, type ProjectOptionSource } from "@/lib/projectLabel";
 
 // The Dashboard's project table, shared by the Project Summary and the Completed tab so the
 // two always have the same columns and the same cells.
@@ -12,9 +13,9 @@ export const fmtCents = (v: number) =>
 
 export const SUMMARY_COLUMN_COUNT = 6;
 
-export interface SummaryProject {
+// name + brands (via ProjectOptionSource) make the Project column read "City — Brand".
+export interface SummaryProject extends ProjectOptionSource {
   id: string;
-  name: string;
   updated_at: string;
   _projectCost?: number | null;
   _completedToDate?: number | null;
@@ -25,12 +26,12 @@ export interface SummaryProject {
 export function SummaryColGroup() {
   return (
     <colgroup>
-      <col style={{ width: "22%" }} />
+      <col style={{ width: "30%" }} />
+      <col style={{ width: "14%" }} />
       <col style={{ width: "16%" }} />
-      <col style={{ width: "18%" }} />
-      <col style={{ width: "16%" }} />
+      <col style={{ width: "14%" }} />
       <col style={{ width: "12%" }} />
-      <col style={{ width: "16%" }} />
+      <col style={{ width: "14%" }} />
     </colgroup>
   );
 }
@@ -56,7 +57,7 @@ export function SummaryProjectRow({ project: p, hasAlert, testId }: { project: S
       <td className="text-center">
         <Link to={`/project/${p.id}`} className="text-primary hover:underline font-medium inline-flex items-center gap-1.5">
           {hasAlert && <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />}
-          {p.name}
+          {formatProjectOption(p)}
         </Link>
       </td>
       <td className="text-center text-foreground">{p._projectCost != null ? fmtCost(p._projectCost) : "—"}</td>
