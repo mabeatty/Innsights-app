@@ -1,21 +1,23 @@
-import { Link } from "react-router-dom";
-import { format } from "date-fns";
-import { Button } from "@/components/ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import KindTag from "./KindTag";
+import { useState } from "react";
+import { ChevronRight } from "lucide-react";
+import {
+  SummaryColGroup, SummaryHead, SummaryProjectRow, SUMMARY_COLUMN_COUNT, type SummaryProject,
+} from "./ProjectSummaryTable";
 
-export interface CompletedProject {
-  id: string;
-  name: string;
-  brand: string | null;               // "Hampton Inn" or "Hampton Inn / Tapestry"
-  kind: "Dev" | "PIP" | null;
-  opening: string | null;             // target opening date, yyyy-MM-dd
+export interface CompletedGroup {
+  label: string;               // "Development" / "Asset Management" / "Uncategorized"
+  items: SummaryProject[];
 }
 
-// Where completed projects live once they're off the Dashboard: still one click from
-// their project page. (To reopen one, change its status in Project Info.)
-export default function CompletedProjectsTab({ projects }: { projects: CompletedProject[] }) {
-  if (projects.length === 0) {
+// Where completed projects live once they're off the Dashboard: the same table as the Project
+// Summary (same columns, same cells, same Development / Asset Management sections), one click
+// from each project's page. To reopen one, change its status in Project Info.
+export default function CompletedProjectsTab({ groups, projectsWithAlerts }: { groups: CompletedGroup[]; projectsWithAlerts: Set<string> }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const toggle = (label: string) =>
+    setCollapsed((prev) => { const next = new Set(prev); if (!next.delete(label)) next.add(label); return next; });
+
+  if (groups.length === 0) {
     return (
       <div className="py-16 text-center text-muted-foreground" data-testid="completed-empty">
         <p>No completed projects yet.</p>
@@ -23,42 +25,38 @@ export default function CompletedProjectsTab({ projects }: { projects: Completed
       </div>
     );
   }
-  const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name));
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted-foreground">
         Completed projects are hidden from the Project Summary and Master Calendar. Open one to see all of its records, or change its status in Project Info to reopen it.
       </p>
-      <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Project</TableHead>
-              <TableHead>Brand</TableHead>
-              <TableHead>Target opening</TableHead>
-              <TableHead className="w-28" />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {sorted.map((p) => (
-              <TableRow key={p.id} data-testid="completed-row">
-                <TableCell>
-                  <span className="inline-flex items-center gap-2">
-                    <Link to={`/project/${p.id}`} className="font-medium text-primary hover:underline">{p.name}</Link>
-                    {p.kind && <KindTag kind={p.kind} />}
-                  </span>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">{p.brand ?? "—"}</TableCell>
-                <TableCell className="text-sm text-muted-foreground">{p.opening ? format(new Date(`${p.opening}T00:00:00`), "MMM d, yyyy") : "—"}</TableCell>
-                <TableCell className="text-right">
-                  <Button asChild variant="outline" size="sm" className="h-7 text-xs">
-                    <Link to={`/project/${p.id}`} aria-label={`Open ${p.name}`}>Open project</Link>
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+      <div className="space-y-6">
+        {groups.map((group, groupIdx) => {
+          const isCollapsed = collapsed.has(group.label);
+          return (
+            <div key={group.label} className="border rounded-md overflow-hidden bg-card">
+              <table className="w-full table-dense" style={{ tableLayout: "fixed" }}>
+                <SummaryColGroup />
+                {groupIdx === 0 && <SummaryHead />}
+                <tbody className="divide-y">
+                  <tr className="cursor-pointer select-none" onClick={() => toggle(group.label)}>
+                    <td colSpan={SUMMARY_COLUMN_COUNT} className="bg-sidebar-accent py-2 px-3 text-left">
+                      <div className="flex items-center gap-2">
+                        <ChevronRight className={`h-3.5 w-3.5 text-sidebar-accent-foreground transition-transform duration-200 ${isCollapsed ? "" : "rotate-90"}`} />
+                        <span className="text-xs font-bold uppercase tracking-wider text-sidebar-accent-foreground">
+                          {group.label} ({group.items.length})
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                  {!isCollapsed && group.items.map((p) => (
+                    <SummaryProjectRow key={p.id} project={p} hasAlert={projectsWithAlerts.has(p.id)} testId="completed-row" />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

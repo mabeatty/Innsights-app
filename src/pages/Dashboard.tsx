@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { FolderPlus, ChevronRight, AlertTriangle, LayoutList, CalendarRange, CheckCircle2 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import MasterCalendar from "@/components/dashboard/MasterCalendar";
-import CompletedProjectsTab, { type CompletedProject } from "@/components/dashboard/CompletedProjectsTab";
+import CompletedProjectsTab from "@/components/dashboard/CompletedProjectsTab";
+import { SummaryColGroup, SummaryHead, SummaryProjectRow } from "@/components/dashboard/ProjectSummaryTable";
 import { buildPhaseSegments, type PhaseRow, type PhaseSegment } from "@/lib/masterCalendar";
 import { format } from "date-fns";
 import { useAlerts } from "@/hooks/useAlerts";
@@ -56,12 +57,6 @@ async function fetchAllRows<T = any>(
   }
   return all;
 }
-
-const fmtCost = (v: number) =>
-  "$" + Math.round(v).toLocaleString("en-US");
-
-const fmtCents = (v: number) =>
-  "$" + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 export default function Dashboard() {
   const { isConsultant, consultantProjectIds, accessLevel } = useAuth();
@@ -221,16 +216,14 @@ export default function Dashboard() {
   const calendarProjects = calendarCandidates.filter((p) => p.show_on_calendar !== false);
   const canManageCalendar = !isConsultant && accessLevel !== "view"; // same rule as editing a project
 
-  // Completed projects: off the Dashboard and Master Calendar, kept findable on the Completed tab.
-  const completedProjects: CompletedProject[] = projects
-    .filter((p) => p._status === "Completed")
-    .map((p) => ({
-      id: p.id,
-      name: p.name,
-      brand: [p.brands?.name, p.secondary_brand?.name].filter(Boolean).join(" / ") || null,
-      kind: TYPE_ORDER[0].match(p._infoType) ? "Dev" : TYPE_ORDER[1].match(p._infoType) ? "PIP" : null,
-      opening: p._completionDate ?? null,
-    }));
+  // Completed projects: off the Dashboard and Master Calendar, kept findable on the Completed tab
+  // as the same table, in the same Development / Asset Management sections.
+  const completedGroups = TYPE_ORDER
+    .map((g) => ({
+      label: g.label,
+      items: projects.filter((p) => p._status === "Completed" && g.match(p._infoType)).sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .filter((g) => g.items.length > 0);
 
   const setCalendarVisible = async (id: string, visible: boolean) => {
     const previous = projects.find((p) => p.id === id)?.show_on_calendar;
@@ -278,7 +271,7 @@ export default function Dashboard() {
             <CalendarRange className="h-3.5 w-3.5" /> Master Calendar
           </TabsTrigger>
           <TabsTrigger value="completed" className="gap-1.5">
-            <CheckCircle2 className="h-3.5 w-3.5" /> Completed{completedProjects.length > 0 ? ` (${completedProjects.length})` : ""}
+            <CheckCircle2 className="h-3.5 w-3.5" /> Completed
           </TabsTrigger>
         </TabsList>
 
@@ -294,26 +287,8 @@ export default function Dashboard() {
                 return (
                   <div key={typeGroup.label} className="border rounded-md overflow-hidden bg-card">
                     <table className="w-full table-dense" style={{ tableLayout: 'fixed' }}>
-                      <colgroup>
-                        <col style={{ width: '22%' }} />
-                        <col style={{ width: '16%' }} />
-                        <col style={{ width: '18%' }} />
-                        <col style={{ width: '16%' }} />
-                        <col style={{ width: '12%' }} />
-                        <col style={{ width: '16%' }} />
-                      </colgroup>
-                      {groupIdx === 0 && (
-                        <thead className="bg-muted/50">
-                          <tr>
-                            <th className="text-center">Project</th>
-                            <th className="text-center">Project Cost</th>
-                            <th className="text-center">Completed to Date</th>
-                            <th className="text-center">Construction Start</th>
-                            <th className="text-center">Completion Date</th>
-                            <th className="text-center">Last Updated</th>
-                          </tr>
-                        </thead>
-                      )}
+                      <SummaryColGroup />
+                      {groupIdx === 0 && <SummaryHead />}
                       <tbody className="divide-y">
                         <tr
                           className="cursor-pointer select-none"
@@ -348,38 +323,7 @@ export default function Dashboard() {
                                 </td>
                               </tr>
                               {!statusCollapsed && group.items.map((p) => (
-                                <tr key={p.id} className="hover:bg-muted/30 transition-colors">
-                                  <td className="text-center">
-                                    <Link
-                                      to={`/project/${p.id}`}
-                                      className="text-primary hover:underline font-medium inline-flex items-center gap-1.5"
-                                    >
-                                      {projectsWithAlerts.has(p.id) && (
-                                        <AlertTriangle className="h-3.5 w-3.5 text-amber-500 shrink-0" />
-                                      )}
-                                      {p.name}
-                                    </Link>
-                                  </td>
-                                  <td className="text-center text-foreground">
-                                    {p._projectCost != null ? fmtCost(p._projectCost) : "—"}
-                                  </td>
-                                  <td className="text-center text-foreground">
-                                    {p._completedToDate != null ? fmtCents(p._completedToDate) : "—"}
-                                  </td>
-                                  <td className="text-center text-muted-foreground">
-                                    {p._constructionStart
-                                      ? format(new Date(p._constructionStart + "T00:00:00"), "MMM yyyy")
-                                      : "—"}
-                                  </td>
-                                  <td className="text-center text-muted-foreground">
-                                    {p._completionDate
-                                      ? format(new Date(p._completionDate + "T00:00:00"), "MMM yyyy")
-                                      : "—"}
-                                  </td>
-                                  <td className="text-center text-muted-foreground">
-                                    {format(new Date(p.updated_at), "MMM d, yyyy")}
-                                  </td>
-                                </tr>
+                                <SummaryProjectRow key={p.id} project={p} hasAlert={projectsWithAlerts.has(p.id)} />
                               ))}
                             </>
                           );
@@ -410,7 +354,7 @@ export default function Dashboard() {
         </TabsContent>
 
         <TabsContent value="completed" className="mt-4">
-          {loading ? <p className="text-muted-foreground text-sm">Loading…</p> : <CompletedProjectsTab projects={completedProjects} />}
+          {loading ? <p className="text-muted-foreground text-sm">Loading…</p> : <CompletedProjectsTab groups={completedGroups} projectsWithAlerts={projectsWithAlerts} />}
         </TabsContent>
       </Tabs>
     </div>

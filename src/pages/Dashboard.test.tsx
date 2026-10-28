@@ -33,12 +33,18 @@ const tables: Record<string, any[]> = {
     { project_id: "ash", phase_number: 3, phase_name: "Pre-Construction", sub_phase_number: "3.1", start_date: "2025-07-01", end_date: "2026-03-31" },
     { project_id: "ash", phase_number: 4, phase_name: "Construction", sub_phase_number: "4.1", start_date: "2025-10-20", end_date: "2027-02-05" },
     { project_id: "ash", phase_number: 4, phase_name: "Construction", sub_phase_number: "4.2", start_date: null, end_date: null },
+    { project_id: "done", phase_number: 4, phase_name: "Construction", sub_phase_number: "4.1", start_date: "2024-03-01", end_date: "2025-06-15" },
     { project_id: "key", phase_number: 2, phase_name: "Pre-Development", sub_phase_number: "2.1", start_date: "2026-02-01", end_date: "2026-12-31" },
     // a non-4.1 row with a start date must NOT become the "Construction Start" column
     { project_id: "key", phase_number: 4, phase_name: "Construction", sub_phase_number: "4.3", start_date: "2027-02-15", end_date: "2028-01-31" },
   ],
-  project_budget: [],
-  budget_transactions: [],
+  project_budget: [
+    { project_id: "done", scheduled_value: 600000 }, { project_id: "done", scheduled_value: 400000 },
+  ],
+  budget_transactions: [
+    { project_id: "done", amount: 250000.5, status: "Paid" },
+    { project_id: "done", amount: 999, status: "Pending" }, // not counted: only approved / paid / deferred
+  ],
 };
 const updates: { table: string; payload: any; col?: string; val?: any }[] = [];
 let updateError: string | null = null;
@@ -218,24 +224,38 @@ describe("Dashboard tabs", () => {
       expect(screen.getByTestId("coverage")).toHaveTextContent("of 3 projects");
     });
 
-    it("are listed on the Completed tab, each one click from its project", async () => {
+    it("are listed on the Completed tab in the same table as the Dashboard: same columns, same cells", async () => {
       renderDash();
       await screen.findByRole("link", { name: "Ashland" });
+      const summaryHeaders = screen.getAllByRole("columnheader").map((h) => h.textContent);
+      expect(summaryHeaders).toEqual(["Project", "Project Cost", "Completed to Date", "Construction Start", "Completion Date", "Last Updated"]);
       clickTab(/Completed/);
       const rows = await screen.findAllByTestId("completed-row");
-      expect(rows.map((r) => within(r).getAllByRole("cell")[0].textContent)).toEqual(["Old HotelDev", "Renovated InnPIP"]); // by name, tagged
-      const old = rows[0];
-      expect(within(old).getByRole("link", { name: "Old Hotel" })).toHaveAttribute("href", "/project/done");
-      expect(within(old).getByRole("link", { name: "Open Old Hotel" })).toHaveAttribute("href", "/project/done");
-      expect(within(old).getByText("Hampton Inn / Tapestry")).toBeInTheDocument();
-      expect(within(old).getByText("Jun 15, 2025")).toBeInTheDocument();
-      expect(within(rows[1]).getByText("Hilton Garden Inn")).toBeInTheDocument();
+      expect(screen.getAllByRole("columnheader").map((h) => h.textContent)).toEqual(summaryHeaders);
+      expect(screen.getByText("Development (1)")).toBeInTheDocument();
+      expect(screen.getByText("Asset Management (1)")).toBeInTheDocument();
+      const cells = (r: HTMLElement) => within(r).getAllByRole("cell").map((c) => c.textContent);
+      const [name, cost, done, start, completion, updated] = cells(rows[0]);
+      expect([name, cost, done, start, completion]).toEqual(["Old Hotel", "$1,000,000", "$250,000.50", "Mar 2024", "Jun 2025"]);
+      expect(updated).toMatch(/^Sep [56], 2026$/);
+      expect(cells(rows[1]).slice(0, 5)).toEqual(["Renovated Inn", "—", "—", "—", "—"]);
+      expect(within(rows[0]).getByRole("link", { name: "Old Hotel" })).toHaveAttribute("href", "/project/done");
       expect(screen.getByTestId("where")).toHaveTextContent("?tab=completed");
     });
 
-    it("show how many there are on the tab", async () => {
+    it("a section on the Completed tab collapses like the Dashboard's", async () => {
+      renderDash("/dashboard?tab=completed");
+      expect(await screen.findAllByTestId("completed-row")).toHaveLength(2);
+      fireEvent.click(screen.getByText("Development (1)"));
+      expect(screen.queryByRole("link", { name: "Old Hotel" })).not.toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "Renovated Inn" })).toBeInTheDocument();
+      fireEvent.click(screen.getByText("Development (1)"));
+      expect(screen.getByRole("link", { name: "Old Hotel" })).toBeInTheDocument();
+    });
+
+    it("the tab itself carries no count", async () => {
       renderDash();
-      expect(await screen.findByRole("tab", { name: "Completed (2)" })).toBeInTheDocument();
+      expect(await screen.findByRole("tab", { name: "Completed" })).toBeInTheDocument(); // not "Completed (2)"
     });
 
     it("open straight onto the Completed tab from a link", async () => {
